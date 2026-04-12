@@ -1,27 +1,129 @@
-{"news_sources": [
-  {"name": "연합뉴스 국제", "url": "https://www.yna.co.kr/rss/international.xml", "category": "글로벌 뉴스"},
-  {"name": "The New York Times", "url": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml", "category": "글로벌 뉴스"},
-  {"name": "Reuters", "url": "https://www.reutersagency.com/feed/?taxonomy=best-topics&post_type=best", "category": "글로벌 뉴스"},
-  {"name": "The Guardian World", "url": "https://www.theguardian.com/world/rss", "category": "글로벌 뉴스"},
-  {"name": "조선일보 국제", "url": "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml", "category": "글로벌 뉴스"},
-  {"name": "매일경제 증권", "url": "https://www.mk.co.kr/rss/50200011/", "category": "증권 관련 뉴스"},
-  {"name": "한국경제 증권", "url": "https://www.hankyung.com/feed/stock", "category": "증권 관련 뉴스"},
-  {"name": "연합뉴스 경제", "url": "https://www.yna.co.kr/rss/economy.xml", "category": "증권 관련 뉴스"},
-  {"name": "Bloomberg", "url": "https://feeds.bloomberg.com/markets/news.rss", "category": "증권 관련 뉴스"},
-  {"name": "CNBC", "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10001147", "category": "증권 관련 뉴스"},
-  {"name": "연합뉴스 IT/과학", "url": "https://www.yna.co.kr/rss/science.xml", "category": "AI 관련 뉴스"},
-  {"name": "The Verge AI", "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", "category": "AI 관련 뉴스"},
-  {"name": "TechCrunch AI", "url": "https://techcrunch.com/category/artificial-intelligence/feed/", "category": "AI 관련 뉴스"},
-  {"name": "MIT Technology Review", "url": "https://www.technologyreview.com/feed/", "category": "AI 관련 뉴스"},
-  {"name": "조선일보 IT", "url": "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/tech-it/?outputType=xml", "category": "AI 관련 뉴스"},
-  {"name": "연합뉴스 정치", "url": "https://www.yna.co.kr/rss/politics.xml", "category": "정부 정책 뉴스"},
-  {"name": "중앙일보 정치", "url": "https://rss.joins.com/joins_politics_list.xml", "category": "정부 정책 뉴스"},
-  {"name": "경향신문 정치", "url": "https://www.khan.co.kr/rss/rssdata/politic_news.xml", "category": "정부 정책 뉴스"},
-  {"name": "한겨레 정치", "url": "https://www.hani.co.kr/rss/politics/", "category": "정부 정책 뉴스"},
-  {"name": "KBS 정치", "url": "https://news.kbs.co.kr/rss/politics.xml", "category": "정부 정책 뉴스"},
-  {"name": "매일경제 부동산", "url": "https://www.mk.co.kr/rss/50300009/", "category": "부동산 뉴스"},
-  {"name": "한국경제 부동산", "url": "https://www.hankyung.com/feed/realestate", "category": "부동산 뉴스"},
-  {"name": "조선일보 부동산", "url": "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/real-estate/?outputType=xml", "category": "부동산 뉴스"},
-  {"name": "연합뉴스 부동산", "url": "https://www.yna.co.kr/rss/realestate.xml", "category": "부동산 뉴스"},
-  {"name": "중앙일보 부동산", "url": "https://rss.joins.com/joins_life_list.xml", "category": "부동산 뉴스"}
-]}
+{
+  "news_sources": [
+    {
+      "name": "연합뉴스 국제",
+      "url": "https://www.yna.co.kr/rss/international.xml",
+      "category": "글로벌"
+    },
+    {
+      "name": "The New York Times",
+      "url": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
+      "category": "글로벌"
+    },
+    {
+      "name": "Reuters",
+      "url": "https://www.reutersagency.com/feed/?taxonomy=best-topics&post_type=best",
+      "category": "글로벌"
+    },
+    {
+      "name": "The Guardian World",
+      "url": "https://www.theguardian.com/world/rss",
+      "category": "글로벌"
+    },
+    {
+      "name": "조선일보 국제",
+      "url": "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml",
+      "category": "글로벌"
+    },
+    {
+      "name": "매일경제 증권",
+      "url": "https://www.mk.co.kr/rss/50200011/",
+      "category": "증권"
+    },
+    {
+      "name": "한국경제 증권",
+      "url": "https://www.hankyung.com/feed/stock",
+      "category": "증권"
+    },
+    {
+      "name": "연합뉴스 경제",
+      "url": "https://www.yna.co.kr/rss/economy.xml",
+      "category": "증권"
+    },
+    {
+      "name": "Bloomberg",
+      "url": "https://feeds.bloomberg.com/markets/news.rss",
+      "category": "증권"
+    },
+    {
+      "name": "CNBC",
+      "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10001147",
+      "category": "증권"
+    },
+    {
+      "name": "연합뉴스 IT/과학",
+      "url": "https://www.yna.co.kr/rss/science.xml",
+      "category": "AI"
+    },
+    {
+      "name": "The Verge AI",
+      "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+      "category": "AI"
+    },
+    {
+      "name": "TechCrunch AI",
+      "url": "https://techcrunch.com/category/artificial-intelligence/feed/",
+      "category": "AI"
+    },
+    {
+      "name": "MIT Technology Review",
+      "url": "https://www.technologyreview.com/feed/",
+      "category": "AI"
+    },
+    {
+      "name": "조선일보 IT",
+      "url": "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/tech-it/?outputType=xml",
+      "category": "AI"
+    },
+    {
+      "name": "연합뉴스 정치",
+      "url": "https://www.yna.co.kr/rss/politics.xml",
+      "category": "정부정책"
+    },
+    {
+      "name": "중앙일보 정치",
+      "url": "https://rss.joins.com/joins_politics_list.xml",
+      "category": "정부정책"
+    },
+    {
+      "name": "경향신문 정치",
+      "url": "https://www.khan.co.kr/rss/rssdata/politic_news.xml",
+      "category": "정부정책"
+    },
+    {
+      "name": "한겨레 정치",
+      "url": "https://www.hani.co.kr/rss/politics/",
+      "category": "정부정책"
+    },
+    {
+      "name": "KBS 정치",
+      "url": "https://news.kbs.co.kr/rss/politics.xml",
+      "category": "정부정책"
+    },
+    {
+      "name": "매일경제 부동산",
+      "url": "https://www.mk.co.kr/rss/50300009/",
+      "category": "부동산"
+    },
+    {
+      "name": "한국경제 부동산",
+      "url": "https://www.hankyung.com/feed/realestate",
+      "category": "부동산"
+    },
+    {
+      "name": "조선일보 부동산",
+      "url": "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/real-estate/?outputType=xml",
+      "category": "부동산"
+    },
+    {
+      "name": "연합뉴스 부동산",
+      "url": "https://www.yna.co.kr/rss/realestate.xml",
+      "category": "부동산"
+    },
+    {
+      "name": "중앙일보 부동산",
+      "url": "https://rss.joins.com/joins_life_list.xml",
+      "category": "부동산"
+    }
+  ]
+}

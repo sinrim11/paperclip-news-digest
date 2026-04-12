@@ -30,10 +30,10 @@ def load_json(path):
 GLOSSARY = load_json(os.path.join(CONFIG_DIR, "glossary.json"))
 # Mapping from article category name to glossary key
 CATEGORY_TO_GLOSSARY = {
-    "증권 관련 뉴스": "securities",
-    "AI 관련 뉴스": "ai",
-    "정부 정책 뉴스": "government_policy",
-    "부동산 뉴스": "real_estate"
+    "증권": "securities",
+    "AI": "ai",
+    "정부정책": "government_policy",
+    "부동산": "real_estate"
 }
 
 # --- Prompts ---
