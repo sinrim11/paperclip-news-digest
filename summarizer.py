@@ -5,7 +5,7 @@ import re
 import time
 import urllib.request
 
-OLLAMA_MODEL = "gemma4:latest"
+OLLAMA_MODEL = "gemma4:26b"
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MAX_ARTICLES = 50
 TIMEOUT_SEC = 180
