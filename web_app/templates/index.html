@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>뉴스 다이제스트</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,700;1,400;1,700&family=Manrope:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script>
+tailwind.config = {
+    theme: {
+        extend: {
+            colors: {
+                "bg": "#0f1419",
+                "surface": "#1a1f26",
+                "surface-el": "#242b35",
+                "txt": "#e7e9ea",
+                "txt-sec": "#8b98a5",
+                "txt-mute": "#5b6b7d",
+                "border": "#2f3840",
+                "accent": "#1d9bf0",
+            },
+            fontFamily: {
+                headline: ["Newsreader", "serif"],
+                body: ["Manrope", "sans-serif"],
+                label: ["Inter", "sans-serif"],
+            },
+        },
+    }
+}
+</script>
+<style>
+    .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    body { font-family: 'Manrope', sans-serif; }
+    .placeholder-img {
+        background: linear-gradient(135deg, #242b35 0%, #1a1f26 100%);
+        display: flex; align-items: center; justify-content: center;
+    }
+    .chip-active { color: #fff !important; }
+    .category-section { scroll-margin-top: 140px; }
+    .detail-toggle:checked ~ .detail-content { max-height: 500px; opacity: 1; }
+    .detail-content { max-height: 0; opacity: 0; overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; }
+    .chip-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+    .chip-scroll::-webkit-scrollbar { display: none; }
+</style>
+</head>
+<body class="bg-bg text-txt min-h-screen">
+
+{# Category config #}
+{% set category_config = {
+    '글로벌 뉴스': {'color': '#3b82f6', 'icon': 'public'},
+    '증권 관련 뉴스': {'color': '#10b981', 'icon': 'trending_up'},
+    'AI 관련 뉴스': {'color': '#a78bfa', 'icon': 'psychology'},
+    '정부 정책 뉴스': {'color': '#f59e0b', 'icon': 'policy'},
+    '부동산 뉴스': {'color': '#06b6d4', 'icon': 'domain'}
+} %}
+{% set ordered_categories = ['글로벌 뉴스', '증권 관련 뉴스', 'AI 관련 뉴스', '정부 정책 뉴스', '부동산 뉴스'] %}
+
+<!-- Header -->
+<header class="fixed top-0 w-full z-50 bg-bg/95 backdrop-blur-md border-b border-border">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+        <h1 class="font-headline text-xl sm:text-2xl font-bold text-txt italic tracking-tight">뉴스 다이제스트</h1>
+        <div class="flex items-center gap-4">
+            <span class="text-txt-sec text-xs sm:text-sm font-label">{{ display_date }}</span>
+            <span class="text-accent font-bold text-lg font-label">{{ total_articles }}</span>
+        </div>
+    </div>
+</header>
+
+<!-- Sticky Category Chips -->
+<nav class="fixed top-16 w-full z-40 bg-bg/95 backdrop-blur-md border-b border-border">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex gap-2 overflow-x-auto chip-scroll">
+        <button class="chip-active shrink-0 px-4 py-2 rounded-full text-xs font-label font-semibold transition-all bg-accent"
+                onclick="window.scrollTo({top:0,behavior:'smooth'}); setActiveChip(this);">
+            전체
+        </button>
+        {% for cat_name in ordered_categories %}
+        {% set conf = category_config.get(cat_name, {'color': '#6b7280', 'icon': 'article'}) %}
+        {% set count = articles_by_category.get(cat_name, [])|length %}
+        <button class="shrink-0 px-4 py-2 rounded-full text-xs font-label font-semibold transition-all text-txt-sec border border-border hover:border-[{{ conf.color }}] hover:text-[{{ conf.color }}]"
+                data-color="{{ conf.color }}"
+                onclick="document.getElementById('cat-{{ loop.index }}').scrollIntoView({behavior:'smooth'}); setActiveChip(this);">
+            {{ cat_name.replace(' 뉴스', '').replace(' 관련', '') }}
+            {% if count > 0 %}
+            <span class="ml-1 opacity-60">{{ count }}</span>
+            {% endif %}
+        </button>
+        {% endfor %}
+    </div>
+</nav>
+
+<!-- Main Content -->
+<main class="pt-[140px] pb-16">
+    <!-- Hero Section -->
+    <section class="max-w-4xl mx-auto px-4 sm:px-6 mb-10">
+        <h2 class="font-headline text-3xl sm:text-4xl font-bold text-txt mb-2">오늘의 뉴스 요약</h2>
+        <p class="text-txt-sec text-sm">AI가 큐레이션한 오늘의 핵심 뉴스 브리핑</p>
+        <div class="h-0.5 w-16 bg-accent rounded-full mt-4"></div>
+    </section>
+
+    <!-- Articles by Category -->
+    {% for cat_name in ordered_categories %}
+    {% set articles = articles_by_category.get(cat_name, []) %}
+    {% if articles|length > 0 %}
+    {% set conf = category_config.get(cat_name, {'color': '#6b7280', 'icon': 'article'}) %}
+    <section id="cat-{{ loop.index }}" class="category-section max-w-4xl mx-auto px-4 sm:px-6 mb-12">
+        <!-- Category Header -->
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: {{ conf.color }}20;">
+                <span class="material-symbols-outlined text-lg" style="color: {{ conf.color }}">{{ conf.icon }}</span>
+            </div>
+            <h3 class="font-headline text-xl font-bold text-txt">{{ cat_name }}</h3>
+            <span class="text-xs font-label font-semibold px-2.5 py-0.5 rounded-full"
+                  style="background: {{ conf.color }}15; color: {{ conf.color }};">{{ articles|length }}건</span>
+        </div>
+
+        <div class="grid gap-6 sm:grid-cols-2">
+        {% for article in articles %}
+            <article class="bg-surface rounded-xl overflow-hidden border border-border transition-all duration-300 hover:border-[{{ conf.color }}40] hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 group">
+                <!-- Image -->
+                <div class="relative w-full h-[200px] overflow-hidden">
+                    {% if article.image_url %}
+                    <img alt="{{ article.title }}"
+                         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                         src="{{ article.image_url }}"
+                         loading="lazy"
+                         onerror="this.parentElement.classList.add('placeholder-img'); this.outerHTML='<span class=\'material-symbols-outlined text-txt-mute text-4xl\'>{{ conf.icon }}</span>'"/>
+                    {% else %}
+                    <div class="placeholder-img w-full h-full">
+                        <span class="material-symbols-outlined text-txt-mute text-4xl">{{ conf.icon }}</span>
+                    </div>
+                    {% endif %}
+                    <!-- Category Badge on image -->
+                    <span class="absolute top-3 left-3 px-2.5 py-1 text-[10px] font-label font-bold rounded-md text-white backdrop-blur-sm"
+                          style="background: {{ conf.color }}cc;">
+                        {{ cat_name.replace(' 뉴스', '').replace(' 관련', '') }}
+                    </span>
+                </div>
+
+                <!-- Content -->
+                <div class="p-5">
+                    <!-- Headline -->
+                    <h4 class="font-headline text-lg font-bold text-txt leading-snug mb-3 line-clamp-2">
+                        <a href="{{ article.url }}" target="_blank" rel="noopener"
+                           class="hover:text-accent transition-colors">
+                            {{ article.title }}
+                        </a>
+                    </h4>
+
+                    <!-- Key Summary -->
+                    {% if article.summary %}
+                    <p class="text-txt font-semibold text-[15px] leading-relaxed mb-3 line-clamp-3">
+                        {{ article.summary.split('\n')[0] if '\n' in article.summary else article.summary[:150] }}
+                    </p>
+                    {% endif %}
+
+                    <!-- Expandable Detail -->
+                    {% if article.summary and (article.summary.split('\n')|length > 1 or article.summary|length > 150) %}
+                    <label class="inline-flex items-center gap-1 text-accent text-xs font-label font-semibold cursor-pointer hover:underline mb-3">
+                        <input type="checkbox" class="detail-toggle hidden peer"/>
+                        <span class="peer-checked:hidden">자세히 보기</span>
+                        <span class="hidden peer-checked:inline">접기</span>
+                        <span class="material-symbols-outlined text-sm peer-checked:rotate-180 transition-transform">expand_more</span>
+                    </label>
+                    <div class="detail-content">
+                        <p class="text-txt-sec text-sm leading-relaxed pb-2">
+                            {% if '\n' in article.summary %}
+                                {{ article.summary.split('\n')[1:] | join('\n') }}
+                            {% else %}
+                                {{ article.summary[150:] }}
+                            {% endif %}
+                        </p>
+                    </div>
+                    {% endif %}
+
+                    <!-- Meta Footer -->
+                    <div class="flex items-center justify-between pt-3 border-t border-border mt-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[11px] text-txt-mute font-label">{{ article.published_date }}</span>
+                            {% if article.source_count and article.source_count > 1 %}
+                            <span class="text-[11px] text-txt-mute font-label">· 외 {{ article.source_count - 1 }}개 매체</span>
+                            {% endif %}
+                        </div>
+                        <a class="text-accent text-xs font-label font-semibold flex items-center gap-0.5 hover:underline"
+                           href="{{ article.url }}" target="_blank" rel="noopener">
+                            원문
+                            <span class="material-symbols-outlined text-sm">open_in_new</span>
+                        </a>
+                    </div>
+                </div>
+            </article>
+        {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+    {% endfor %}
+
+    <!-- Fallback for uncategorized -->
+    {% set known_cats = ordered_categories %}
+    {% for cat_name, articles in articles_by_category.items() %}
+    {% if cat_name not in known_cats and articles|length > 0 %}
+    <section class="max-w-4xl mx-auto px-4 sm:px-6 mb-12">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-el">
+                <span class="material-symbols-outlined text-lg text-txt-mute">article</span>
+            </div>
+            <h3 class="font-headline text-xl font-bold text-txt">{{ cat_name }}</h3>
+            <span class="text-xs font-label font-semibold px-2.5 py-0.5 rounded-full bg-surface-el text-txt-sec">{{ articles|length }}건</span>
+        </div>
+        <div class="grid gap-6 sm:grid-cols-2">
+        {% for article in articles %}
+            <article class="bg-surface rounded-xl overflow-hidden border border-border transition-all duration-300 hover:border-txt-mute hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 group">
+                <div class="relative w-full h-[200px] overflow-hidden">
+                    {% if article.image_url %}
+                    <img alt="{{ article.title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                         src="{{ article.image_url }}" loading="lazy"
+                         onerror="this.parentElement.classList.add('placeholder-img'); this.outerHTML='<span class=\'material-symbols-outlined text-txt-mute text-4xl\'>article</span>'"/>
+                    {% else %}
+                    <div class="placeholder-img w-full h-full">
+                        <span class="material-symbols-outlined text-txt-mute text-4xl">article</span>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="p-5">
+                    <h4 class="font-headline text-lg font-bold text-txt leading-snug mb-3 line-clamp-2">
+                        <a href="{{ article.url }}" target="_blank" rel="noopener" class="hover:text-accent transition-colors">{{ article.title }}</a>
+                    </h4>
+                    <p class="text-txt-sec text-sm leading-relaxed mb-3 line-clamp-3">{{ article.summary }}</p>
+                    <div class="flex items-center justify-between pt-3 border-t border-border">
+                        <span class="text-[11px] text-txt-mute font-label">{{ article.published_date }}</span>
+                        <a class="text-accent text-xs font-label font-semibold flex items-center gap-0.5 hover:underline"
+                           href="{{ article.url }}" target="_blank" rel="noopener">
+                            원문 <span class="material-symbols-outlined text-sm">open_in_new</span>
+                        </a>
+                    </div>
+                </div>
+            </article>
+        {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+    {% endfor %}
+
+    <!-- Empty state -->
+    {% if total_articles == 0 %}
+    <section class="max-w-4xl mx-auto text-center py-24 px-4">
+        <span class="material-symbols-outlined text-6xl text-txt-mute mb-4">newspaper</span>
+        <h2 class="font-headline text-2xl font-bold text-txt-sec mb-2">뉴스가 아직 없습니다</h2>
+        <p class="text-txt-mute text-sm">파이프라인을 실행하여 뉴스를 수집해주세요.</p>
+    </section>
+    {% endif %}
+
+    <!-- Footer -->
+    <footer class="max-w-4xl mx-auto px-4 sm:px-6 pt-8 border-t border-border">
+        <div class="flex items-center justify-between text-txt-mute text-xs font-label pb-8">
+            <span>마지막 업데이트: {{ last_updated }}</span>
+            <span>The Digital Curator</span>
+        </div>
+    </footer>
+</main>
+
+<script>
+function setActiveChip(el) {
+    document.querySelectorAll('nav button').forEach(btn => {
+        btn.classList.remove('chip-active');
+        btn.style.background = '';
+        btn.style.borderColor = '';
+    });
+    el.classList.add('chip-active');
+    const color = el.dataset.color || '#1d9bf0';
+    el.style.background = color;
+    el.style.borderColor = color;
+}
+</script>
+</body>
+</html>
