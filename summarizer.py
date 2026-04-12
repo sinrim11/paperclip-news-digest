@@ -8,6 +8,8 @@ import urllib.request
 # --- Configuration ---
 MLX_MODEL = "mlx-community/gemma-4-26b-a4b-it-8bit"
 MLX_URL = "http://localhost:8080/v1/chat/completions"
+OLLAMA_FALLBACK_URL = "http://localhost:11434/v1/chat/completions"
+OLLAMA_FALLBACK_MODEL = "gemma4:26b"
 MAX_ARTICLES = 50
 TIMEOUT_SEC = 180
 
@@ -66,24 +68,32 @@ REFINEMENT_SYSTEM_PROMPT = (
 # --- Core Functions ---
 
 def _call_mlx(prompt_system, prompt_user, temperature=0.3) -> str:
-    payload = json.dumps({
-        "model": MLX_MODEL,
-        "messages": [
-            {"role": "system", "content": prompt_system},
-            {"role": "user", "content": prompt_user},
-        ],
-        "max_tokens": 1024,
-        "temperature": temperature,
-        "stream": False,
-    }).encode()
-    req = urllib.request.Request(
-        MLX_URL, data=payload,
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:
-        data = json.loads(resp.read())
-    raw = data["choices"][0]["message"]["content"]
-    return html.unescape(raw.strip())
+    def _call_endpoint(url, model):
+        payload = json.dumps({
+            "model": model,
+            "messages": [
+                {"role": "system", "content": prompt_system},
+                {"role": "user", "content": prompt_user},
+            ],
+            "max_tokens": 1024,
+            "temperature": temperature,
+            "stream": False,
+        }).encode()
+        req = urllib.request.Request(
+            url, data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:
+            data = json.loads(resp.read())
+        raw = data["choices"][0]["message"]["content"]
+        return html.unescape(raw.strip())
+
+    try:
+        return _call_endpoint(MLX_URL, MLX_MODEL)
+    except Exception as e:
+        if "Connection refused" in str(e) or "61" in str(e):
+            return _call_endpoint(OLLAMA_FALLBACK_URL, OLLAMA_FALLBACK_MODEL)
+        raise
 
 def quality_check(text: str) -> bool:
     """Checks if the text meets basic quality criteria."""
