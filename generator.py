@@ -20,12 +20,14 @@ def generate_digest(input_file, template_path, output_dir):
             categories[cat] = []
         categories[cat].append(article)
 
+    digest_content = f\"# Daily News Digest - {datetime.now().strftime('%Y-%m-%d')}\\n\\n\"
     digest_content = f"# Daily News Digest - {datetime.now().strftime('%Y-%m-%d')}\n\n"
     
     for cat, items in categories.items():
         digest_content += f"## {cat}\n"
         for item in items:
-            digest_content += f"- [{item['title']}]({item['url']})\n"
+            title_ko = item.get('title_ko', item['title'])
+            digest_content += f"- [{title_ko}]({item['url']})\n"
             digest_content += f"  > {item['summary']}\n\n"
 
     with open(output_file, 'w', encoding='utf-8') as f:

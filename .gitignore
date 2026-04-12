@@ -1,8 +1,10 @@
 __pycache__/
 *.pyc
 .venv/
-output/
+output/*.md
+output/*.json
+*.log
 .env
-*.egg-info/
-dist/
-build/
+.omc/
+.playwright-mcp/
+*.png

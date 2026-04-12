@@ -50,13 +50,17 @@ def load_latest_articles():
 
 
 def group_by_category(articles):
-    """Group articles by category field."""
+    """Group articles by category, sorted by source_count desc then published_date desc."""
     grouped = {}
     for article in articles:
         cat = article.get("category", "기타")
         if cat not in grouped:
             grouped[cat] = []
         grouped[cat].append(article)
+    for cat in grouped:
+        grouped[cat].sort(
+            key=lambda a: (-(a.get("source_count") or 1), a.get("published_date", "")),
+        )
     return grouped
 
 
@@ -66,9 +70,9 @@ async def index(request: Request):
     articles_by_category = group_by_category(articles)
     last_updated = datetime.now().strftime("%Y-%m-%d %H:%M")
     return templates.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             "articles_by_category": articles_by_category,
             "last_updated": last_updated,
             "display_date": display_date,

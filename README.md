@@ -5,27 +5,22 @@ Korean news aggregation and summarization pipeline with web browser UI.
 Collects RSS feeds from 25+ Korean and international sources, extracts full article content via trafilatura, summarizes in Korean using a local Ollama LLM, and serves a browsable digest via FastAPI.
 
 ## Requirements
-
-- Python 3.9+
-- [Ollama](https://ollama.com) with a Gemma 4 model (e.g. `gemma4:latest`)
+- Python 3.14
+- pip install -r requirements.txt
+- [Ollama](https://ollama.com) with a Gemma 4 model (e.g. `gemma4:26b`)
 
 ## Setup
-
 ```bash
 pip install -r requirements.txt
-
 # Verify Ollama is running
 ollama list
 ```
 
 ## Usage
-
 ### Collect and summarize news
-
 ```bash
 python main.py
 ```
-
 This runs the full pipeline:
 1. **Collect** — fetches RSS feeds, deduplicates, extracts full content
 2. **Summarize** — generates Korean summaries via Ollama
@@ -34,11 +29,11 @@ This runs the full pipeline:
 Output files are written to `output/`.
 
 ### Browse in web UI
-
 ```bash
 python web_app/main.py
 # Open http://localhost:8080
 ```
+
 
 ## Project Structure
 

@@ -150,30 +150,16 @@ tailwind.config = {
                         </a>
                     </h4>
 
-                    <!-- Key Summary -->
+                    <!-- Summary: flowing paragraph, first sentence bolded -->
                     {% if article.summary %}
-                    <p class="text-txt font-semibold text-[15px] leading-relaxed mb-3 line-clamp-3">
-                        {{ article.summary.split('\n')[0] if '\n' in article.summary else article.summary[:150] }}
+                    {% set parts = article.summary.split('. ', 1) %}
+                    <p class="text-txt-sec text-[15px] leading-[1.75] mb-3">
+                        {% if parts|length > 1 %}
+                        <strong class="text-txt font-semibold">{{ parts[0] }}.</strong> {{ parts[1] }}
+                        {% else %}
+                        {{ article.summary }}
+                        {% endif %}
                     </p>
-                    {% endif %}
-
-                    <!-- Expandable Detail -->
-                    {% if article.summary and (article.summary.split('\n')|length > 1 or article.summary|length > 150) %}
-                    <label class="inline-flex items-center gap-1 text-accent text-xs font-label font-semibold cursor-pointer hover:underline mb-3">
-                        <input type="checkbox" class="detail-toggle hidden peer"/>
-                        <span class="peer-checked:hidden">자세히 보기</span>
-                        <span class="hidden peer-checked:inline">접기</span>
-                        <span class="material-symbols-outlined text-sm peer-checked:rotate-180 transition-transform">expand_more</span>
-                    </label>
-                    <div class="detail-content">
-                        <p class="text-txt-sec text-sm leading-relaxed pb-2">
-                            {% if '\n' in article.summary %}
-                                {{ article.summary.split('\n')[1:] | join('\n') }}
-                            {% else %}
-                                {{ article.summary[150:] }}
-                            {% endif %}
-                        </p>
-                    </div>
                     {% endif %}
 
                     <!-- Meta Footer -->

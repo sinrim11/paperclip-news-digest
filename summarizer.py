@@ -13,18 +13,18 @@ TIMEOUT_SEC = 180
 SYSTEM_PROMPT = (
     "당신은 뉴스 요약 전문가입니다. 반드시 한국어로만 답변하세요. "
     "영어 기사도 한국어로 번역하여 요약합니다. "
-    "4-6문장, 300-800자로 작성하세요. "
-    "구조: 1) 핵심 사실 2) 맥락/배경 3) 전망. "
-    "숫자/고유명사 포함. 미사여구 금지."
+    "형식 규칙: 마크다운 기호 사용 금지 (##, -, *, ** 금지). "
+    "3-5문장의 자연스러운 한국어 단락으로 작성. "
+    "첫 문장에 핵심 사실(누가/무엇/언제/어디/숫자) 포함. "
+    "200-400자. 미사여구 없이 명확하고 간결하게."
 )
 
 
 def _call_ollama(text: str) -> str:
     prompt = (
-        "다음 뉴스 기사를 한국어로 4-6문장 요약해줘. "
-        "영어면 한국어로 번역하여 요약. 300-800자. "
-        "1문장: 핵심 사실(누가/무엇/언제/어디). "
-        "2-3문장: 맥락과 배경. 마지막: 전망.\n\n"
+        "다음 뉴스 기사를 한국어 단락으로 요약해줘. "
+        "영어면 한국어로 번역하여 요약. "
+        "3-5문장, 첫 문장에 핵심 사실 포함. 마크다운 기호 사용 금지.\n\n"
         f"{text}"
     )
     payload = json.dumps({
@@ -50,6 +50,8 @@ KOREAN_PATTERN = re.compile(r'[가-힣].*[가-힣].*[가-힣]')
 
 def _needs_summary(article):
     s = article.get("summary", "")
+    if "JavaScript is disabled" in s:
+        return True
     return not (len(s) >= 200 and KOREAN_PATTERN.search(s))
 
 
@@ -58,7 +60,7 @@ def _save(articles, path):
         json.dump(articles, f, ensure_ascii=False, indent=4)
 
 
-def summarize_articles(input_file):
+def summarize_articles(input_file, force=False):
     if not os.path.exists(input_file):
         print(f"Input file {input_file} not found.")
         return
@@ -66,7 +68,12 @@ def summarize_articles(input_file):
     with open(input_file, "r", encoding="utf-8") as f:
         articles = json.load(f)
 
-    to_process = [(i, a) for i, a in enumerate(articles[:MAX_ARTICLES]) if _needs_summary(a)]
+    if force:
+        print("Force mode enabled: Processing all articles...")
+        to_process = [(i, a) for i, a in enumerate(articles[:MAX_ARTICLES])]
+    else:
+        to_process = [(i, a) for i, a in enumerate(articles[:MAX_ARTICLES]) if _needs_summary(a)]
+        
     print(f"Need summarization: {len(to_process)}/{len(articles)} articles via Ollama ({OLLAMA_MODEL})...")
 
     summarized = 0
@@ -103,10 +110,20 @@ def summarize_articles(input_file):
 
     print(f"완료: {summarized}/{len(to_process)}개 기사 요약됨")
 
-
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) > 1:
-        summarize_articles(sys.argv[1])
+    force_mode = "--force" in sys.argv
+    if len(sys.argv) > 1 and sys.argv[1] != "--force":
+        summarize_articles(sys.argv[1], force=force_mode)
+    elif len(sys.argv) > 1 and sys.argv[1] == "--force":
+        # If --force is provided, we still need the file path.
+        # Assuming the next arg or a default if not provided.
+        # For simplicity in this fix, I'll assume the user provides the path.
+        # Or I'll check the first arg that isn't --force.
+        path_arg = [a for a in sys.argv if a != "--force" and not a.startswith("-")]
+        if path_arg:
+            summarize_articles(path_arg[0], force=True)
+        else:
+            print("Usage: python summarizer.py <input_json_file> [--force]")
     else:
-        print("Usage: python summarizer.py <input_json_file>")
+        print("Usage: python summarizer.py <input_json_file> [--force]")
