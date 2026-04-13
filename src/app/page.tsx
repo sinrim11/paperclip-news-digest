@@ -118,28 +118,67 @@ export default async function HomePage({
 
   return (
     <div className="space-y-8">
-      {/* Header row: date nav + generate button */}
+      {/* Header row: date nav */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <DateNavigator currentDate={dateStr} availableDates={availableDates} />
-        {!digest && <GenerateButton date={dateStr} />}
       </div>
 
-      {/* Empty state */}
-      {!digest && (
-        <div className="text-center py-20 text-gray-400">
-          <p className="text-6xl mb-4">📭</p>
-          <p className="text-xl">
-            {dateStr === today
-              ? '오늘의 브리핑이 아직 없습니다.'
-              : `${dateStr} 브리핑이 없습니다.`}
-          </p>
-          <p className="text-sm mt-2">
-            {dateStr === today
-              ? '위 버튼을 눌러 지금 생성하거나 크론이 자동 실행됩니다.'
-              : '해당 날짜의 데이터가 저장되지 않았습니다.'}
-          </p>
+      {/* Empty state — vercel-react-best-practices §rendering-conditional-render */}
+      {!digest ? (
+        <div className="flex flex-col items-center py-12">
+          <div className="w-full max-w-lg rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-10 text-center">
+            {/* Icon badge */}
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm text-3xl">
+              📰
+            </div>
+
+            {/* Heading */}
+            <h2 className="mb-2 text-lg font-semibold text-gray-800">
+              {dateStr === today
+                ? '오늘의 브리핑이 아직 없습니다'
+                : `${dateStr} 브리핑 없음`}
+            </h2>
+
+            {/* Description */}
+            <p className="mb-6 text-sm leading-relaxed text-gray-500">
+              {dateStr === today
+                ? '5개 카테고리 각 10건씩 총 50건의 뉴스를 팩트·임팩트·액션 3줄로 요약합니다.'
+                : '해당 날짜의 데이터가 저장되지 않았습니다.'}
+            </p>
+
+            {/* Category pills (today only) */}
+            {dateStr === today && (
+              <>
+                <div className="mb-6 flex flex-wrap justify-center gap-2">
+                  {[
+                    { emoji: '🌐', label: '글로벌' },
+                    { emoji: '📈', label: '증권' },
+                    { emoji: '🤖', label: 'AI' },
+                    { emoji: '🏛️', label: '정부정책' },
+                    { emoji: '🏘️', label: '부동산' },
+                  ].map(({ emoji, label }) => (
+                    <span
+                      key={label}
+                      className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 shadow-sm"
+                    >
+                      {emoji} {label}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Generate CTA */}
+                <div className="flex justify-center">
+                  <GenerateButton date={dateStr} />
+                </div>
+
+                <p className="mt-4 text-xs text-gray-400">
+                  ⏰ 크론이 매일 오전 7시(KST) 자동 생성합니다
+                </p>
+              </>
+            )}
+          </div>
         </div>
-      )}
+      ) : null}
 
       {/* Digest in progress */}
       {digest?.status === 'in_progress' && (
