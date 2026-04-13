@@ -1,9 +1,24 @@
+import dynamic from 'next/dynamic';
 import type { WeeklyDigestContent } from '@/lib/types';
 import type { TimelineNewsItem } from './IssueTimeline';
 import type { MarketDayData } from './MarketSparklines';
 import type { CategorySummaryItem } from './WeeklyCategoryTabs';
-import { MarketSparklines } from './MarketSparklines';
 import { WeeklyCategoryTabs } from './WeeklyCategoryTabs';
+
+// bundle-dynamic-imports: recharts (~180KB) deferred to client-only chunk
+const MarketSparklines = dynamic(
+  () => import('./MarketSparklines').then((m) => ({ default: m.MarketSparklines })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="h-24 animate-pulse bg-gray-100 rounded-xl" />
+        ))}
+      </div>
+    ),
+  },
+);
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
