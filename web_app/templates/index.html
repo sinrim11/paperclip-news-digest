@@ -150,8 +150,22 @@ tailwind.config = {
                         </a>
                     </h4>
 
-                    <!-- Summary: flowing paragraph, first sentence bolded -->
+                    <!-- Summary: structured bullets or flowing paragraph -->
                     {% if article.summary %}
+                    {% if article.summary.startswith('1. ') %}
+                    {% set after1 = article.summary[3:] %}
+                    {% set split2 = after1.split(' 2. ', 1) %}
+                    <ul class="text-txt-sec text-[14px] leading-[1.7] mb-3 space-y-1.5">
+                        <li class="flex gap-2"><span class="text-accent font-bold shrink-0 mt-0.5">①</span><span>{{ split2[0] }}</span></li>
+                        {% if split2|length > 1 %}
+                        {% set split3 = split2[1].split(' 3. ', 1) %}
+                        <li class="flex gap-2"><span class="text-accent font-bold shrink-0 mt-0.5">②</span><span>{{ split3[0] }}</span></li>
+                        {% if split3|length > 1 %}
+                        <li class="flex gap-2"><span class="text-accent font-bold shrink-0 mt-0.5">③</span><span>{{ split3[1] }}</span></li>
+                        {% endif %}
+                        {% endif %}
+                    </ul>
+                    {% else %}
                     {% set parts = article.summary.split('. ', 1) %}
                     <p class="text-txt-sec text-[15px] leading-[1.75] mb-3">
                         {% if parts|length > 1 %}
@@ -160,6 +174,7 @@ tailwind.config = {
                         {{ article.summary }}
                         {% endif %}
                     </p>
+                    {% endif %}
                     {% endif %}
 
                     <!-- Meta Footer -->
@@ -214,7 +229,11 @@ tailwind.config = {
                     <h4 class="font-headline text-lg font-bold text-txt leading-snug mb-3 line-clamp-2">
                         <a href="{{ article.url }}" target="_blank" rel="noopener" class="hover:text-accent transition-colors">{{ article.title }}</a>
                     </h4>
+                    {% if article.summary.startswith('1. ') %}
+                    <p class="text-txt-sec text-sm leading-relaxed mb-3 line-clamp-3">{{ article.summary[3:].split(' 2. ')[0] }}</p>
+                    {% else %}
                     <p class="text-txt-sec text-sm leading-relaxed mb-3 line-clamp-3">{{ article.summary }}</p>
+                    {% endif %}
                     <div class="flex items-center justify-between pt-3 border-t border-border">
                         <span class="text-[11px] text-txt-mute font-label">{{ article.published_date }}</span>
                         <a class="text-accent text-xs font-label font-semibold flex items-center gap-0.5 hover:underline"
