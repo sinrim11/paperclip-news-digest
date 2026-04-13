@@ -118,6 +118,9 @@ export default async function HomePage({
 
   return (
     <div className="space-y-8">
+      {/* sr-only h1 — WCAG 2.4.6: each page has a unique heading for screen readers */}
+      <h1 className="sr-only">뉴스 다이제스트 — {dateStr} 브리핑</h1>
+
       {/* Header row: date nav */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <DateNavigator currentDate={dateStr} availableDates={availableDates} />

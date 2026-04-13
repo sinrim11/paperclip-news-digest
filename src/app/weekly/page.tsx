@@ -56,7 +56,7 @@ export default async function WeeklyPage() {
           <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm text-3xl">
             📆
           </div>
-          <h2 className="mb-2 text-lg font-semibold text-gray-800">주간 브리핑이 아직 없습니다</h2>
+          <h1 className="mb-2 text-lg font-semibold text-gray-800">주간 브리핑이 아직 없습니다</h1>
           <p className="mb-6 text-sm leading-relaxed text-gray-500">
             지난 7일간 뉴스를 카테고리별 트렌드·주요 이슈·시장 흐름으로 종합 정리합니다.
           </p>
@@ -93,8 +93,17 @@ export default async function WeeklyPage() {
     wti:     r.wtiValue    ?? undefined,
   }));
 
+  const weekStartFmt = new Date(latest.weekStart).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+  const weekEndFmt   = new Date(latest.weekEnd).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+
   return (
     <div className="space-y-12">
+      {/* M6: visible page header — users know they are in the weekly view */}
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold text-gray-900">📊 주간 브리핑</h1>
+        <p className="text-sm text-gray-500">{weekStartFmt} – {weekEndFmt} 주요 뉴스 종합</p>
+      </div>
+
       <WeeklyView
         content={content}
         weekStart={new Date(latest.weekStart)}
