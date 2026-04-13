@@ -53,13 +53,13 @@ export function DateNavigator({
         </button>
 
         <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-bold">{fmt(currentDate)}</h2>
+          <h2 className="text-xl font-bold sm:text-2xl">{fmt(currentDate)}</h2>
           {sorted.length > 1 && (
             <select
               value={currentDate}
               onChange={(e) => navigate(e.target.value)}
               aria-label="날짜 선택"
-              className="text-xs text-gray-500 border border-gray-200 rounded px-1.5 py-0.5 bg-white cursor-pointer"
+              className="hidden sm:block text-xs text-gray-500 border border-gray-200 rounded px-1.5 py-0.5 bg-white cursor-pointer"
             >
               {[...sorted].reverse().map((d) => (
                 <option key={d} value={d}>
