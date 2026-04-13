@@ -16,33 +16,67 @@ import trafilatura
 
 FETCH_TIMEOUT = 10
 
+# Known limitations for content extraction:
+# - NYTimes articles: require authentication/subscription (HTTP 403/401)
+# - TechnologyReview.com: requires JavaScript rendering (client-side content loading)
+# - Some Chosun articles: RSS-preview-only (no extractable full content)
+# These articles fall back to RSS summary for summarization (see summarizer.py)
+
 
 def _extract_content(url):
+    # Determine minimum content threshold based on domain
+    min_content_length = 200
+    domain = url.split('/')[2].lower() if url else ''
+    # Korean news sites often have shorter articles in RSS
+    if any(d in domain for d in ['chosun.com', 'yna.co.kr', 'mk.co.kr', 'hankyung.com']):
+        min_content_length = 100
+
     try:
         resp = requests.get(url, timeout=FETCH_TIMEOUT, headers={
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
         })
         resp.raise_for_status()
         html_content = resp.text
-    except Exception:
+    except Exception as e:
+        print(f"  ✗ {url} - HTTP error: {type(e).__name__}")
         return None, None
 
     # Check for JS-disabled messages
     if any(msg in html_content.lower() for msg in ["javascript is disabled", "enable javascript"]):
+        print(f"  ✗ {url} - JavaScript required")
         return None, None
 
     # Try trafilatura first
     content = trafilatura.extract(html_content, include_comments=False, include_tables=False)
 
+    # Track extraction source
+    extraction_source = "trafilatura" if content and len(content) >= min_content_length else None
+
     # Fallback to newspaper3k if trafilatura fails or returns very little text
-    if (not content or len(content) < 200) and Article:
+    if (not content or len(content) < min_content_length) and Article:
         try:
             a = Article(url)
             a.download()
             a.parse()
-            content = a.text
-        except Exception:
-            pass
+            if a.text and len(a.text) >= min_content_length:
+                content = a.text
+                extraction_source = "newspaper3k"
+            elif a.text and content is None:
+                # Accept newspaper3k even if short, if trafilatura failed completely
+                content = a.text
+                extraction_source = "newspaper3k"
+        except Exception as e:
+            if extraction_source is None and 'newspaper3k' not in str(type(e).__name__):
+                print(f"  ✗ {url} - newspaper3k failed: {type(e).__name__}")
+
+    if content and len(content) >= min_content_length:
+        print(f"  ✓ {url} - {len(content)} chars via {extraction_source}")
+    elif content and len(content) > 50:
+        print(f"  ~ {url} - {len(content)} chars (short, from {extraction_source})")
+    elif not content:
+        print(f"  ✗ {url} - No content extracted")
+    else:
+        print(f"  ✗ {url} - Content too short: {len(content)} chars")
 
     og_image = None
     try:

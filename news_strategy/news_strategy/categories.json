@@ -1,0 +1,10 @@
+[
+  {"name": "정치", "priority": 5},
+  {"name": "경제", "priority": 5},
+  {"name": "사회", "priority": 4},
+  {"name": "IT/과학", "priority": 4},
+  {"name": "국제", "priority": 4},
+  {"name": "문화/연예", "priority": 3},
+  {"name": "스포츠", "priority": 3},
+  {"name": "건강", "priority": 2}
+]

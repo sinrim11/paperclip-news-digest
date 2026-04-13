@@ -1,0 +1,14 @@
+{
+  "additional_domestic": [
+    {"name": "중앙일보", "rss_url": "https://www.joongang.co.kr/rss/news"},
+    {"name": "경향신문", "rss_url": "https://www.khan.co.kr/rss/rssdata/total_news.xml"},
+    {"name": "한국일보", "rss_url": "http://rss.hankooki.com/news/hk_main.xml"},
+    {"name": "KBS", "rss_url": "https://news.kbs.co.kr/rss/news.xml"},
+    {"name": "MBC", "rss_url": "https://imnews.imbc.com/rss/news/news_00.xml"}
+  ],
+  "additional_international": [
+    {"name": "Reuters", "rss_url": "https://www.reutersagency.com/feed/"},
+    {"name": "NYT", "rss_url": "https://rssitemary.nytimes.com/services/xml/rss/nytgeo.xml"},
+    {"name": "AP News", "rss_url": "https://apnews.com/hub/ap-top-news.rss"}
+  ]
+}

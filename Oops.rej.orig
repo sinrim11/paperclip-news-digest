@@ -1,0 +1,9 @@
+@@ -6,7 +6,7 @@
+ import urllib.request
+ 
+ # --- Configuration ---
+-MLX_MODEL = "mlx-community/gemma-4-26b-a4b-it-8bit"
++MLX_MODEL = "mlx-community/gemma-2-2b-it"
+ MLX_URL = "http://localhost:8080/v1/chat/completions"
+ OLLAMA_FALLBACK_URL = "http://localhost:11434/v1/chat/completions"
+ OLLAMA_FALLBACK_MODEL = "gemma4:26b"

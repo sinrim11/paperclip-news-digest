@@ -1,0 +1,40 @@
+{
+  "securities": {
+    "bull market": "강세장",
+    "bear market": "약세장",
+    "dividend": "배당금",
+    "equity": "주식",
+    "bond": "채권",
+    "interest rate": "금리",
+    "inflation": "인플레이션",
+    "yield": "수익률",
+    "volatility": "변동성",
+    "asset allocation": "자산 배분"
+  },
+  "ai": {
+    "large language model": "대규모 언어 모델 (LLM)",
+    "machine learning": "머신 러닝",
+    "neural network": "신경망",
+    "generative ai": "생성형 AI",
+    "inference": "추론",
+    "training": "학습",
+    "parameter": "매개변수",
+    "algorithm": "알고리즘"
+  },
+  "government_policy": {
+    "regulation": "규제",
+    "subsidy": "보조금",
+    "legislation": "입법",
+    "tax reform": "세제 개편",
+    "monetary policy": "통화 정책",
+    "fiscal policy": "재정 정책"
+  },
+  "real_estate": {
+    "mortgage": "주택 담보 대출",
+    "interest rate": "금리",
+    "housing market": "부동산 시장",
+    "supply": "공급",
+    "demand": "수요",
+    "property value": "자산 가치"
+  }
+}
