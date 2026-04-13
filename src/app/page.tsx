@@ -136,7 +136,7 @@ export default async function HomePage({
             <h2 className="mb-2 text-lg font-semibold text-gray-800">
               {dateStr === today
                 ? '오늘의 브리핑이 아직 없습니다'
-                : `${dateStr} 브리핑 없음`}
+                : `${new Date(dateStr).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })} 브리핑 없음`}
             </h2>
 
             {/* Description */}
