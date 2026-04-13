@@ -1,5 +1,5 @@
 /**
- * POST /api/cron/daily
+ * GET /api/cron/daily  (also POST for backward compat)
  * Triggered at 07:00 KST every day (cron: "0 22 * * *" UTC).
  * Generates today's digest and sends a Slack notification.
  *
@@ -61,3 +61,6 @@ export async function POST(req: Request) {
 
   return NextResponse.json(data, { status: res.status });
 }
+
+// Spec requires GET (Vercel Cron / GitHub Actions / external schedulers use GET)
+export const GET = POST;

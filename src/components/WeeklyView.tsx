@@ -28,6 +28,10 @@ export function WeeklyView({ content, weekStart, weekEnd }: {
   const fmt = (d: Date) =>
     d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
 
+  // Resolve optional legacy fields to stable arrays for type-safe rendering
+  const categoryRecaps = content.categoryRecaps ?? [];
+  const topTrends = content.topTrends ?? [];
+
   return (
     <div className="space-y-8">
       {/* Week header */}
@@ -41,14 +45,17 @@ export function WeeklyView({ content, weekStart, weekEnd }: {
         {content.headline && (
           <p className="mt-2 text-lg text-gray-700 leading-relaxed">{content.headline}</p>
         )}
+        {content.executive_summary && (
+          <p className="mt-2 text-base text-gray-600 leading-relaxed">{content.executive_summary}</p>
+        )}
       </div>
 
       {/* Category recaps */}
-      {(content.categoryRecaps?.length ?? 0) > 0 && (
+      {categoryRecaps.length > 0 && (
         <section>
           <h3 className="font-bold text-lg mb-4">카테고리별 주간 총평</h3>
           <div className="grid md:grid-cols-2 gap-4">
-            {(content.categoryRecaps ?? []).map((recap) => {
+            {categoryRecaps.map((recap) => {
               const key = labelToKey(recap.category);
               const icon = key ? CATEGORY_ICON[key] : '📋';
               const label = key ? CATEGORY_LABEL[key] : recap.category;
@@ -80,11 +87,11 @@ export function WeeklyView({ content, weekStart, weekEnd }: {
       )}
 
       {/* Top trends */}
-      {(content.topTrends?.length ?? 0) > 0 && (
+      {topTrends.length > 0 && (
         <section>
           <h3 className="font-bold text-lg mb-4">이번 주 반복된 트렌드</h3>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {(content.topTrends ?? []).map((trend, i) => (
+            {topTrends.map((trend, i) => (
               <div
                 key={trend.tag}
                 className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-2"
@@ -98,7 +105,7 @@ export function WeeklyView({ content, weekStart, weekEnd }: {
                   <div
                     className="h-full bg-blue-400 rounded-full transition-all"
                     style={{
-                      width: `${Math.min(100, (trend.count / (content.topTrends?.[0]?.count ?? 1)) * 100)}%`,
+                      width: `${Math.min(100, (trend.count / (topTrends[0]?.count ?? 1)) * 100)}%`,
                     }}
                   />
                 </div>

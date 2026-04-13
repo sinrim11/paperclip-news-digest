@@ -127,16 +127,61 @@ export interface LLMTop3Item extends LLMNewsItem {
 export interface WeeklyDigestContent {
   weekStart: string;
   weekEnd: string;
-  headline: string;
-  categoryRecaps: Array<{
+
+  // Phase 4 full spec fields
+  executive_summary?: string;
+  market_weekly?: {
+    summary: string;
+    kospi?: Record<string, unknown>;
+    kosdaq?: Record<string, unknown>;
+    usdKrw?: Record<string, unknown>;
+  };
+  category_summaries?: Array<{
+    category: string;
+    summary: string;
+    progression: string;
+    highlight: string;
+  }>;
+  weekly_top5?: Array<{
+    rank: number;
+    title: string;
+    category: string;
+    fact: string;
+    impact: string;
+    action: string;
+    weekly_progression: string;
+    current_status: string;
+  }>;
+  trend_analysis?: {
+    new_issues: string[];
+    escalated_issues: string[];
+    resolved_issues: string[];
+    sector_strength: Record<string, string>;
+    cross_category_chains: Array<{ chain: string; description: string }>;
+  };
+  context_evolution?: Array<{
+    tag: string;
+    weeklyCount: number;
+    statusChange: string;
+    nextWeekOutlook: string;
+  }>;
+  next_week_watchlist?: {
+    scheduled_events: Array<{ date: string; event: string; impact: string }>;
+    ongoing_monitors: string[];
+    investment_checklist: string[];
+  };
+
+  // Legacy / simplified fields (kept for backward compat with existing frontend)
+  headline?: string;
+  categoryRecaps?: Array<{
     category: string;
     summary: string;
     keyItems: string[];
   }>;
-  topTrends: Array<{
+  topTrends?: Array<{
     tag: string;
     count: number;
     description: string;
   }>;
-  outlook: string;
+  outlook?: string;
 }

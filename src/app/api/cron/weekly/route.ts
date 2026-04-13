@@ -1,5 +1,5 @@
 /**
- * POST /api/cron/weekly
+ * GET /api/cron/weekly  (also POST for backward compat)
  * Triggered every Sunday at 20:00 KST (cron: "0 11 * * 0" UTC).
  * Generates the weekly digest and sends a Slack notification.
  *
@@ -40,17 +40,19 @@ export async function POST(req: Request) {
   });
 
   const data = await res.json() as {
-    weekId?: string;
+    weeklyId?: string;
     message?: string;
-    executiveSummary?: string;
-    top5?: Array<{ title?: string }>;
+    weekStart?: string;
+    // Phase 4 content surfaced by generate route
+    executive_summary?: string;
+    weekly_top5?: Array<{ rank?: number; title?: string }>;
   };
 
   if (res.ok) {
-    const summaryLine = data.executiveSummary
-      ? `> ${data.executiveSummary.slice(0, 200)}`
+    const summaryLine = data.executive_summary
+      ? `> ${data.executive_summary.slice(0, 200)}`
       : '';
-    const top5Lines = (data.top5 ?? [])
+    const top5Lines = (data.weekly_top5 ?? [])
       .slice(0, 5)
       .map((item, i) => `${i + 1}. ${item.title ?? ''}`)
       .join('\n');
@@ -68,3 +70,6 @@ export async function POST(req: Request) {
 
   return NextResponse.json(data, { status: res.status });
 }
+
+// Spec requires GET (Vercel Cron / GitHub Actions / external schedulers use GET)
+export const GET = POST;
