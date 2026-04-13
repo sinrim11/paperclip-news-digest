@@ -1,16 +1,29 @@
 /**
  * POST /api/cron/daily
- * Called by the scheduler (or manually) to generate today's digest.
- * Delegates to /api/digest/generate.
+ * Triggered at 07:00 KST every day (cron: "0 22 * * *" UTC).
+ * Generates today's digest and sends a Slack notification.
+ *
+ * Authentication: Authorization: Bearer <CRON_SECRET>
  */
 
 import { NextResponse } from 'next/server';
+import { sendSlack } from '@/lib/slack';
+
+function verifyCronSecret(req: Request): boolean {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) return true; // not set → open (dev mode)
+  const auth = req.headers.get('authorization') ?? '';
+  return auth === `Bearer ${cronSecret}`;
+}
 
 export async function POST(req: Request) {
+  if (!verifyCronSecret(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const host = req.headers.get('host') ?? 'localhost:3000';
   const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
   const baseUrl = process.env.NEXTAUTH_URL ?? `${protocol}://${host}`;
-
   const today = new Date().toISOString().slice(0, 10);
 
   const res = await fetch(`${baseUrl}/api/digest/generate`, {
@@ -19,6 +32,32 @@ export async function POST(req: Request) {
     body: JSON.stringify({ date: today }),
   });
 
-  const data = await res.json() as unknown;
+  const data = await res.json() as {
+    digestId?: string;
+    message?: string;
+    market?: { kospi?: { value?: number; change?: string }; usdKrw?: { value?: number } };
+    top3?: Array<{ title?: string; urgency?: string }>;
+  };
+
+  if (res.ok) {
+    const marketLine = data.market?.kospi
+      ? `📊 KOSPI ${data.market.kospi.value} (${data.market.kospi.change})  ·  USD/KRW ${data.market.usdKrw?.value}`
+      : '';
+    const top3Lines = (data.top3 ?? [])
+      .slice(0, 3)
+      .map((item, i) => `${i + 1}. ${item.title ?? ''}`)
+      .join('\n');
+
+    await sendSlack(
+      [
+        `🔥 *오늘의 핵심 3선* (${today})`,
+        marketLine,
+        top3Lines || '다이제스트 생성 완료',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    );
+  }
+
   return NextResponse.json(data, { status: res.status });
 }
