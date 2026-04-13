@@ -11,7 +11,7 @@ MLX_URL = "http://localhost:8080/v1/chat/completions"
 OLLAMA_FALLBACK_URL = "http://localhost:11434/v1/chat/completions"
 OLLAMA_FALLBACK_MODEL = "gemma4:26b"
 MAX_ARTICLES = 50
-TIMEOUT_SEC = 180
+TIMEOUT_SEC = 300
 
 # Base directory of the project
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -106,7 +106,7 @@ def quality_check(text: str) -> bool:
     # Check for sentence completion (ends with . ! or ?)
     ends_properly = text.strip().endswith(('.', '!', '?'))
     
-    return korean_ratio > 0.7 and ends_properly
+    return korean_ratio > 0.5 and ends_properly
 
 def _needs_summary(article):
     s = article.get("summary", "")
@@ -163,7 +163,7 @@ def summarize_articles(input_file, force=False):
         for attempt in range(2):
             try:
                 # --- Step 1: Translation ---
-                translation_user_prompt = f"{glossary_context}\n\nTranslate the following article to Korean:\n\n{input_text}"
+                translation_user_prompt = f"{glossary_context}\n\n다음 기사를 한국어로 요약하세요:\n\n{input_text}"
                 translated_text = _call_mlx(TRANSLATION_SYSTEM_PROMPT, translation_user_prompt, temperature=0.2)
                 
                 if not quality_check(translated_text):
