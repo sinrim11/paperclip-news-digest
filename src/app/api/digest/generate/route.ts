@@ -22,10 +22,15 @@ import {
   type MarketSnapshot,
   type LLMCategoryResult,
   type LLMTop3Item,
+  type RawArticle,
 } from '@/lib/types';
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => ({})) as { date?: string; force?: boolean };
+  const body = await req.json().catch(() => ({})) as {
+    date?: string;
+    force?: boolean;
+    preCollectedArticles?: Record<string, RawArticle[]>; // CategoryKey → articles (bypasses RSS)
+  };
   const dateStr = body.date ?? new Date().toISOString().slice(0, 10);
   const targetDate = new Date(dateStr);
   targetDate.setUTCHours(0, 0, 0, 0);
@@ -72,27 +77,40 @@ export async function POST(req: Request) {
       console.error('[generate] market step failed:', err);
     }
 
-    // ── Step 2: Collect RSS articles ──────────────────────────────────────
-    const articlesByCategory = await collectByCategory(12);
+    // ── Step 2: Collect articles (RSS or pre-collected) ───────────────────
+    const articlesByCategory: Map<CategoryKey, RawArticle[]> = body.preCollectedArticles
+      ? new Map(Object.entries(body.preCollectedArticles) as [CategoryKey, RawArticle[]][])
+      : await collectByCategory(12);
 
-    // ── Step 3: Category LLM calls (5 parallel, retry once on failure) ────
-    const categoryResults = await Promise.allSettled(
-      CATEGORIES.map(async (catKey: CategoryKey): Promise<LLMCategoryResult> => {
-        const articles = articlesByCategory.get(catKey) ?? [];
-        const koreanLabel = toCategoryLabel(catKey);
-        const msgs = buildCategoryPrompt(dateStr, koreanLabel, articles, marketSnapshot);
+    // ── Step 3: Category LLM calls (sequential — Ollama serializes anyway) ──
+    // Running in parallel caused later requests to exceed the 120s timeout
+    // while queued. Sequential ensures each call gets the full 300s window.
+    type SettledResult = { status: 'fulfilled'; value: LLMCategoryResult } | { status: 'rejected'; reason: unknown };
+    const categoryResults: SettledResult[] = [];
 
-        for (let attempt = 0; attempt < 2; attempt++) {
-          try {
-            return await chatJSON<LLMCategoryResult>(msgs, { temperature: 0.3, maxTokens: 4096 });
-          } catch (err) {
-            if (attempt === 1) throw err;
-            await new Promise((r) => setTimeout(r, 2000));
+    for (const catKey of CATEGORIES) {
+      const articles = articlesByCategory.get(catKey) ?? [];
+      const koreanLabel = toCategoryLabel(catKey);
+      const msgs = buildCategoryPrompt(dateStr, koreanLabel, articles, marketSnapshot);
+
+      let settled: SettledResult = { status: 'rejected', reason: new Error('not started') };
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const value = await chatJSON<LLMCategoryResult>(msgs, { temperature: 0.3, maxTokens: 4096 });
+          settled = { status: 'fulfilled', value };
+          break;
+        } catch (err) {
+          if (attempt === 1) {
+            settled = { status: 'rejected', reason: err };
+          } else {
+            console.warn(`[generate] ${catKey} attempt 1 failed, retrying:`, err);
+            await new Promise((r) => setTimeout(r, 3000));
           }
         }
-        throw new Error('unreachable');
-      }),
-    );
+      }
+      categoryResults.push(settled);
+      console.log(`[generate] ${catKey}: ${settled.status}`);
+    }
 
     // ── Step 4: Persist category briefings + news items ───────────────────
     const successfulCategories: LLMCategoryResult[] = [];
