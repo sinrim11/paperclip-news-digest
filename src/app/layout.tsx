@@ -12,6 +12,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko">
       <body className="min-h-screen bg-gray-50 text-gray-900 antialiased">
+        {/* Skip navigation for keyboard/screen-reader users (N2) */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-blue-600 focus:px-4 focus:py-2 focus:text-sm focus:text-white"
+        >
+          메인 콘텐츠로 건너뛰기
+        </a>
         <header className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <Link href="/" className="text-xl font-bold hover:opacity-80 transition-opacity">
@@ -20,7 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <NavLinks />
           </div>
         </header>
-        <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>
+        <main id="main-content" className="max-w-7xl mx-auto px-6 py-8">{children}</main>
       </body>
     </html>
   );
