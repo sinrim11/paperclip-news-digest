@@ -125,7 +125,7 @@ export default async function HomePage({
 
       {/* Empty state — vercel-react-best-practices §rendering-conditional-render */}
       {!digest ? (
-        <div className="flex flex-col items-center py-12">
+        <div className="flex min-h-[60vh] flex-col items-center justify-center">
           <div className="w-full max-w-lg rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-10 text-center">
             {/* Icon badge */}
             <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm text-3xl">
@@ -149,7 +149,7 @@ export default async function HomePage({
             {/* Category pills (today only) */}
             {dateStr === today && (
               <>
-                <div className="mb-6 flex flex-wrap justify-center gap-2">
+                <div className="mb-6 flex gap-2 overflow-x-auto flex-nowrap pb-1 sm:flex-wrap sm:justify-center sm:overflow-x-visible sm:pb-0">
                   {[
                     { emoji: '🌐', label: '글로벌' },
                     { emoji: '📈', label: '증권' },
@@ -159,7 +159,7 @@ export default async function HomePage({
                   ].map(({ emoji, label }) => (
                     <span
                       key={label}
-                      className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 shadow-sm"
+                      className="inline-flex flex-none items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 shadow-sm"
                     >
                       {emoji} {label}
                     </span>

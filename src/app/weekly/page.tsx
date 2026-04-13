@@ -51,7 +51,7 @@ export default async function WeeklyPage() {
 
   if (!latest) {
     return (
-      <div className="flex flex-col items-center py-12">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center">
         <div className="w-full max-w-lg rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-10 text-center">
           <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm text-3xl">
             📆

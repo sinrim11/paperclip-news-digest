@@ -33,7 +33,10 @@ export function DateNavigator({
     }
   };
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Use KST (UTC+9) to match the server-side todayKST() used in page.tsx
+  const d = new Date();
+  d.setTime(d.getTime() + 9 * 60 * 60 * 1000);
+  const today = d.toISOString().slice(0, 10);
   const isToday = currentDate === today;
 
   return (
