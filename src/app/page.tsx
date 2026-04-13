@@ -4,6 +4,7 @@ import { DateNavigator } from '@/components/DateNavigator';
 import { MarketDashboard } from '@/components/MarketDashboard';
 import { TopHighlights, type Top3Item } from '@/components/TopHighlights';
 import { CategoryTabs, type CategoryTabData } from '@/components/CategoryTabs';
+import { ContextMap, type ContextMapItem } from '@/components/ContextMap';
 import { GenerateButton } from '@/components/GenerateButton';
 
 export const dynamic = 'force-dynamic';
@@ -104,6 +105,17 @@ export default async function HomePage({
     ];
   });
 
+  // ── Build context map items ────────────────────────────────────────────────
+  const contextMapItems: ContextMapItem[] =
+    digest?.newsItems.map((n) => ({
+      id: n.id,
+      title: n.title,
+      category: n.category as CategoryKey,
+      urgency: n.urgency as 'breaking' | 'watch' | 'note',
+      contextTags: n.contextTags,
+      sourceUrl: n.sourceUrl,
+    })) ?? [];
+
   return (
     <div className="space-y-8">
       {/* Header row: date nav + generate button */}
@@ -168,6 +180,11 @@ export default async function HomePage({
 
           {/* Category tabs */}
           {categoryTabs.length > 0 && <CategoryTabs categories={categoryTabs} />}
+
+          {/* Context map */}
+          {contextMapItems.length > 0 && (
+            <ContextMap items={contextMapItems} />
+          )}
         </>
       )}
     </div>
