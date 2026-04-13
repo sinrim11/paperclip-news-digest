@@ -157,7 +157,7 @@ export default async function HomePage({
                     { emoji: '🌐', label: '글로벌' },
                     { emoji: '📈', label: '증권' },
                     { emoji: '🤖', label: 'AI' },
-                    { emoji: '🏛️', label: '정부정책' },
+                    { emoji: '🏛️', label: '정치' },
                     { emoji: '🏘️', label: '부동산' },
                   ].map(({ emoji, label }) => (
                     <span

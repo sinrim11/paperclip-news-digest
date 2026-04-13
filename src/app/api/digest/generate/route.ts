@@ -90,6 +90,9 @@ export async function POST(req: Request) {
 
     for (const catKey of CATEGORIES) {
       const articles = articlesByCategory.get(catKey) ?? [];
+      if (articles.length === 0) {
+        console.warn(`[generate] ${catKey}: 0 RSS articles — LLM will use training-data fallback`);
+      }
       const koreanLabel = toCategoryLabel(catKey);
       const msgs = buildCategoryPrompt(dateStr, koreanLabel, articles, marketSnapshot);
 

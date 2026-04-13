@@ -8,12 +8,12 @@ export const CATEGORY_LABEL: Record<CategoryKey, string> = {
   GLOBAL: '글로벌',
   STOCKS: '증권',
   AI: 'AI',
-  POLICY: '정부정책',
+  POLICY: '정치',
   REALESTATE: '부동산',
 };
 
 // Legacy alias used throughout prompts (human-facing Korean label)
-export type Category = '글로벌' | '증권' | 'AI' | '정부정책' | '부동산';
+export type Category = '글로벌' | '증권' | 'AI' | '정치' | '부동산';
 
 export const CATEGORIES: CategoryKey[] = ['GLOBAL', 'STOCKS', 'AI', 'POLICY', 'REALESTATE'];
 
@@ -23,7 +23,8 @@ export function toCategoryKey(label: string): CategoryKey {
     '글로벌': 'GLOBAL',
     '증권': 'STOCKS',
     'AI': 'AI',
-    '정부정책': 'POLICY',
+    '정치': 'POLICY',
+    '정부정책': 'POLICY', // legacy label — keep for backward compat with old DB data / LLM output
     '부동산': 'REALESTATE',
   };
   return map[label] ?? 'GLOBAL';

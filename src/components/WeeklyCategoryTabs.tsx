@@ -13,7 +13,8 @@ const CATEGORY_ICON: Record<string, string> = {
   '글로벌':   '🌐',
   '증권':     '📈',
   'AI':       '🤖',
-  '정부정책': '🏛️',
+  '정치':     '🏛️',
+  '정부정책': '🏛️', // legacy label — keep for existing weekly digest data
   '부동산':   '🏠',
 };
 
