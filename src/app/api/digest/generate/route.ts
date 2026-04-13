@@ -11,7 +11,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { chatJSON } from '@/lib/llm';
+import { chatJSON } from '@/lib/claude';
 import { collectByCategory } from '@/lib/news-collector';
 import { buildMarketPrompt, buildCategoryPrompt, buildTop3Prompt } from '@/lib/prompts/daily-digest';
 import {
@@ -82,9 +82,9 @@ export async function POST(req: Request) {
       ? new Map(Object.entries(body.preCollectedArticles) as [CategoryKey, RawArticle[]][])
       : await collectByCategory(12);
 
-    // ── Step 3: Category LLM calls (sequential — Ollama serializes anyway) ──
-    // Running in parallel caused later requests to exceed the 120s timeout
-    // while queued. Sequential ensures each call gets the full 300s window.
+    // ── Step 3: Category LLM calls (sequential — rate-limit safe) ──────────
+    // Running sequentially avoids hammering the Anthropic API rate limit
+    // and gives each category the full 60s timeout budget.
     type SettledResult = { status: 'fulfilled'; value: LLMCategoryResult } | { status: 'rejected'; reason: unknown };
     const categoryResults: SettledResult[] = [];
 

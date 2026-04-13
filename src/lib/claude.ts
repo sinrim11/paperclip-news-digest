@@ -112,7 +112,7 @@ export async function chat(
       messages: conversationMessages,
       ...(useWebSearch && {
         // Built-in server-side web search — no tool_result loop needed
-        tools: [{ type: 'web_search_20250305' as const }],
+        tools: [{ type: 'web_search_20250305' as const, name: 'web_search' as const }],
       }),
     });
 
