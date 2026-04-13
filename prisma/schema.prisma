@@ -1,0 +1,166 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Category {
+  GLOBAL    // 글로벌
+  STOCKS    // 증권
+  AI        // AI
+  POLICY    // 정부정책
+  REALESTATE // 부동산
+}
+
+enum Urgency {
+  breaking
+  watch
+  note
+}
+
+enum DigestStatus {
+  pending
+  in_progress
+  done
+  failed
+}
+
+// ─── 1. DailyDigest ──────────────────────────────────────────────────────────
+model DailyDigest {
+  id        String       @id @default(cuid())
+  date      DateTime     @unique @db.Date
+  status    DigestStatus @default(pending)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  marketDaily       MarketDaily?
+  categoryBriefings CategoryBriefing[]
+  newsItems         NewsItem[]
+
+  @@index([date])
+  @@index([status])
+}
+
+// ─── 2. MarketDaily ──────────────────────────────────────────────────────────
+model MarketDaily {
+  id       String   @id @default(cuid())
+  digestId String   @unique
+  date     DateTime @db.Date
+
+  kospiValue    Float?
+  kospiChange   String?
+  kospiDir      String?
+  kosdaqValue   Float?
+  kosdaqChange  String?
+  kosdaqDir     String?
+  usdKrwValue   Float?
+  usdKrwChange  String?
+  usdKrwDir     String?
+  wtiValue      Float?
+  wtiChange     String?
+  wtiDir        String?
+  us10yValue    Float?
+  us10yChange   String?
+  us10yDir      String?
+  btcUsdValue   Float?
+  btcUsdChange  String?
+  btcUsdDir     String?
+
+  createdAt DateTime @default(now())
+
+  digest DailyDigest @relation(fields: [digestId], references: [id], onDelete: Cascade)
+
+  @@index([date])
+}
+
+// ─── 3. CategoryBriefing ─────────────────────────────────────────────────────
+model CategoryBriefing {
+  id        String   @id @default(cuid())
+  digestId  String
+  category  Category
+  summary   String   @db.Text
+  newsCount Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  digest    DailyDigest @relation(fields: [digestId], references: [id], onDelete: Cascade)
+  newsItems NewsItem[]
+
+  @@unique([digestId, category])
+  @@index([digestId])
+  @@index([category])
+}
+
+// ─── 4. NewsItem ─────────────────────────────────────────────────────────────
+model NewsItem {
+  id                 String   @id @default(cuid())
+  digestId           String
+  categoryBriefingId String
+  category           Category
+  newsOrder          Int
+
+  title   String @db.Text
+  urgency Urgency @default(note)
+
+  fact   String @db.Text
+  impact String @db.Text
+  action String @db.Text
+
+  contextTags String[]
+  source      String
+  sourceUrl   String   @db.Text
+
+  isTop3   Boolean @default(false)
+  top3Rank Int?
+
+  relatedData    String[]
+  contextLinks   String[]
+  upcomingEvents String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  digest           DailyDigest      @relation(fields: [digestId], references: [id], onDelete: Cascade)
+  categoryBriefing CategoryBriefing @relation(fields: [categoryBriefingId], references: [id], onDelete: Cascade)
+
+  @@unique([digestId, category, newsOrder])
+  @@index([digestId])
+  @@index([category])
+  @@index([urgency])
+  @@index([isTop3])
+  @@index([contextTags])
+}
+
+// ─── 5. ContextTagHistory ────────────────────────────────────────────────────
+model ContextTagHistory {
+  id           String   @id @default(cuid())
+  tag          String   @unique
+  count        Int      @default(1)
+  lastSeenDate DateTime @db.Date
+  newsItemIds  String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tag])
+  @@index([count])
+  @@index([lastSeenDate])
+}
+
+// ─── 6. WeeklyDigest ─────────────────────────────────────────────────────────
+model WeeklyDigest {
+  id        String   @id @default(cuid())
+  weekStart DateTime @unique @db.Date
+  weekEnd   DateTime @db.Date
+  content   Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([weekStart])
+  @@index([weekEnd])
+}

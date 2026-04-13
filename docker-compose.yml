@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: news-digest-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: news_digest
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d news_digest"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Ollama (local LLM — gemma4:26b) ────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: news-digest-ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # To pull the model: docker exec news-digest-ollama ollama pull gemma4:26b
+
+  # ── Next.js App ─────────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.next
+    container_name: news-digest-app
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/news_digest
+      - OLLAMA_BASE_URL=http://ollama:11434/v1
+      - OLLAMA_MODEL=gemma4:26b
+      - NODE_ENV=production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/market"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Legacy Python pipeline (kept for RSS collection support) ────────────────
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: news-digest-pipeline
+    environment:
+      - OLLAMA_API_URL=http://ollama:11434/v1/chat/completions
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./output:/app/output
+      - ./config:/app/config
+      - ./news_strategy:/app/news_strategy
+    depends_on:
+      ollama:
+        condition: service_healthy
+    command: sleep infinity
+
+volumes:
+  postgres_data:
+    driver: local
+  ollama_data:
+    driver: local
+
+networks:
+  default:
+    name: news-digest-network
+    driver: bridge
