@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta name="description" content="AI가 큐레이션한 오늘의 핵심 뉴스 브리핑"/>
 <title>뉴스 다이제스트</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,700;1,400;1,700&family=Manrope:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -26,25 +27,72 @@ tailwind.config = {
                 body: ["Manrope", "sans-serif"],
                 label: ["Inter", "sans-serif"],
             },
+            spacing: {
+                '4': '4px',
+                '8': '8px',
+                '16': '16px',
+                '24': '24px',
+                '32': '32px',
+                '48': '48px',
+            }
         },
     }
 }
 </script>
 <style>
+    * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
     .material-symbols-outlined {
         font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
     }
+    html { scroll-behavior: smooth; }
     body { font-family: 'Manrope', sans-serif; }
+
+    /* Placeholder image gradient */
     .placeholder-img {
         background: linear-gradient(135deg, #242b35 0%, #1a1f26 100%);
         display: flex; align-items: center; justify-content: center;
     }
+
+    /* Navigation chips */
     .chip-active { color: #fff !important; }
-    .category-section { scroll-margin-top: 140px; }
-    .detail-toggle:checked ~ .detail-content { max-height: 500px; opacity: 1; }
-    .detail-content { max-height: 0; opacity: 0; overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; }
+    .category-section { scroll-margin-top: 120px; }
+
+    /* Image lazy loading fade-in */
+    img[loading="lazy"] {
+        opacity: 0;
+        transition: opacity 0.3s ease-in-out;
+    }
+    img[loading="lazy"].loaded,
+    img:not([loading="lazy"]) {
+        opacity: 1;
+    }
+
+    /* Chip scroll styling */
     .chip-scroll { scrollbar-width: none; -ms-overflow-style: none; }
     .chip-scroll::-webkit-scrollbar { display: none; }
+
+    /* Card animation on load */
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    article { animation: fadeInUp 0.4s ease-out; }
+
+    /* Responsive typography improvements */
+    @media (max-width: 640px) {
+        .hero-title { font-size: 28px; line-height: 1.3; }
+        .card-headline { font-size: 18px; }
+    }
+    @media (min-width: 641px) {
+        .hero-title { font-size: 36px; line-height: 1.3; }
+        .card-headline { font-size: 20px; }
+    }
+
+    /* Better focus states for accessibility */
+    button:focus-visible, a:focus-visible {
+        outline: 2px solid #1d9bf0;
+        outline-offset: 2px;
+    }
 </style>
 </head>
 <body class="bg-bg text-txt min-h-screen">
@@ -62,43 +110,46 @@ tailwind.config = {
 <!-- Header -->
 <header class="fixed top-0 w-full z-50 bg-bg/95 backdrop-blur-md border-b border-border">
     <div class="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-        <h1 class="font-headline text-xl sm:text-2xl font-bold text-txt italic tracking-tight">뉴스 다이제스트</h1>
-        <div class="flex items-center gap-4">
-            <span class="text-txt-sec text-xs sm:text-sm font-label">{{ display_date }}</span>
-            <span class="text-accent font-bold text-lg font-label">{{ total_articles }}</span>
+        <h1 class="font-headline text-lg sm:text-2xl font-bold text-txt italic tracking-tight">뉴스 다이제스트</h1>
+        <div class="flex items-center gap-2 sm:gap-4">
+            <span class="text-txt-sec text-[11px] sm:text-sm font-label truncate">{{ display_date }}</span>
+            <span class="text-accent font-bold text-sm sm:text-lg font-label whitespace-nowrap">{{ total_articles }}건</span>
         </div>
     </div>
 </header>
 
 <!-- Sticky Category Chips -->
 <nav class="fixed top-16 w-full z-40 bg-bg/95 backdrop-blur-md border-b border-border">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex gap-2 overflow-x-auto chip-scroll">
-        <button class="chip-active shrink-0 px-4 py-2 rounded-full text-xs font-label font-semibold transition-all bg-accent"
+    <div class="max-w-4xl mx-auto px-3 sm:px-6 py-3 flex gap-2 overflow-x-auto chip-scroll">
+        <button class="chip-active shrink-0 px-3 sm:px-4 py-2 rounded-full text-[11px] sm:text-xs font-label font-semibold transition-all duration-200 bg-accent text-white"
+                title="전체 뉴스"
                 onclick="window.scrollTo({top:0,behavior:'smooth'}); setActiveChip(this);">
             전체
         </button>
         {% for cat_name in ordered_categories %}
         {% set conf = category_config.get(cat_name, {'color': '#6b7280', 'icon': 'article'}) %}
         {% set count = articles_by_category.get(cat_name, [])|length %}
-        <button class="shrink-0 px-4 py-2 rounded-full text-xs font-label font-semibold transition-all text-txt-sec border border-border hover:border-[{{ conf.color }}] hover:text-[{{ conf.color }}]"
+        {% if count > 0 %}
+        <button class="shrink-0 px-3 sm:px-4 py-2 rounded-full text-[11px] sm:text-xs font-label font-semibold transition-all duration-200 text-txt-sec border border-border hover:border-[{{ conf.color }}] hover:text-[{{ conf.color }}] hover:bg-[{{ conf.color }}08]"
                 data-color="{{ conf.color }}"
+                title="{{ cat_name }}: {{ count }}건"
                 onclick="document.getElementById('cat-{{ loop.index }}').scrollIntoView({behavior:'smooth'}); setActiveChip(this);">
-            {{ cat_name.replace(' 뉴스', '').replace(' 관련', '') }}
-            {% if count > 0 %}
+            <span class="hidden sm:inline">{{ cat_name.replace(' 뉴스', '').replace(' 관련', '') }}</span>
+            <span class="sm:hidden">{{ cat_name.replace(' 뉴스', '').replace(' 관련', '')[:2] }}</span>
             <span class="ml-1 opacity-60">{{ count }}</span>
-            {% endif %}
         </button>
+        {% endif %}
         {% endfor %}
     </div>
 </nav>
 
 <!-- Main Content -->
-<main class="pt-[140px] pb-16">
+<main class="pt-32 pb-8 sm:pb-16">
     <!-- Hero Section -->
-    <section class="max-w-4xl mx-auto px-4 sm:px-6 mb-10">
-        <h2 class="font-headline text-3xl sm:text-4xl font-bold text-txt mb-2">오늘의 뉴스 요약</h2>
-        <p class="text-txt-sec text-sm">AI가 큐레이션한 오늘의 핵심 뉴스 브리핑</p>
-        <div class="h-0.5 w-16 bg-accent rounded-full mt-4"></div>
+    <section class="max-w-4xl mx-auto px-4 sm:px-6 mb-8 sm:mb-16">
+        <h2 class="hero-title font-headline font-bold text-txt mb-3">오늘의 뉴스 요약</h2>
+        <p class="text-txt-sec text-sm sm:text-base font-body leading-relaxed">{{ total_articles }}건의 뉴스에서 선별한 오늘의 핵심 브리핑입니다</p>
+        <div class="h-1 w-12 bg-gradient-to-r from-accent to-accent/30 rounded-full mt-4"></div>
     </section>
 
     <!-- Articles by Category -->
@@ -106,68 +157,69 @@ tailwind.config = {
     {% set articles = articles_by_category.get(cat_name, []) %}
     {% if articles|length > 0 %}
     {% set conf = category_config.get(cat_name, {'color': '#6b7280', 'icon': 'article'}) %}
-    <section id="cat-{{ loop.index }}" class="category-section max-w-4xl mx-auto px-4 sm:px-6 mb-12">
+    <section id="cat-{{ loop.index }}" class="category-section max-w-4xl mx-auto px-4 sm:px-6 mb-16">
         <!-- Category Header -->
-        <div class="flex items-center gap-3 mb-6">
-            <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: {{ conf.color }}20;">
+        <div class="flex items-center gap-3 mb-8">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background: {{ conf.color }}20;">
                 <span class="material-symbols-outlined text-lg" style="color: {{ conf.color }}">{{ conf.icon }}</span>
             </div>
-            <h3 class="font-headline text-xl font-bold text-txt">{{ cat_name }}</h3>
-            <span class="text-xs font-label font-semibold px-2.5 py-0.5 rounded-full"
+            <h3 class="font-headline text-xl sm:text-2xl font-bold text-txt">{{ cat_name }}</h3>
+            <span class="text-xs sm:text-sm font-label font-semibold px-3 py-1 rounded-full ml-auto"
                   style="background: {{ conf.color }}15; color: {{ conf.color }};">{{ articles|length }}건</span>
         </div>
 
-        <div class="grid gap-6 sm:grid-cols-2">
+        <!-- Mobile: single column, Tablet+: 2 columns -->
+        <div class="grid gap-4 sm:gap-6 md:grid-cols-2">
         {% for article in articles %}
-            <article class="bg-surface rounded-xl overflow-hidden border border-border transition-all duration-300 hover:border-[{{ conf.color }}40] hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 group">
-                <!-- Image -->
-                <div class="relative w-full h-[200px] overflow-hidden">
+            <article class="bg-surface rounded-2xl overflow-hidden border border-border transition-all duration-300 hover:border-[{{ conf.color }}] hover:shadow-lg hover:shadow-[{{ conf.color }}]/10 group">
+                <!-- Image Container -->
+                <div class="relative w-full h-48 sm:h-56 overflow-hidden bg-surface-el">
                     {% if article.image_url %}
                     <img alt="{{ article.title }}"
                          class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                          src="{{ article.image_url }}"
                          loading="lazy"
-                         onerror="this.parentElement.classList.add('placeholder-img'); this.outerHTML='<span class=\'material-symbols-outlined text-txt-mute text-4xl\'>{{ conf.icon }}</span>'"/>
+                         decoding="async"
+                         onerror="this.parentElement.classList.add('placeholder-img'); this.outerHTML='<span class=\'material-symbols-outlined text-txt-mute text-5xl\'>{{ conf.icon }}</span>'"/>
                     {% else %}
                     <div class="placeholder-img w-full h-full">
-                        <span class="material-symbols-outlined text-txt-mute text-4xl">{{ conf.icon }}</span>
+                        <span class="material-symbols-outlined text-txt-mute text-5xl">{{ conf.icon }}</span>
                     </div>
                     {% endif %}
-                    <!-- Category Badge on image -->
-                    <span class="absolute top-3 left-3 px-2.5 py-1 text-[10px] font-label font-bold rounded-md text-white backdrop-blur-sm"
-                          style="background: {{ conf.color }}cc;">
+                    <!-- Category Badge -->
+                    <span class="absolute top-3 left-3 px-2.5 py-1.5 text-[10px] sm:text-xs font-label font-bold rounded-lg text-white shadow-md"
+                          style="background: {{ conf.color }}dd;">
                         {{ cat_name.replace(' 뉴스', '').replace(' 관련', '') }}
                     </span>
                 </div>
 
-                <!-- Content -->
-                <div class="p-5">
+                <!-- Content Container -->
+                <div class="p-4 sm:p-5 flex flex-col h-full">
                     <!-- Headline -->
-                    <h4 class="font-headline text-lg font-bold text-txt leading-snug mb-3 line-clamp-2">
-                        <a href="{{ article.url }}" target="_blank" rel="noopener"
-                           class="hover:text-accent transition-colors">
+                    <h4 class="card-headline font-headline font-bold text-txt leading-tight mb-3 line-clamp-2 flex-shrink-0">
+                        <a href="{{ article.url }}" target="_blank" rel="noopener" class="hover:text-accent transition-colors duration-200">
                             {{ article.title }}
                         </a>
                     </h4>
 
-                    <!-- Summary: structured bullets or flowing paragraph -->
+                    <!-- Summary Section -->
                     {% if article.summary %}
                     {% if article.summary.startswith('1. ') %}
                     {% set after1 = article.summary[3:] %}
                     {% set split2 = after1.split(' 2. ', 1) %}
-                    <ul class="text-txt-sec text-[14px] leading-[1.7] mb-3 space-y-1.5">
-                        <li class="flex gap-2"><span class="text-accent font-bold shrink-0 mt-0.5">①</span><span>{{ split2[0] }}</span></li>
+                    <ul class="text-txt-sec text-sm sm:text-[14px] leading-relaxed mb-4 space-y-2 flex-grow">
+                        <li class="flex gap-2"><span class="text-accent font-bold shrink-0 mt-0.5">①</span><span class="flex-grow">{{ split2[0] }}</span></li>
                         {% if split2|length > 1 %}
                         {% set split3 = split2[1].split(' 3. ', 1) %}
-                        <li class="flex gap-2"><span class="text-accent font-bold shrink-0 mt-0.5">②</span><span>{{ split3[0] }}</span></li>
+                        <li class="flex gap-2"><span class="text-accent font-bold shrink-0 mt-0.5">②</span><span class="flex-grow">{{ split3[0] }}</span></li>
                         {% if split3|length > 1 %}
-                        <li class="flex gap-2"><span class="text-accent font-bold shrink-0 mt-0.5">③</span><span>{{ split3[1] }}</span></li>
+                        <li class="flex gap-2"><span class="text-accent font-bold shrink-0 mt-0.5">③</span><span class="flex-grow">{{ split3[1] }}</span></li>
                         {% endif %}
                         {% endif %}
                     </ul>
                     {% else %}
                     {% set parts = article.summary.split('. ', 1) %}
-                    <p class="text-txt-sec text-[15px] leading-[1.75] mb-3">
+                    <p class="text-txt-sec text-sm sm:text-[15px] leading-relaxed mb-4 flex-grow line-clamp-3">
                         {% if parts|length > 1 %}
                         <strong class="text-txt font-semibold">{{ parts[0] }}.</strong> {{ parts[1] }}
                         {% else %}
@@ -178,15 +230,15 @@ tailwind.config = {
                     {% endif %}
 
                     <!-- Meta Footer -->
-                    <div class="flex items-center justify-between pt-3 border-t border-border mt-2">
-                        <div class="flex items-center gap-2">
-                            <span class="text-[11px] text-txt-mute font-label">{{ article.published_date }}</span>
+                    <div class="flex items-center justify-between pt-4 border-t border-border mt-auto flex-shrink-0">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="text-[10px] sm:text-[11px] text-txt-mute font-label shrink-0">{{ article.published_date }}</span>
                             {% if article.source_count and article.source_count > 1 %}
-                            <span class="text-[11px] text-txt-mute font-label">· 외 {{ article.source_count - 1 }}개 매체</span>
+                            <span class="text-[10px] sm:text-[11px] text-txt-mute font-label shrink-0">· +{{ article.source_count - 1 }}</span>
                             {% endif %}
                         </div>
-                        <a class="text-accent text-xs font-label font-semibold flex items-center gap-0.5 hover:underline"
-                           href="{{ article.url }}" target="_blank" rel="noopener">
+                        <a class="text-accent text-xs sm:text-sm font-label font-semibold flex items-center gap-1 hover:underline hover:gap-2 transition-all flex-shrink-0 ml-2"
+                           href="{{ article.url }}" target="_blank" rel="noopener" title="원문 읽기">
                             원문
                             <span class="material-symbols-outlined text-sm">open_in_new</span>
                         </a>
@@ -203,41 +255,43 @@ tailwind.config = {
     {% set known_cats = ordered_categories %}
     {% for cat_name, articles in articles_by_category.items() %}
     {% if cat_name not in known_cats and articles|length > 0 %}
-    <section class="max-w-4xl mx-auto px-4 sm:px-6 mb-12">
-        <div class="flex items-center gap-3 mb-6">
-            <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-el">
+    <section class="max-w-4xl mx-auto px-4 sm:px-6 mb-16">
+        <div class="flex items-center gap-3 mb-8">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-el flex-shrink-0">
                 <span class="material-symbols-outlined text-lg text-txt-mute">article</span>
             </div>
-            <h3 class="font-headline text-xl font-bold text-txt">{{ cat_name }}</h3>
-            <span class="text-xs font-label font-semibold px-2.5 py-0.5 rounded-full bg-surface-el text-txt-sec">{{ articles|length }}건</span>
+            <h3 class="font-headline text-xl sm:text-2xl font-bold text-txt">{{ cat_name }}</h3>
+            <span class="text-xs sm:text-sm font-label font-semibold px-3 py-1 rounded-full ml-auto bg-surface-el text-txt-sec">{{ articles|length }}건</span>
         </div>
-        <div class="grid gap-6 sm:grid-cols-2">
+        <div class="grid gap-4 sm:gap-6 md:grid-cols-2">
         {% for article in articles %}
-            <article class="bg-surface rounded-xl overflow-hidden border border-border transition-all duration-300 hover:border-txt-mute hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 group">
-                <div class="relative w-full h-[200px] overflow-hidden">
+            <article class="bg-surface rounded-2xl overflow-hidden border border-border transition-all duration-300 hover:border-txt-sec hover:shadow-lg hover:shadow-white/5 group">
+                <div class="relative w-full h-48 sm:h-56 overflow-hidden bg-surface-el">
                     {% if article.image_url %}
                     <img alt="{{ article.title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                         src="{{ article.image_url }}" loading="lazy"
-                         onerror="this.parentElement.classList.add('placeholder-img'); this.outerHTML='<span class=\'material-symbols-outlined text-txt-mute text-4xl\'>article</span>'"/>
+                         src="{{ article.image_url }}" loading="lazy" decoding="async"
+                         onerror="this.parentElement.classList.add('placeholder-img'); this.outerHTML='<span class=\'material-symbols-outlined text-txt-mute text-5xl\'>article</span>'"/>
                     {% else %}
                     <div class="placeholder-img w-full h-full">
-                        <span class="material-symbols-outlined text-txt-mute text-4xl">article</span>
+                        <span class="material-symbols-outlined text-txt-mute text-5xl">article</span>
                     </div>
                     {% endif %}
                 </div>
-                <div class="p-5">
-                    <h4 class="font-headline text-lg font-bold text-txt leading-snug mb-3 line-clamp-2">
-                        <a href="{{ article.url }}" target="_blank" rel="noopener" class="hover:text-accent transition-colors">{{ article.title }}</a>
+                <div class="p-4 sm:p-5 flex flex-col h-full">
+                    <h4 class="card-headline font-headline font-bold text-txt leading-tight mb-3 line-clamp-2 flex-shrink-0">
+                        <a href="{{ article.url }}" target="_blank" rel="noopener" class="hover:text-accent transition-colors duration-200">{{ article.title }}</a>
                     </h4>
+                    {% if article.summary %}
                     {% if article.summary.startswith('1. ') %}
-                    <p class="text-txt-sec text-sm leading-relaxed mb-3 line-clamp-3">{{ article.summary[3:].split(' 2. ')[0] }}</p>
+                    <p class="text-txt-sec text-sm sm:text-[14px] leading-relaxed mb-4 flex-grow line-clamp-3">{{ article.summary[3:].split(' 2. ')[0] }}</p>
                     {% else %}
-                    <p class="text-txt-sec text-sm leading-relaxed mb-3 line-clamp-3">{{ article.summary }}</p>
+                    <p class="text-txt-sec text-sm sm:text-[14px] leading-relaxed mb-4 flex-grow line-clamp-3">{{ article.summary }}</p>
                     {% endif %}
-                    <div class="flex items-center justify-between pt-3 border-t border-border">
-                        <span class="text-[11px] text-txt-mute font-label">{{ article.published_date }}</span>
-                        <a class="text-accent text-xs font-label font-semibold flex items-center gap-0.5 hover:underline"
-                           href="{{ article.url }}" target="_blank" rel="noopener">
+                    {% endif %}
+                    <div class="flex items-center justify-between pt-4 border-t border-border mt-auto flex-shrink-0">
+                        <span class="text-[10px] sm:text-[11px] text-txt-mute font-label">{{ article.published_date }}</span>
+                        <a class="text-accent text-xs sm:text-sm font-label font-semibold flex items-center gap-1 hover:underline hover:gap-2 transition-all"
+                           href="{{ article.url }}" target="_blank" rel="noopener" title="원문 읽기">
                             원문 <span class="material-symbols-outlined text-sm">open_in_new</span>
                         </a>
                     </div>
@@ -251,34 +305,66 @@ tailwind.config = {
 
     <!-- Empty state -->
     {% if total_articles == 0 %}
-    <section class="max-w-4xl mx-auto text-center py-24 px-4">
-        <span class="material-symbols-outlined text-6xl text-txt-mute mb-4">newspaper</span>
-        <h2 class="font-headline text-2xl font-bold text-txt-sec mb-2">뉴스가 아직 없습니다</h2>
-        <p class="text-txt-mute text-sm">파이프라인을 실행하여 뉴스를 수집해주세요.</p>
+    <section class="max-w-4xl mx-auto text-center py-24 sm:py-32 px-4">
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-surface-el mb-6">
+            <span class="material-symbols-outlined text-4xl text-txt-mute">newspaper</span>
+        </div>
+        <h2 class="font-headline text-2xl sm:text-3xl font-bold text-txt-sec mb-3">뉴스가 아직 없습니다</h2>
+        <p class="text-txt-mute text-sm sm:text-base max-w-sm mx-auto">파이프라인을 실행하여 오늘의 뉴스를 수집해주세요.</p>
     </section>
     {% endif %}
 
     <!-- Footer -->
-    <footer class="max-w-4xl mx-auto px-4 sm:px-6 pt-8 border-t border-border">
-        <div class="flex items-center justify-between text-txt-mute text-xs font-label pb-8">
-            <span>마지막 업데이트: {{ last_updated }}</span>
-            <span>The Digital Curator</span>
+    <footer class="max-w-4xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12 border-t border-border">
+        <div class="flex flex-col sm:flex-row items-center justify-between text-txt-mute text-xs font-label pb-8 gap-4">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm opacity-60">schedule</span>
+                <span>{{ last_updated }}</span>
+            </div>
+            <span class="text-txt-mute/50">The Digital Curator</span>
         </div>
     </footer>
 </main>
 
 <script>
+// Enhanced chip navigation with visual feedback
 function setActiveChip(el) {
     document.querySelectorAll('nav button').forEach(btn => {
         btn.classList.remove('chip-active');
         btn.style.background = '';
         btn.style.borderColor = '';
+        btn.style.backgroundColor = '';
     });
     el.classList.add('chip-active');
+    el.style.color = '#fff';
     const color = el.dataset.color || '#1d9bf0';
     el.style.background = color;
     el.style.borderColor = color;
 }
+
+// Lazy load images with fade-in effect
+document.addEventListener('DOMContentLoaded', function() {
+    const images = document.querySelectorAll('img[loading="lazy"]');
+    images.forEach(img => {
+        img.addEventListener('load', function() {
+            this.classList.add('loaded');
+        });
+        if (img.complete) {
+            img.classList.add('loaded');
+        }
+    });
+});
+
+// Improve scroll performance with passive event listeners
+let ticking = false;
+window.addEventListener('scroll', function() {
+    if (!ticking) {
+        requestAnimationFrame(function() {
+            ticking = false;
+        });
+        ticking = true;
+    }
+}, { passive: true });
 </script>
 </body>
 </html>
