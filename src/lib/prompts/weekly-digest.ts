@@ -76,6 +76,8 @@ ${tagsText}
 
 ## 작업 지시
 
+입력 데이터의 긴급도 분류 기준: breaking(즉시 대응) / watch(모니터링) / note(배경 지식)
+
 위 데이터를 분석하여 주간 리포트를 작성하세요.
 
 출력 JSON 스키마 (순수 JSON, 마크다운 없이):
@@ -105,7 +107,8 @@ ${tagsText}
       "impact": "임팩트 1문장",
       "action": "액션 1문장",
       "weekly_progression": "이 이슈가 한 주간 어떻게 전개됐는지 1~2문장",
-      "current_status": "진행중|해결|확대|소강"
+      "current_status": "진행중|해결|확대|소강",
+      "related_context_tags": ["관련 맥락 태그 (context_tags 기반)"]
     }
   ],
   "trend_analysis": {
