@@ -1,3 +1,4 @@
+// vercel-react-best-practices §rerender: "use client" justified — tab switching requires useState
 'use client';
 
 import { useState } from 'react';
@@ -56,15 +57,18 @@ export function CategoryTabs({ categories }: { categories: CategoryTabData[] }) 
             <button
               key={cat.key}
               onClick={() => setActiveKey(cat.key)}
-              className={`shrink-0 flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-t transition-colors
+              aria-selected={isActive}
+              role="tab"
+              className={`shrink-0 flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-t
+                border-b-2 transition-all duration-200 ease-out
                 ${isActive
-                  ? 'text-blue-700 border-b-2 border-blue-600 bg-blue-50'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                  ? 'text-blue-700 border-blue-600 bg-blue-50'
+                  : 'text-gray-500 border-transparent hover:text-gray-700 hover:bg-gray-50 hover:border-gray-300'
                 }`}
             >
               <span>{CATEGORY_ICON[cat.key]}</span>
               <span>{CATEGORY_LABEL[cat.key]}</span>
-              <span className={`text-xs ${isActive ? 'text-blue-500' : 'text-gray-400'}`}>
+              <span className={`text-xs transition-colors duration-200 ${isActive ? 'text-blue-500' : 'text-gray-400'}`}>
                 {cat.items.length}
               </span>
               {bc > 0 && (
@@ -77,8 +81,8 @@ export function CategoryTabs({ categories }: { categories: CategoryTabData[] }) 
         })}
       </div>
 
-      {/* Active category content */}
-      <div>
+      {/* Active category content — key forces remount so fade-in re-triggers on tab switch */}
+      <div key={activeKey} className="animate-fade-in">
         {active.summary && (
           <div className="text-sm text-gray-600 bg-white rounded-lg border border-gray-100 px-4 py-3 mb-4 flex items-start gap-2">
             <span className="text-gray-400 mt-0.5">💬</span>
