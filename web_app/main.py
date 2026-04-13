@@ -87,5 +87,5 @@ async def health():
 
 
 if __name__ == "__main__":
-    print("Starting Daily News Digest server at http://localhost:8080")
-    uvicorn.run(app, host="0.0.0.0", port=8080, log_level="info")
+    print("Starting Daily News Digest server at http://localhost:3200")
+    uvicorn.run(app, host="0.0.0.0", port=3200, log_level="info")

@@ -6,7 +6,7 @@ import time
 import urllib.request
 
 # --- Configuration ---
-MLX_MODEL = "mlx-community/gemma-4-26b-a4b-it-8bit"
+MLX_MODEL = "mlx-community/gemma-2-2b-it"
 MLX_URL = "http://localhost:8080/v1/chat/completions"
 OLLAMA_FALLBACK_URL = "http://localhost:11434/v1/chat/completions"
 OLLAMA_FALLBACK_MODEL = "gemma4:26b"
@@ -39,30 +39,28 @@ CATEGORY_TO_GLOSSARY = {
 # --- Prompts ---
 
 TRANSLATION_SYSTEM_PROMPT = (
-    "당신은 전문 뉴스 번역가입니다. 다음 영어 기사를 한국어로 번역하세요. "
-    "문맥을 고려하여 자연스럽게 번역하되, 원문의 핵심 사실을 누락하지 마세요. "
-    "제공된 용어집(Glossary)이 있다면 반드시 그 용어를 사용하여 번역하세요. "
+    "당신은 전문 뉴스 요약 전문가입니다. 주어진 기사(영어 또는 한국어)를 읽고 핵심 내용을 한국어로 요약하세요. "
+    "요약문은 반드시 합쇼체(-습니다, -입니다, -했습니다)로 작성하세요. "
+    "기자 이름, 특파원 정보, 발신지(예: (서울=연합뉴스), 기자 =), 저작권 문구는 절대 포함하지 마세요. "
+    "제공된 용어집(Glossary)이 있다면 반드시 그 용어를 사용하세요. "
     "마크다운 기호(##, -, *, **)를 사용하지 마세요. "
-    "결과는 순수한 한국어 텍스트로만 출력하세요. "
+    "3~4문장의 순수한 한국어 요약문만 출력하세요. "
     "\n\n[예시]\n"
-    "입력: The Fed raised interest rates to fight inflation.\n"
-    "출력: 연준은 인플레이션에 대응하기 위해 금리를 인상했습니다.\n"
-    "입력: Apple's stock price surged after the launch of the new iPhone.\n"
-    "출력: 새로운 아이폰 출시 이후 애플의 주가가 급등했습니다."
+    "입력: The Fed raised interest rates by 0.25% to combat inflation, the fifth hike this year.\n"
+    "출력: 미국 연방준비제도는 인플레이션 억제를 위해 기준금리를 0.25%포인트 인상했습니다. 이번 인상은 올해 다섯 번째로, 금리는 사상 최고 수준에 근접했습니다. 시장에서는 추가 인상 가능성을 주시하고 있습니다.\n"
+    "입력: (서울=연합뉴스) 홍길동 기자 = 삼성전자 주가가 급등했다.\n"
+    "출력: 삼성전자 주가가 이날 장중 급등세를 보였습니다."
 )
 
 REFINEMENT_SYSTEM_PROMPT = (
-    "당신은 전문 뉴스 에디터입니다. 다음 번역된 한국어 요약문을 읽고, "
-    "더 자연스럽고 세련된 한국어 문장으로 윤문(polishing)하세요. "
-    "문장은 간결하고 명확해야 하며, 신문 기사 스타일의 문어체를 사용하세요. "
-    "불필요한 미사여구는 제거하고 핵심 정보를 강조하세요. "
-    "마크다운 기호(##, -, *, **)를 절대로 사용하지 마세요. "
-    "결과는 순수한 한국어 텍스트로만 출력하세요. "
-    "\n\n[예시]\n"
-    "입력: 이 회사는 매우 좋은 실적을 보여주었습니다. 그것은 놀랍습니다.\n"
-    "출력: 해당 기업은 예상치를 상회하는 놀라운 실적을 발표했습니다.\n"
-    "입력: 금리가 오를 것이라고 사람들은 말합니다. 그래서 경제가 어려워집니다.\n"
-    "출력: 금리 인상 전망에 따라 경기 침체에 대한 우려가 커지고 있습니다."
+    "당신은 전문 뉴스 에디터입니다. 다음 한국어 요약문을 읽고, 가장 중요한 핵심 사실 3가지를 번호 형식으로 정리하세요. "
+    "각 항목은 반드시 합쇼체(-습니다, -입니다, -했습니다)로 끝나야 합니다. "
+    "기자 이름, 특파원 정보, 발신지, 저작권 문구가 있다면 제거하세요. "
+    "마크다운 기호(##, *, **)를 절대로 사용하지 마세요. "
+    "출력 형식: '1. [사실] 2. [사실] 3. [사실]' — 각 항목은 한 문장으로 간결하게.\n"
+    "\n[예시]\n"
+    "입력: 미 연준이 금리를 인상했습니다. 이는 인플레이션 대응 조치입니다. 시장은 충격을 받았습니다.\n"
+    "출력: 1. 미국 연방준비제도가 기준금리를 추가 인상했습니다. 2. 이번 조치는 지속되는 인플레이션에 대응하기 위한 것입니다. 3. 금리 인상 발표 후 주식시장이 하락세를 보였습니다."
 )
 
 # --- Core Functions ---
@@ -173,7 +171,7 @@ def summarize_articles(input_file, force=False):
                     continue
 
                 # --- Step 2: Refinement ---
-                refinement_user_prompt = f"Refine this Korean translation into a natural news summary:\n\n{translated_text}"
+                refinement_user_prompt = f"다음 한국어 요약문을 핵심 사실 3가지로 구조화하세요:\n\n{translated_text}"
                 refined_text = _call_mlx(REFINEMENT_SYSTEM_PROMPT, refinement_user_prompt, temperature=0.7)
 
                 if quality_check(refined_text):
