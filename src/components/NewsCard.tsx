@@ -1,3 +1,4 @@
+// vercel-react-best-practices §rerender: RSC — no "use client", pure Tailwind styling
 import type { Urgency } from '@/lib/types';
 import { UrgencyBadge } from './UrgencyBadge';
 
@@ -23,15 +24,15 @@ const URGENCY_BG: Record<string, string> = {
 
 export function NewsCard({ item }: { item: NewsCardData }) {
   return (
-    <article className={`rounded-lg border p-4 ${URGENCY_BG[item.urgency] ?? URGENCY_BG.note}`}>
+    <article className={`rounded-lg border p-4 shadow-sm hover:shadow-md transition-all duration-200 ease-out group ${URGENCY_BG[item.urgency] ?? URGENCY_BG.note}`}>
       <div className="flex items-start justify-between gap-2 mb-2">
-        <h4 className="font-medium text-sm flex-1 leading-snug">
+        <h4 className="font-semibold text-sm flex-1 leading-snug text-gray-900">
           {item.sourceUrl ? (
             <a
               href={item.sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:underline hover:text-blue-600"
+              className="hover:text-blue-600 hover:underline underline-offset-2 decoration-blue-300 transition-colors duration-150"
             >
               {item.title}
             </a>
@@ -42,23 +43,25 @@ export function NewsCard({ item }: { item: NewsCardData }) {
         <UrgencyBadge urgency={item.urgency} />
       </div>
 
-      <div className="space-y-1 text-xs text-gray-700">
-        <p><span className="font-semibold">📌 팩트:</span> {item.fact}</p>
-        <p><span className="font-semibold">💡 임팩트:</span> {item.impact}</p>
-        <p><span className="font-semibold">🎯 액션:</span> {item.action}</p>
+      <div className="space-y-1 text-xs text-gray-600 leading-relaxed">
+        <p><span className="font-semibold text-gray-700">📌 팩트:</span> {item.fact}</p>
+        <p><span className="font-semibold text-gray-700">💡 임팩트:</span> {item.impact}</p>
+        <p><span className="font-semibold text-gray-700">🎯 액션:</span> {item.action}</p>
       </div>
 
       {item.contextTags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
+        <div className="flex flex-wrap gap-1 mt-2.5">
           {item.contextTags.map((tag) => (
-            <span key={tag} className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
+            <span key={tag} className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full group-hover:bg-gray-200 transition-colors duration-150">
               #{tag}
             </span>
           ))}
         </div>
       )}
 
-      <p className="text-xs text-gray-400 mt-2">{item.source}</p>
+      {item.source && (
+        <p className="text-xs text-gray-400 mt-2 italic">{item.source}</p>
+      )}
     </article>
   );
 }
