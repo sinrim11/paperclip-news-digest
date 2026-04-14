@@ -1,5 +1,15 @@
+// vercel-react-best-practices §bundle-dynamic-imports: recharts split into lazy chunk via next/dynamic — excluded from main bundle
 'use client';
-import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
+import dynamic from 'next/dynamic';
+import type { SparklineChartProps } from './SparklineChart';
+
+const SparklineChart = dynamic<SparklineChartProps>(
+  () => import('./SparklineChart').then((m) => m.SparklineChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-14 rounded bg-gray-100 animate-pulse" />,
+  },
+);
 
 export interface MarketDayData {
   date: string;
@@ -12,6 +22,7 @@ export interface MarketDayData {
 interface SparkConfig {
   key: keyof Omit<MarketDayData, 'date'>;
   label: string;
+  /** Brand color for the sparkline stroke — neutral, not direction-based */
   color: string;
   unit: string;
 }
@@ -20,7 +31,7 @@ const SPARKS: SparkConfig[] = [
   { key: 'kospi',  label: 'KOSPI',   color: '#3b82f6', unit: '' },
   { key: 'kosdaq', label: 'KOSDAQ',  color: '#10b981', unit: '' },
   { key: 'usdKrw', label: 'USD/KRW', color: '#f59e0b', unit: '₩' },
-  { key: 'wti',    label: 'WTI',     color: '#ef4444', unit: '$' },
+  { key: 'wti',    label: 'WTI',     color: '#8b5cf6', unit: '$' },
 ];
 
 function weekPct(values: number[]): number {
@@ -32,9 +43,11 @@ export function MarketSparklines({ data }: { data: MarketDayData[] }) {
   if (!data.length) return null;
 
   return (
-    <section>
-      <h3 className="font-bold text-lg mb-4">📊 주간 마켓 동향</h3>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+      <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-4">
+        주간 마켓 동향
+      </h3>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {SPARKS.map(({ key, label, color, unit }) => {
           const series = data
             .map((d) => ({ date: d.date, v: d[key] as number | undefined }))
@@ -44,51 +57,44 @@ export function MarketSparklines({ data }: { data: MarketDayData[] }) {
 
           const latest = series[series.length - 1].v;
           const change = weekPct(series.map((s) => s.v));
-          const up = change >= 0;
+          // Korean market convention: up = red, down = blue (matches MarketDashboard Ticker)
+          const up = change > 0;
+          const flat = change === 0;
+          const arrow = flat ? '–' : up ? '▲' : '▼';
+          const badgeCls = flat
+            ? 'bg-gray-50 text-gray-400 border border-gray-100'
+            : up
+            ? 'bg-red-50 text-red-600 border border-red-200'
+            : 'bg-blue-50 text-blue-600 border border-blue-200';
 
           return (
-            <div key={key} className="bg-white rounded-xl border border-gray-200 p-4">
+            <div
+              key={key}
+              className="rounded-lg border border-gray-100 bg-gray-50/40 p-3 transition-shadow duration-150 hover:shadow-md hover:bg-white"
+            >
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
                   {label}
                 </span>
-                <span className={`text-xs font-bold ${up ? 'text-green-600' : 'text-red-500'}`}>
-                  {up ? '+' : ''}
-                  {change.toFixed(1)}%
+                <span
+                  className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${badgeCls}`}
+                >
+                  <span>{arrow}</span>
+                  <span>{Math.abs(change).toFixed(1)}%</span>
                 </span>
               </div>
-              <div className="text-sm font-bold text-gray-800 mb-2 tabular-nums">
+              <div className="text-sm font-bold text-gray-900 mb-2 tabular-nums">
                 {unit}
                 {latest.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}
               </div>
-              <div className="h-12">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={series} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                    <defs>
-                      <linearGradient id={`grad-${key}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor={color} stopOpacity={0.3} />
-                        <stop offset="95%" stopColor={color} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <Area
-                      type="monotone"
-                      dataKey="v"
-                      stroke={color}
-                      strokeWidth={1.5}
-                      fill={`url(#grad-${key})`}
-                      dot={false}
-                      isAnimationActive={false}
-                    />
-                    <Tooltip
-                      contentStyle={{ fontSize: '11px', padding: '2px 6px' }}
-                      formatter={(val) => [
-                        `${unit}${Number(val)?.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}`,
-                        label,
-                      ]}
-                      labelFormatter={(l) => l}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+              <div className="h-14">
+                <SparklineChart
+                  series={series}
+                  color={color}
+                  unit={unit}
+                  label={label}
+                  gradientId={`spark-grad-${key}`}
+                />
               </div>
             </div>
           );
