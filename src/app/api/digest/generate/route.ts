@@ -11,7 +11,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { chatJSON } from '@/lib/claude';
+import { chatJSON } from '@/lib/llm';
 import { collectByCategory } from '@/lib/news-collector';
 import { buildMarketPrompt, buildCategoryPrompt, buildTop3Prompt } from '@/lib/prompts/daily-digest';
 import {
