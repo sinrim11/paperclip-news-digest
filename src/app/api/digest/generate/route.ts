@@ -64,6 +64,7 @@ export async function POST(req: Request) {
           wtiValue: mResult.wti.value,        wtiChange: mResult.wti.change,        wtiDir: mResult.wti.direction,
           us10yValue: mResult.us10y.value,    us10yChange: mResult.us10y.change,    us10yDir: mResult.us10y.direction,
           btcUsdValue: mResult.btcUsd.value,  btcUsdChange: mResult.btcUsd.change,  btcUsdDir: mResult.btcUsd.direction,
+          nasdaqValue: mResult.nasdaq.value,  nasdaqChange: mResult.nasdaq.change,  nasdaqDir: mResult.nasdaq.direction,
         },
         update: {
           kospiValue: mResult.kospi.value,    kospiChange: mResult.kospi.change,
@@ -72,6 +73,7 @@ export async function POST(req: Request) {
           wtiValue: mResult.wti.value,        wtiChange: mResult.wti.change,
           us10yValue: mResult.us10y.value,    us10yChange: mResult.us10y.change,
           btcUsdValue: mResult.btcUsd.value,  btcUsdChange: mResult.btcUsd.change,
+          nasdaqValue: mResult.nasdaq.value,  nasdaqChange: mResult.nasdaq.change,
         },
       });
     } catch (err) {
@@ -177,6 +179,13 @@ export async function POST(req: Request) {
     // ── Step 5: TOP 3 selection ───────────────────────────────────────────
     if (successfulCategories.length > 0) {
       try {
+        // Fetch all persisted items so we can match by DB id instead of title
+        const allDbItems = await prisma.newsItem.findMany({
+          where: { digestId: digest.id },
+          select: { id: true, title: true, category: true },
+          orderBy: [{ category: 'asc' }, { newsOrder: 'asc' }],
+        });
+
         const top3Input = successfulCategories.map((c) => ({
           category: c.category as Category,
           items: c.items.map((it) => ({
@@ -193,21 +202,30 @@ export async function POST(req: Request) {
           { temperature: 0.2, maxTokens: 2048 },
         );
 
-        // Mark TOP 3 items in the DB
+        // Match TOP 3 items by closest title (LLM may slightly alter titles)
         for (const topItem of top3Result.top3.slice(0, 3)) {
-          await prisma.newsItem.updateMany({
-            where: {
-              digestId: digest.id,
-              title: topItem.title,
-            },
-            data: {
-              isTop3: true,
-              top3Rank: topItem.rank,
-              relatedData: topItem.relatedData ?? [],
-              contextLinks: topItem.contextLinks ?? [],
-              upcomingEvents: topItem.upcomingEvents ?? [],
-            },
-          });
+          const normalizedTop = topItem.title.trim().toLowerCase();
+          const match = allDbItems.find(
+            (db) => db.title.trim().toLowerCase() === normalizedTop,
+          ) ?? allDbItems.find(
+            (db) => normalizedTop.includes(db.title.trim().toLowerCase().slice(0, 15))
+              || db.title.trim().toLowerCase().includes(normalizedTop.slice(0, 15)),
+          );
+
+          if (match) {
+            await prisma.newsItem.update({
+              where: { id: match.id },
+              data: {
+                isTop3: true,
+                top3Rank: topItem.rank,
+                relatedData: topItem.relatedData ?? [],
+                contextLinks: topItem.contextLinks ?? [],
+                upcomingEvents: topItem.upcomingEvents ?? [],
+              },
+            });
+          } else {
+            console.warn(`[generate] top3: no DB match for "${topItem.title}"`);
+          }
         }
       } catch (err) {
         console.error('[generate] top3 step failed:', err);
