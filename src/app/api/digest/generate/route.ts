@@ -100,19 +100,19 @@ export async function POST(req: Request) {
       const msgs = buildCategoryPrompt(dateStr, koreanLabel, articles, marketSnapshot);
 
       let settled: SettledResult = { status: 'rejected', reason: new Error('not started') };
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (let attempt = 0; attempt < 3; attempt++) {
         try {
           const value = await chatJSON<LLMCategoryResult>(msgs, { temperature: 0.3, maxTokens: 4096 });
-          settled = { status: 'fulfilled', value };
-          break;
-        } catch (err) {
-          if (attempt === 1) {
-            settled = { status: 'rejected', reason: err };
-          } else {
-            console.warn(`[generate] ${catKey} attempt 1 failed, retrying:`, err);
-            await new Promise((r) => setTimeout(r, 3000));
+          if (value?.items?.length > 0) {
+            settled = { status: 'fulfilled', value };
+            break;
           }
+          console.warn(`[generate] ${catKey} attempt ${attempt + 1}: 0 items returned, retrying`);
+        } catch (err) {
+          console.warn(`[generate] ${catKey} attempt ${attempt + 1} failed:`, err);
         }
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 3000));
+        else settled = { status: 'rejected', reason: new Error(`${catKey}: all 3 attempts failed or empty`) };
       }
       categoryResults.push(settled);
       console.log(`[generate] ${catKey}: ${settled.status}`);
@@ -237,13 +237,28 @@ export async function POST(req: Request) {
           })),
         }));
 
-        const top3Result = await chatJSON<{ top3: LLMTop3Item[] }>(
-          buildTop3Prompt(dateStr, top3Input),
-          { temperature: 0.2, maxTokens: 2048 },
-        );
+        let top3Result: { top3: LLMTop3Item[] } | null = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            top3Result = await chatJSON<{ top3: LLMTop3Item[] }>(
+              buildTop3Prompt(dateStr, top3Input),
+              { temperature: 0.2, maxTokens: 2048 },
+            );
+            if (top3Result?.top3?.length > 0) break;
+            console.warn(`[generate] top3 attempt ${attempt + 1}: empty top3 array, retrying`);
+            top3Result = null;
+          } catch (err) {
+            console.warn(`[generate] top3 attempt ${attempt + 1} failed:`, err);
+            if (attempt < 2) await new Promise((r) => setTimeout(r, 3000));
+          }
+        }
+
+        if (!top3Result?.top3?.length) {
+          console.error('[generate] top3: all attempts returned empty — skipping');
+        }
 
         // Match TOP 3 items by closest title (LLM may slightly alter titles)
-        for (const topItem of top3Result.top3.slice(0, 3)) {
+        for (const topItem of (top3Result?.top3 ?? []).slice(0, 3)) {
           const normalizedTop = topItem.title.trim().toLowerCase();
           const match = allDbItems.find(
             (db) => db.title.trim().toLowerCase() === normalizedTop,
