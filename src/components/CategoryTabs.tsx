@@ -1,4 +1,4 @@
-// vercel-react-best-practices §rerender: "use client" justified — tab switching requires useState
+// vercel-react-best-practices §rerender: "use client" justified — tab switching + urgency filter require useState
 'use client';
 
 import { useState } from 'react';
@@ -39,12 +39,26 @@ export function CategoryTabs({ categories }: { categories: CategoryTabData[] }) 
   const [activeKey, setActiveKey] = useState<CategoryKey>(
     categories[0]?.key ?? 'GLOBAL',
   );
+  const [urgencyFilter, setUrgencyFilter] = useState<Urgency | null>(null);
 
   const active = categories.find((c) => c.key === activeKey) ?? categories[0];
   if (!active) return null;
 
   const breakingCount = (c: CategoryTabData) =>
     c.items.filter((i) => i.urgency === 'breaking').length;
+
+  function handleTabChange(key: CategoryKey) {
+    setActiveKey(key);
+    setUrgencyFilter(null); // reset filter on tab switch
+  }
+
+  function handleUrgencyFilter(u: Urgency) {
+    setUrgencyFilter((prev) => (prev === u ? null : u)); // toggle
+  }
+
+  const visibleItems = urgencyFilter
+    ? active.items.filter((i) => i.urgency === urgencyFilter)
+    : active.items;
 
   return (
     <section>
@@ -56,7 +70,7 @@ export function CategoryTabs({ categories }: { categories: CategoryTabData[] }) 
           return (
             <button
               key={cat.key}
-              onClick={() => setActiveKey(cat.key)}
+              onClick={() => handleTabChange(cat.key)}
               aria-selected={isActive}
               role="tab"
               className={`shrink-0 flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-t
@@ -90,22 +104,45 @@ export function CategoryTabs({ categories }: { categories: CategoryTabData[] }) 
           </div>
         )}
 
-        {/* Urgency filter hint */}
-        <div className="flex flex-wrap gap-2 mb-3">
+        {/* Urgency filter buttons — clicking toggles filter; active filter is highlighted */}
+        <div className="flex flex-wrap items-center gap-2 mb-3">
           {(['breaking', 'watch', 'note'] as Urgency[]).map((u) => {
             const count = active.items.filter((i) => i.urgency === u).length;
             if (!count) return null;
+            const isFilterActive = urgencyFilter === u;
             return (
-              <span key={u} className="flex items-center gap-1">
+              <button
+                key={u}
+                onClick={() => handleUrgencyFilter(u)}
+                aria-pressed={isFilterActive}
+                className={`flex items-center gap-1 rounded-full transition-all duration-150
+                  ${isFilterActive
+                    ? 'ring-2 ring-offset-1 ring-gray-400 scale-105'
+                    : 'opacity-70 hover:opacity-100'
+                  }`}
+              >
                 <UrgencyBadge urgency={u} />
-                <span className="text-xs text-gray-400">{count}건</span>
-              </span>
+                <span className="text-xs text-gray-400 pr-1">{count}건</span>
+              </button>
             );
           })}
+          {urgencyFilter && (
+            <button
+              onClick={() => setUrgencyFilter(null)}
+              className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+            >
+              전체보기
+            </button>
+          )}
+          {urgencyFilter && (
+            <span className="text-xs text-gray-400 ml-auto">
+              {visibleItems.length} / {active.items.length}건
+            </span>
+          )}
         </div>
 
         <div className="space-y-3">
-          {active.items.map((item) => (
+          {visibleItems.map((item) => (
             <NewsCard key={item.id} item={item} />
           ))}
         </div>
