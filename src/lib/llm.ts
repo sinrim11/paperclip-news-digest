@@ -48,7 +48,7 @@ async function callOllama(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     // Node 18+ supports signal; add a generous timeout for large models
-    signal: AbortSignal.timeout(300_000),
+    signal: AbortSignal.timeout(600_000),
   });
 
   if (!res.ok) {
