@@ -80,7 +80,7 @@ async function main() {
     if (!byCategory[catKey]) byCategory[catKey] = [];
     byCategory[catKey].push({
       title: item.title,
-      content: (item.full_content ?? item.summary ?? '').slice(0, 3000),
+      content: (item.full_content ?? item.summary ?? '').slice(0, 1500),
       url: item.url,
       source: item.source_name ?? '알 수 없음',
       category: catKey as CategoryKey,
@@ -107,7 +107,8 @@ async function main() {
   const successfulCategories: LLMCategoryResult[] = [];
 
   for (const catKey of categoriesToProcess) {
-    const articles = byCategory[catKey] ?? [];
+    // Cap at 6 articles to keep prompt size manageable for large-content categories
+    const articles = (byCategory[catKey] ?? []).slice(0, 6);
     console.log(`\n[direct] === ${catKey} (${articles.length} articles) ===`);
 
     const koreanLabel = toCategoryLabel(catKey);
