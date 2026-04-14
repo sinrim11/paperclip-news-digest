@@ -1,6 +1,7 @@
 // vercel-react-best-practices §rerender: RSC — no "use client", pure Tailwind styling
 import type { CategoryKey, Urgency } from '@/lib/types';
 import { UrgencyBadge } from './UrgencyBadge';
+import { CopyButton } from './CopyButton';
 
 export interface NewsListItem {
   id: string;
@@ -24,6 +25,8 @@ const URGENCY_BORDER: Record<Urgency, string> = {
 };
 
 function NewsListRow({ item, index }: { item: NewsListItem; index: number }) {
+  const copyText = `${item.title}\n📌 팩트: ${item.fact}\n💡 임팩트: ${item.impact}\n🎯 액션: ${item.action}${item.source ? `\n출처: ${item.source}` : ''}`;
+
   return (
     <article className={`border-l-4 ${URGENCY_BORDER[item.urgency]} bg-white rounded-r-lg border border-l-0 border-gray-100 p-4 shadow-sm hover:shadow-md hover:bg-gray-50/50 transition-all duration-200 ease-out group`}>
       {/* Title row */}
@@ -41,6 +44,7 @@ function NewsListRow({ item, index }: { item: NewsListItem; index: number }) {
                 TOP {item.top3Rank}
               </span>
             )}
+            <CopyButton text={copyText} />
           </div>
           <h4 className="font-semibold text-sm leading-snug text-gray-900">
             {item.sourceUrl ? (

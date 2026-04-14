@@ -1,6 +1,7 @@
 // vercel-react-best-practices §rerender: RSC — no "use client", pure Tailwind styling
 import type { Urgency } from '@/lib/types';
 import { UrgencyBadge } from './UrgencyBadge';
+import { CopyButton } from './CopyButton';
 
 export interface NewsCardData {
   id: string;
@@ -23,6 +24,8 @@ const URGENCY_BG: Record<string, string> = {
 };
 
 export function NewsCard({ item }: { item: NewsCardData }) {
+  const copyText = `${item.title}\n📌 팩트: ${item.fact}\n💡 임팩트: ${item.impact}\n🎯 액션: ${item.action}${item.source ? `\n출처: ${item.source}` : ''}`;
+
   return (
     <article className={`rounded-lg border p-4 shadow-sm hover:shadow-md transition-all duration-200 ease-out group ${URGENCY_BG[item.urgency] ?? URGENCY_BG.note}`}>
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -40,7 +43,10 @@ export function NewsCard({ item }: { item: NewsCardData }) {
             item.title
           )}
         </h4>
-        <UrgencyBadge urgency={item.urgency} />
+        <div className="flex items-center gap-1.5 shrink-0">
+          <CopyButton text={copyText} />
+          <UrgencyBadge urgency={item.urgency} />
+        </div>
       </div>
 
       <div className="space-y-1 text-xs text-gray-600 leading-relaxed">
