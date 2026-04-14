@@ -73,35 +73,45 @@ async function callOllama(
   messages: ChatMessage[],
   options: ChatOptions & { jsonMode?: boolean } = {},
 ): Promise<string> {
-  const body: Record<string, unknown> = {
+  const nativeBase = OLLAMA_BASE.replace(/\/v1$/, '');
+
+  if (options.jsonMode) {
+    // Use native Ollama API with think:false to prevent gemma4's reasoning
+    // from consuming the token budget and returning empty content
+    const body = {
+      model: options.model ?? OLLAMA_MODEL,
+      messages,
+      format: 'json',
+      stream: false,
+      think: false,
+      options: {
+        temperature: options.temperature ?? 0.3,
+        num_predict: options.maxTokens ?? 4096,
+      },
+    };
+    const text = await httpPost(`${nativeBase}/api/chat`, JSON.stringify(body));
+    const data = JSON.parse(text) as { message?: { content?: string }; done_reason?: string };
+    const content = data.message?.content ?? '';
+    if (!content.trim()) {
+      throw new Error(`Ollama returned no content (done_reason: ${data.done_reason})`);
+    }
+    return content;
+  }
+
+  // OpenAI-compatible endpoint for non-JSON calls
+  const body = {
     model: options.model ?? OLLAMA_MODEL,
     messages,
     temperature: options.temperature ?? 0.3,
     max_tokens: options.maxTokens ?? 4096,
     stream: false,
   };
-
-  if (options.jsonMode) {
-    body.format = 'json';
-  }
-
   const text = await httpPost(`${OLLAMA_BASE}/chat/completions`, JSON.stringify(body));
   const data = JSON.parse(text) as OllamaResponse;
-  const msg = data.choices?.[0]?.message;
-  let content = msg?.content ?? '';
-
-  // gemma4 with thinking puts JSON in reasoning field and returns empty content
-  if (!content.trim() && msg?.reasoning) {
-    const jsonMatch = msg.reasoning.match(/[{[]/);
-    if (jsonMatch) {
-      content = msg.reasoning.slice(msg.reasoning.indexOf(jsonMatch[0]));
-    }
-  }
-
+  const content = data.choices?.[0]?.message?.content ?? '';
   if (!content.trim()) {
     throw new Error('Ollama returned no content');
   }
-
   return content;
 }
 
