@@ -38,7 +38,7 @@ export function CopyButton({ text, className = '' }: CopyButtonProps) {
       className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-all duration-150
         ${copied
           ? 'bg-green-100 text-green-600'
-          : 'bg-gray-100 text-gray-400 hover:bg-blue-50 hover:text-blue-500 opacity-0 group-hover:opacity-100 focus:opacity-100'
+          : 'bg-gray-100 text-gray-400 hover:bg-blue-50 hover:text-blue-500 opacity-0 group-hover:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100'
         } ${className}`}
     >
       {copied ? (
