@@ -61,6 +61,21 @@ function parseRssItems(xml: string, source: NewsSource): RawArticle[] {
   return items;
 }
 
+/** Tokenize a title for Jaccard similarity comparison */
+function titleTokens(title: string): Set<string> {
+  return new Set(
+    title.toLowerCase().split(/[\s\-_,.()\[\]]+/).filter((t) => t.length > 1),
+  );
+}
+
+/** Jaccard similarity between two token sets */
+function jaccardSim(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  return inter / (a.size + b.size - inter);
+}
+
 function extractTag(xml: string, tag: string): string | null {
   const pattern = new RegExp(`<${tag}[^>]*>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?<\\/${tag}>`, 'is');
   const m = xml.match(pattern);
@@ -107,15 +122,38 @@ export async function collectByCategory(
     byCategory.set(cat, [...existing, ...articles]);
   });
 
-  // Deduplicate by URL and cap per category
+  // Deduplicate by URL and title similarity, accumulate source metadata
   for (const [cat, articles] of byCategory.entries()) {
-    const seen = new Set<string>();
-    const deduped = articles.filter((a) => {
-      if (seen.has(a.url)) return false;
-      seen.add(a.url);
+    // Step 1: URL dedup
+    const urlSeen = new Set<string>();
+    const urlDeduped = articles.filter((a) => {
+      if (urlSeen.has(a.url)) return false;
+      urlSeen.add(a.url);
       return true;
     });
-    byCategory.set(cat, deduped.slice(0, limit));
+
+    // Step 2: Title-similarity dedup (Jaccard >= 0.85 → same story)
+    // Accumulate sourceCount and sourceList on the surviving article
+    const unique: RawArticle[] = [];
+    for (const a of urlDeduped) {
+      const tokA = titleTokens(a.title);
+      let merged = false;
+      for (const u of unique) {
+        if (jaccardSim(tokA, titleTokens(u.title)) >= 0.85) {
+          u.sourceCount = (u.sourceCount ?? 1) + 1;
+          u.sourceList = [...(u.sourceList ?? [u.source]), a.source].filter(
+            (s, i, arr) => arr.indexOf(s) === i,
+          );
+          merged = true;
+          break;
+        }
+      }
+      if (!merged) {
+        unique.push({ ...a, sourceCount: 1, sourceList: [a.source] });
+      }
+    }
+
+    byCategory.set(cat, unique.slice(0, limit));
   }
 
   return byCategory;

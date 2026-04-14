@@ -145,24 +145,49 @@ export async function POST(req: Request) {
         where: { digestId: digest.id, category: catKey },
       });
 
-      const itemsToCreate = llmCat.items.slice(0, 10).map((item, idx) => ({
-        digestId: digest.id,
-        categoryBriefingId: briefing.id,
-        category: catKey,
-        newsOrder: idx + 1,
-        title:       item.title       ?? '',
-        urgency:     item.urgency     ?? 'note',
-        fact:        item.fact        ?? '',
-        impact:      item.impact      ?? '',
-        action:      item.action      ?? '',
-        contextTags: item.contextTags ?? [],
-        source:      item.source      ?? '',
-        sourceUrl:   item.sourceUrl   ?? '',
-        isTop3: false,
-        relatedData: [],
-        contextLinks: [],
-        upcomingEvents: [],
-      }));
+      // Build a lookup of article source info by title for multi-source enrichment
+      const articleSourceMap = new Map<string, { sourceCount: number; sourceList: string[] }>();
+      const catArticles = articlesByCategory.get(catKey) ?? [];
+      for (const a of catArticles) {
+        const key = a.title.trim().toLowerCase();
+        articleSourceMap.set(key, {
+          sourceCount: a.sourceCount ?? 1,
+          sourceList: a.sourceList ?? [a.source],
+        });
+      }
+
+      const itemsToCreate = llmCat.items.slice(0, 10).map((item, idx) => {
+        // Find matching article for source metadata (fuzzy: first 20 chars)
+        const titleKey = (item.title ?? '').trim().toLowerCase();
+        let srcInfo = articleSourceMap.get(titleKey);
+        if (!srcInfo) {
+          for (const [k, v] of articleSourceMap.entries()) {
+            if (k.slice(0, 20) === titleKey.slice(0, 20)) { srcInfo = v; break; }
+          }
+        }
+        return {
+          digestId: digest.id,
+          categoryBriefingId: briefing.id,
+          category: catKey,
+          newsOrder: idx + 1,
+          title:           item.title       ?? '',
+          urgency:         item.urgency     ?? 'note',
+          fact:            item.fact        ?? '',
+          impact:          item.impact      ?? '',
+          action:          item.action      ?? '',
+          contextTags:     item.contextTags ?? [],
+          source:          item.source      ?? '',
+          sourceUrl:       item.sourceUrl   ?? '',
+          isTop3: false,
+          relatedData: [],
+          contextLinks: [],
+          upcomingEvents: [],
+          sourceCount:     srcInfo?.sourceCount ?? 1,
+          sourceList:      srcInfo?.sourceList  ?? [],
+          consensusFacts:  item.consensusFacts  ?? null,
+          conflictingFacts: item.conflictingFacts ?? null,
+        };
+      });
 
       await prisma.newsItem.createMany({ data: itemsToCreate });
 

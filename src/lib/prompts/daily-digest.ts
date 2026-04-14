@@ -9,6 +9,7 @@
  * Stage 6: Cross-category TOP 3 selection → buildTop3Prompt
  *
  * Runtime: Ollama gemma4:26b (no web_search — articles pre-fetched via RSS collector)
+ * CMP-126: gemma4:26b prompt tuning + multi-source consensus rules
  */
 
 import type { Category, RawArticle, MarketSnapshot } from '../types';
@@ -20,39 +21,53 @@ export function buildMarketPrompt(date: string): Array<{ role: 'system' | 'user'
     {
       role: 'system',
       content:
-        '당신은 금융 데이터 분석가입니다. 주어진 날짜의 주요 시장 지표를 JSON 형식으로 반환합니다. 학습 데이터 기준 합리적인 추정치를 제공하세요. 순수 JSON만 출력하세요. 마크다운, 설명, 코드블록 없이.',
+        '반드시 한국어로 JSON만 출력하세요. 금융 데이터 분석가로서 주어진 날짜의 시장 지표를 추정합니다. 순수 JSON만, 마크다운·코드블록 없이.',
     },
     {
       role: 'user',
       content: `오늘 날짜: ${date}
 
-다음 시장 지표의 최근 수준을 JSON으로 반환하세요.
-실시간 데이터가 없으므로 학습 데이터 기준 합리적인 추정치를 제공하세요.
+아래 형식으로 시장 지표를 반환하세요 (학습 데이터 기준 합리적 추정치).
+direction은 반드시 "up", "down", "flat" 중 하나. change는 부호 포함 문자열.
 
-출력 형식 (순수 JSON, 추가 설명 없음):
-{
-  "date": "${date}",
-  "kospi": { "value": 0, "change": "+0.0%", "direction": "flat" },
-  "kosdaq": { "value": 0, "change": "+0.0%", "direction": "flat" },
-  "usdKrw": { "value": 0, "change": "+0.0", "direction": "flat" },
-  "wti": { "value": 0, "change": "+0.0%", "direction": "flat" },
-  "us10y": { "value": 0, "change": "+0.00", "direction": "flat" },
-  "btcUsd": { "value": 0, "change": "+0.0%", "direction": "flat" }
-}
-
-direction은 반드시 "up", "down", "flat" 중 하나입니다.
-change는 부호(+/-) 포함 문자열입니다.`,
+{"date":"${date}","kospi":{"value":0,"change":"+0.0%","direction":"flat"},"kosdaq":{"value":0,"change":"+0.0%","direction":"flat"},"usdKrw":{"value":0,"change":"+0.0","direction":"flat"},"wti":{"value":0,"change":"+0.0%","direction":"flat"},"us10y":{"value":0,"change":"+0.00","direction":"flat"},"btcUsd":{"value":0,"change":"+0.0%","direction":"flat"}}`,
     },
   ];
 }
 
-// ─── Stages 2-5: Per-category news structuring (one LLM call per category) ───
+// ─── Stages 2-5: Per-category news structuring ────────────────────────────────
 //
-// Covers:
-//   STEP 2: Structured 3-line summary (fact / impact / action)
-//   STEP 3: Urgency classification (breaking / watch / note)
-//   STEP 4: Context tag linking (cross-category keywords)
-//   STEP 5: Category briefing summary (2-3 sentence overview)
+// CMP-126 multi-source rules:
+//   - sourceCount >= 2 → prepend "[N개 출처 공통 보도]" to fact
+//   - consensusFacts: 3~5문장 공통 사실 상세 서술
+//   - conflictingFacts: 출처 간 상충 수치/시간/주체 명시 (없으면 null)
+//
+// gemma4:26b optimizations:
+//   - Korean-first system directive
+//   - 3 few-shot examples (single / multi-no-conflict / multi-conflict)
+//   - strict JSON fence + schema comment
+//   - output length constraints
+//   - forbidden filler phrases
+//   - self-verification checklist
+
+const FEW_SHOT = `
+## 출력 예시 (Few-shot)
+
+### 예시 1 — 단일 출처 (sourceCount=1)
+입력: {"title":"연준, 기준금리 0.25%p 인상 결정","source_name":"Reuters","source_count":1,"summary":"미 연방준비제도가 5월 FOMC에서 기준금리를 5.25~5.50%로 0.25%p 인상했다."}
+출력:
+{"urgency":"breaking","fact":"미 연준이 2024년 5월 FOMC에서 기준금리를 0.25%p 인상해 5.25~5.50%로 결정했다.","consensusFacts":"미 연방준비제도가 5월 1일 FOMC 회의에서 기준금리를 5.25~5.50%로 결정했다. 파월 의장은 인플레이션이 여전히 목표치(2%)를 크게 웃돌고 있다고 밝혔다. 금리 동결 가능성이 제기됐으나 고용 지표 강세로 인상이 확정됐다.","conflictingFacts":null,"impact":"글로벌 달러 강세 지속으로 신흥국 통화 약세·자본 유출 압력이 높아진다.","action":"달러 자산 및 단기채 비중 확대를 검토하라.","contextTags":["미국_금리"],"source":"Reuters","sourceUrl":"https://reuters.com/example"}
+
+### 예시 2 — 다중 출처, 상충 없음 (sourceCount=2)
+입력: {"title":"삼성전자, 2분기 영업이익 14조원 달성","source_name":"한국경제,연합뉴스","source_count":2,"summary":"삼성전자가 2분기 잠정 영업이익 14조원을 발표했다. HBM 수요 급증이 주요 원인이다."}
+출력:
+{"urgency":"watch","fact":"[2개 출처 공통 보도] 삼성전자가 2024년 2분기 잠정 영업이익 14조원을 기록해 전년 동기 대비 약 15배 급증했다.","consensusFacts":"삼성전자가 2분기 잠정 영업이익 14조원을 발표했다. HBM(고대역폭메모리) 수요 급증이 핵심 성장 동인으로 꼽혔다. 두 출처 모두 DS부문(반도체)의 회복세를 강조했다. 연간 영업이익 60조원 회복 전망이 나오고 있다.","conflictingFacts":null,"impact":"국내 반도체 대장주 삼성전자의 실적 반등이 KOSPI 전체 심리를 끌어올릴 수 있다.","action":"삼성전자 보유자는 3분기 HBM 수주 동향을 주시하라.","contextTags":["삼성전자","반도체_회복"],"source":"한국경제,연합뉴스","sourceUrl":"https://example.com"}
+
+### 예시 3 — 다중 출처, 상충 있음 (sourceCount=3)
+입력: {"title":"이란 드론 공격, 이스라엘 피해 발생","source_name":"BBC,AP,Al Jazeera","source_count":3,"summary":"이란이 이스라엘을 향해 드론 300여 기를 발사했다. 피해 규모 집계 중."}
+출력:
+{"urgency":"breaking","fact":"[3개 출처 공통 보도] 이란이 2024년 4월 14일 이스라엘을 향해 드론 300여 기와 순항미사일을 발사했다.","consensusFacts":"이란 혁명수비대가 4월 14일 새벽 이스라엘 본토를 겨냥해 드론과 미사일을 대규모 발사했다. 이스라엘 아이언돔과 미·영 전투기가 대부분을 요격했다고 세 출처 모두 보도했다. 이스라엘 정부는 즉각 전시 내각을 소집했다. 글로벌 유가와 금값이 장중 급등했다.","conflictingFacts":"드론 발사 수: BBC는 300여 기, AP는 350기 이상, Al Jazeera는 '수백 기'로 보도해 정확한 수치 미확정.","impact":"중동 전면전 리스크 확대로 유가 5달러 이상 급등 및 글로벌 안전자산 선호가 강화된다.","action":"에너지·방산 섹터 노출 및 안전자산(금·달러) 헤지 비율 점검을 즉시 실시하라.","contextTags":["중동_분쟁","유가_급등"],"source":"BBC,AP,Al Jazeera","sourceUrl":"https://bbc.com/example"}
+`;
 
 export function buildCategoryPrompt(
   date: string,
@@ -61,7 +76,7 @@ export function buildCategoryPrompt(
   marketSnapshot?: MarketSnapshot,
 ): Array<{ role: 'system' | 'user'; content: string }> {
   const marketContext = marketSnapshot
-    ? `\n\n## 오늘의 시장 스냅샷 (맥락 연결에 활용)\n` +
+    ? `\n## 오늘의 시장 스냅샷\n` +
       `KOSPI ${marketSnapshot.kospi.value} (${marketSnapshot.kospi.change}), ` +
       `KOSDAQ ${marketSnapshot.kosdaq.value} (${marketSnapshot.kosdaq.change}), ` +
       `USD/KRW ${marketSnapshot.usdKrw.value} (${marketSnapshot.usdKrw.change}), ` +
@@ -72,25 +87,31 @@ export function buildCategoryPrompt(
   const articlesText =
     articles.length > 0
       ? articles
-          .map(
-            (a, i) =>
-              `[${i + 1}] 제목: ${a.title}\n출처: ${a.source}\nURL: ${a.url}\n내용: ${a.content?.slice(0, 800) || '(내용 없음)'}`,
-          )
+          .map((a, i) => {
+            const sc = a.sourceCount ?? 1;
+            const srcLabel = sc > 1
+              ? `출처(${sc}개): ${a.sourceList?.join(', ') ?? a.source}`
+              : `출처: ${a.source}`;
+            const content = (a.content || '').slice(0, 600);
+            return `[${i + 1}] 제목: ${a.title}\n${srcLabel} | source_count=${sc}\nURL: ${a.url}\n내용: ${content || '(내용 없음)'}`;
+          })
           .join('\n\n')
       : '(수집된 기사 없음 — 학습 데이터 기반으로 오늘 날짜의 주요 뉴스를 생성하세요)';
 
   return [
     {
       role: 'system',
-      content: `당신은 시니어 뉴스 에디터 겸 투자 애널리스트입니다.
-매일 아침 의사결정자를 위한 뉴스 브리핑을 작성합니다.
+      content: `반드시 한국어로 JSON만 출력하세요. 마크다운·코드블록·설명 절대 금지.
+당신은 시니어 뉴스 에디터 겸 투자 애널리스트입니다. 의사결정자를 위한 브리핑을 작성합니다.
 독자 프로파일: IT업계 시니어 개발자 + 적극적 투자자 + 정책/부동산 관심 높음.
 
 핵심 원칙:
-- 독자가 10초 안에 핵심을 파악할 수 있어야 합니다
-- fact/impact/action은 각각 반드시 1문장으로 제한합니다
-- 기사 원문을 그대로 복사하지 않습니다
-- 반드시 순수 JSON만 출력합니다 (마크다운, 코드블록, 설명 없이)`,
+- fact/impact/action 각각 반드시 1문장. 수치·날짜·주체 포함 필수.
+- source_count >= 2이면 fact 앞에 "[N개 출처 공통 보도]" 접두사 추가.
+- consensusFacts: 모든 출처에 공통된 사실만 3~5문장으로 상세 서술.
+- conflictingFacts: 출처 간 수치·시간·주체가 다르면 명시. 없으면 null.
+- action은 반드시 "~검토", "~주시", "~대비" 형태로 끝낼 것.
+- 금지어: "다음과 같이", "위와 같이", "이상과 같이", "다음과 같은" 사용 절대 금지.`,
     },
     {
       role: 'user',
@@ -100,81 +121,63 @@ export function buildCategoryPrompt(
 ## 수집된 뉴스 기사 (${articles.length}건)
 
 ${articlesText}
-
+${FEW_SHOT}
 ---
 
 ## 작업 지시
 
-위 기사들을 분석하여 아래 4단계를 순서대로 수행하고, 최종 JSON을 출력하세요.
+위 기사들을 분석해 4단계를 수행하고 최종 JSON을 출력하세요.
 
-### [STEP 2] 구조화 요약 — 각 뉴스를 3줄 구조로 변환
+### [STEP 2] 구조화 요약 (각 뉴스 → 3줄 + 공통사실)
+- fact: 수치·날짜·주체 포함 1문장. source_count >= 2이면 "[N개 출처 공통 보도]" 접두사.
+- consensusFacts: 모든 출처 공통 사실만 3~5문장. 한 출처만 언급한 정보 제외.
+- conflictingFacts: 출처 간 상충 수치·시간·주체 명시. 없으면 null.
+- impact: 시장/산업/사회 영향 1문장.
+- action: 구체적 행동 지침 1문장 (~검토|~주시|~대비).
+최대 10건 선정. 중복·무관 기사 제외.
 
-각 뉴스는 아래 3줄 구조를 반드시 따르세요:
+### [STEP 3] 긴급도 분류
+- "breaking": 즉시 의사결정 필요. 카테고리당 최대 2건.
+- "watch": 1~2주 내 모니터링 필요.
+- "note": 배경지식, 중장기 관점.
 
-| 구분 | 설명 |
-|------|------|
-| 📌 fact (What) | 무슨 일이 일어났는가. 수치/날짜/주체를 포함한 객관적 사실 1문장 |
-| 💡 impact (Why) | 왜 중요한가. 시장/산업/사회에 미치는 영향 1문장 |
-| 🎯 action (So What) | 독자에게 어떤 의미인가. 구체적 행동 지침 1문장 ("~검토", "~주시", "~대비" 형태) |
+### [STEP 4] 맥락 태그 (context_tags)
+카테고리 간 연결 키워드 2~4개. 연관성 없으면 [].
 
-최대 10건 선정. 중복/무관 기사 제외.
-
-### [STEP 3] 긴급도 분류 — 각 뉴스에 urgency 태그 부여
-
-- "breaking": 오늘 당장 포트폴리오/의사결정에 영향. 즉시 대응 필요
-  - 기준: 시장 급변, 전쟁/재난, 긴급 정책 발표, 금리/환율 급변동
-- "watch": 1~2주 내 영향 예상. 모니터링 필요
-  - 기준: 정책 예고, 실적 발표 예정, 기술 트렌드 변화, 시장 구조 변화
-- "note": 알아두면 좋은 배경 지식. 중장기 관점
-  - 기준: 산업 동향, 해외 사례, 연구 결과, 인물/기업 소식
-
-긴급도 부여 원칙:
-- "breaking"은 카테고리당 최대 2건으로 제한 (남발 금지)
-- 투자/자산에 직접 영향을 주는 뉴스는 긴급도를 1단계 올림
-- 글로벌 이슈가 국내 시장에 연쇄 영향이 있으면 긴급도를 1단계 올림
-
-### [STEP 4] 맥락 연결 태깅 (context_tags) — 다른 카테고리 뉴스와 연결되는 키워드 부여
-
-뉴스 간 인과관계나 연쇄 영향이 있는 경우 동일한 contextTag를 부여하세요.
-
-예시:
-- 이란 해상봉쇄(글로벌) ↔ 유가 급등(증권) ↔ 에너지 정책(정치)
-  → contextTags: ["이란_에너지_위기"]
-- AI 규제 법안(정치) ↔ 빅테크 주가(증권) ↔ AI 스타트업(AI)
-  → contextTags: ["AI_규제_파급"]
-- 미국 관세 인상(글로벌) ↔ 수출주 타격(증권) ↔ 무역정책(정치)
-  → contextTags: ["미_관세_충격"]
-
-하나의 뉴스에 여러 contextTag가 붙을 수 있습니다.
-카테고리 내부 연관성이 없으면 빈 배열 []로 두세요.
-
-### [STEP 5] 카테고리 브리핑 요약 — 카테고리 전체 2~3문장 총평
-
-"오늘 이 카테고리에서 가장 중요한 흐름은 무엇인가"를 한눈에 전달하세요.
-예시: "오늘 글로벌은 이란 해상봉쇄 이슈가 지배적. 미-이란 협상 결렬로 호르무즈 해협 긴장 최고조이며, 유가 4달러 이상 상승 전망."
+### [STEP 5] 카테고리 브리핑
+오늘 이 카테고리의 핵심 흐름 2~3문장 총평.
 
 ---
 
-## 출력 형식 (순수 JSON만, 마크다운/코드블록 없이)
+## 출력 형식 (순수 JSON, 아래 스키마 정확히 준수)
 
 {
   "category": "${category}",
-  "summary": "카테고리 전체 흐름 2~3문장 총평",
+  "summary": "카테고리 전체 흐름 2~3문장",
   "items": [
     {
       "title": "뉴스 제목",
-      "urgency": "breaking",
-      "fact": "📌 무슨 일이 일어났는가 — 수치/날짜/주체 포함 1문장",
-      "impact": "💡 왜 중요한가 — 시장/산업/사회 영향 1문장",
-      "action": "🎯 독자에게 어떤 의미인가 — 구체적 행동 지침 1문장",
+      "urgency": "breaking|watch|note",
+      "fact": "1문장 (source_count>=2이면 [N개 출처 공통 보도] 접두사)",
+      "consensusFacts": "3~5문장 공통 사실 상세 서술",
+      "conflictingFacts": "상충 사실 또는 null",
+      "impact": "1문장",
+      "action": "1문장 (~검토|~주시|~대비)",
       "contextTags": ["태그1", "태그2"],
-      "source": "출처 매체명",
+      "source": "출처명",
       "sourceUrl": "https://..."
     }
   ]
 }
 
-urgency 값은 반드시 "breaking", "watch", "note" 중 하나 (소문자 영어).`,
+urgency는 반드시 "breaking", "watch", "note" 중 하나 (소문자 영어).
+
+## 자기 검증 (출력 전 확인)
+- [ ] fact에 수치/날짜/주체 포함 ✓
+- [ ] source_count>=2인 기사는 "[N개 출처 공통 보도]" 접두사 ✓
+- [ ] consensusFacts가 3~5문장 ✓
+- [ ] action이 ~검토/~주시/~대비 형식 ✓
+- [ ] 순수 JSON만 출력 (코드블록 없음) ✓`,
     },
   ];
 }
@@ -210,7 +213,7 @@ export function buildTop3Prompt(
     {
       role: 'system',
       content:
-        '당신은 시니어 투자 애널리스트입니다. 전체 뉴스 중 오늘 가장 중요한 3건을 선정합니다. 반드시 순수 JSON만 출력하세요. 마크다운, 코드블록, 설명 없이.',
+        '반드시 한국어로 JSON만 출력하세요. 마크다운·코드블록 절대 금지. 당신은 시니어 투자 애널리스트입니다. 전체 뉴스 중 오늘 가장 중요한 3건을 선정합니다.',
     },
     {
       role: 'user',
@@ -224,23 +227,20 @@ ${itemsText}
 
 ## [STEP 6] 크로스 카테고리 TOP 3 선정
 
-전체 뉴스 중 오늘 반드시 알아야 할 TOP 3를 선정하세요.
-카테고리에 관계없이 "오늘 반드시 알아야 할 뉴스" 기준으로 선정합니다.
-
 선정 기준 (가중치 순):
 1. 내 자산(주식/부동산/연금)에 직접 영향 → 최우선
 2. 시장 전체 방향성에 영향 → 우선
 3. 향후 1개월 내 중대한 변화 예고 → 높음
 4. 산업/기술 패러다임 변화 → 보통
 
-주의: 가급적 2개 이상 카테고리에서 선정하세요 (카테고리 편중 금지).
+주의: 가급적 2개 이상 카테고리에서 선정 (카테고리 편중 금지).
 
-각 TOP 뉴스는 일반 3줄 요약에 추가로:
-- relatedData: 핵심 데이터 포인트 2~3개 (예: "WTI +3.5%", "KOSPI -1.2%")
-- contextLinks: 다른 카테고리 연관 뉴스 제목 (예: "이란_에너지_위기 → 증권 #3")
-- upcomingEvents: 관련 후속 이벤트/발표 일정 (예: "4/16 OPEC 긴급회의")
+각 TOP 항목 추가 필드:
+- relatedData: 핵심 데이터 포인트 2~3개 (예: "WTI +3.5%")
+- contextLinks: 다른 카테고리 연관 뉴스 제목
+- upcomingEvents: 관련 후속 이벤트 일정
 
-## 출력 형식 (순수 JSON만)
+## 출력 형식 (순수 JSON)
 
 {
   "top3": [
@@ -248,7 +248,7 @@ ${itemsText}
       "rank": 1,
       "category": "카테고리명",
       "title": "뉴스 제목",
-      "urgency": "breaking",
+      "urgency": "breaking|watch|note",
       "fact": "팩트 1문장",
       "impact": "임팩트 1문장",
       "action": "액션 1문장",
@@ -262,7 +262,7 @@ ${itemsText}
   ]
 }
 
-urgency 값은 반드시 "breaking", "watch", "note" 중 하나.`,
+urgency는 반드시 "breaking", "watch", "note" 중 하나.`,
     },
   ];
 }

@@ -53,6 +53,7 @@ export interface MarketSnapshot {
   wti: MarketIndicator;
   us10y: MarketIndicator;
   btcUsd: MarketIndicator;
+  nasdaq: MarketIndicator;
 }
 
 // ─── News item (3-line summary) ───────────────────────────────────────────────
@@ -75,6 +76,11 @@ export interface NewsItem {
   relatedData?: string[];
   contextLinks?: string[];
   upcomingEvents?: string[];
+  // Multi-source fields (CMP-126)
+  sourceCount?: number;
+  sourceList?: string[];
+  consensusFacts?: string;
+  conflictingFacts?: string | null;
 }
 
 // ─── Category briefing ───────────────────────────────────────────────────────
@@ -94,6 +100,8 @@ export interface RawArticle {
   source: string;
   category: CategoryKey;
   publishedAt?: string;
+  sourceCount?: number;   // how many sources reported the same story (from dedup)
+  sourceList?: string[];  // accumulated source names after dedup
 }
 
 // ─── LLM structured output (prompts use Korean labels) ───────────────────────
@@ -107,6 +115,9 @@ export interface LLMNewsItem {
   contextTags: string[];
   source: string;
   sourceUrl: string;
+  // Multi-source fields (CMP-126)
+  consensusFacts?: string;
+  conflictingFacts?: string | null;
 }
 
 export interface LLMCategoryResult {

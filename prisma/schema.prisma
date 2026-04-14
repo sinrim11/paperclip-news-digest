@@ -68,6 +68,9 @@ model MarketDaily {
   btcUsdValue   Float?
   btcUsdChange  String?
   btcUsdDir     String?
+  nasdaqValue   Float?
+  nasdaqChange  String?
+  nasdaqDir     String?
 
   createdAt DateTime @default(now())
 
@@ -120,6 +123,11 @@ model NewsItem {
   relatedData    String[]
   contextLinks   String[]
   upcomingEvents String[]
+
+  sourceCount      Int      @default(1)
+  sourceList       String[]
+  consensusFacts   String?  @db.Text
+  conflictingFacts String?  @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
