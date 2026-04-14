@@ -13,7 +13,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { chatJSON } from '@/lib/llm';
 import { collectByCategory } from '@/lib/news-collector';
-import { buildMarketPrompt, buildCategoryPrompt, buildTop3Prompt } from '@/lib/prompts/daily-digest';
+import { fetchRealMarketData } from '@/lib/market-fetcher';
+import { buildCategoryPrompt, buildTop3Prompt } from '@/lib/prompts/daily-digest';
 import {
   CATEGORIES,
   toCategoryLabel,
@@ -47,10 +48,10 @@ export async function POST(req: Request) {
     : await prisma.dailyDigest.create({ data: { date: targetDate, status: 'in_progress' } });
 
   try {
-    // ── Step 1: Market data ────────────────────────────────────────────────
+    // ── Step 1: Market data (live from Yahoo Finance) ─────────────────────
     let marketSnapshot: MarketSnapshot | undefined;
     try {
-      const mResult = await chatJSON<MarketSnapshot>(buildMarketPrompt(dateStr), { temperature: 0.1 });
+      const mResult = await fetchRealMarketData(dateStr);
       marketSnapshot = mResult;
       await prisma.marketDaily.upsert({
         where: { digestId: digest.id },
