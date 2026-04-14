@@ -133,13 +133,6 @@ export async function POST(req: Request) {
       const llmCat = result.value;
       successfulCategories.push(llmCat);
 
-      // Upsert CategoryBriefing
-      const briefing = await prisma.categoryBriefing.upsert({
-        where: { digestId_category: { digestId: digest.id, category: catKey } },
-        create: { digestId: digest.id, category: catKey, summary: llmCat.summary, newsCount: llmCat.items.length },
-        update: { summary: llmCat.summary, newsCount: llmCat.items.length },
-      });
-
       // Delete old items for this category then bulk-create
       await prisma.newsItem.deleteMany({
         where: { digestId: digest.id, category: catKey },
@@ -156,7 +149,29 @@ export async function POST(req: Request) {
         });
       }
 
-      const itemsToCreate = llmCat.items.slice(0, 10).map((item, idx) => {
+      // Dedup by normalized title, then sort by urgency (breaking > watch > note)
+      const urgencyOrder: Record<string, number> = { breaking: 0, watch: 1, note: 2 };
+      const seenTitles = new Set<string>();
+      const dedupedItems = llmCat.items.filter((item) => {
+        const key = (item.title ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+        if (seenTitles.has(key)) return false;
+        seenTitles.add(key);
+        return true;
+      });
+      dedupedItems.sort((a, b) =>
+        (urgencyOrder[a.urgency] ?? 2) - (urgencyOrder[b.urgency] ?? 2),
+      );
+
+      const finalItems = dedupedItems.slice(0, 10);
+
+      // Upsert CategoryBriefing (after dedup so newsCount is accurate)
+      const briefing = await prisma.categoryBriefing.upsert({
+        where: { digestId_category: { digestId: digest.id, category: catKey } },
+        create: { digestId: digest.id, category: catKey, summary: llmCat.summary, newsCount: finalItems.length },
+        update: { summary: llmCat.summary, newsCount: finalItems.length },
+      });
+
+      const itemsToCreate = finalItems.map((item, idx) => {
         // Find matching article for source metadata (fuzzy: first 20 chars)
         const titleKey = (item.title ?? '').trim().toLowerCase();
         let srcInfo = articleSourceMap.get(titleKey);
