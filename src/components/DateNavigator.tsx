@@ -24,19 +24,18 @@ export function DateNavigator({
       weekday: 'short',
     });
 
+  // Use KST (UTC+9) to match the server-side todayKST() used in page.tsx
+  const d = new Date();
+  d.setTime(d.getTime() + 9 * 60 * 60 * 1000);
+  const today = d.toISOString().slice(0, 10);
+
   const navigate = (date: string) => {
-    const today = new Date().toISOString().slice(0, 10);
     if (date === today) {
       router.push('/');
     } else {
       router.push(`/?date=${date}`);
     }
   };
-
-  // Use KST (UTC+9) to match the server-side todayKST() used in page.tsx
-  const d = new Date();
-  d.setTime(d.getTime() + 9 * 60 * 60 * 1000);
-  const today = d.toISOString().slice(0, 10);
   const isToday = currentDate === today;
 
   return (

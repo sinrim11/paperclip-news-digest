@@ -6,6 +6,7 @@ import { TopHighlights, type Top3Item } from '@/components/TopHighlights';
 import { CategoryTabs, type CategoryTabData } from '@/components/CategoryTabs';
 import { ContextMap, type ContextMapItem } from '@/components/ContextMap';
 import { GenerateButton } from '@/components/GenerateButton';
+import { ProgressPoller } from '@/components/ProgressPoller';
 
 export const dynamic = 'force-dynamic';
 
@@ -183,11 +184,15 @@ export default async function HomePage({
         </div>
       ) : null}
 
-      {/* Digest in progress */}
+      {/* Digest in progress — auto-polls every 10s until done */}
       {digest?.status === 'in_progress' && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
-          ⏳ 브리핑을 생성하고 있습니다. 잠시 후 새로고침 해주세요.
-        </div>
+        <>
+          <ProgressPoller intervalMs={10_000} />
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between gap-4">
+            <span className="text-sm text-blue-700">⏳ 브리핑을 생성하고 있습니다. 완료되면 자동으로 갱신됩니다.</span>
+            <GenerateButton date={dateStr} force />
+          </div>
+        </>
       )}
 
       {digest?.status === 'failed' && (

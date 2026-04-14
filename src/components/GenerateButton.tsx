@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-export function GenerateButton({ date }: { date: string }) {
+export function GenerateButton({ date, force }: { date: string; force?: boolean }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -15,7 +15,7 @@ export function GenerateButton({ date }: { date: string }) {
       const res = await fetch('/api/digest/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date }),
+        body: JSON.stringify({ date, ...(force ? { force: true } : {}) }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -36,7 +36,7 @@ export function GenerateButton({ date }: { date: string }) {
         disabled={loading}
         className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60 disabled:cursor-wait transition-colors"
       >
-        {loading ? '생성 중…' : '오늘 브리핑 생성'}
+        {loading ? '생성 중…' : force ? '강제 재시작' : '오늘 브리핑 생성'}
       </button>
       {error && <p className="text-xs text-red-500">{error}</p>}
     </div>
