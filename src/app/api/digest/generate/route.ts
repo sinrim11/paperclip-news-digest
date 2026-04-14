@@ -102,7 +102,7 @@ export async function POST(req: Request) {
       let settled: SettledResult = { status: 'rejected', reason: new Error('not started') };
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const value = await chatJSON<LLMCategoryResult>(msgs, { temperature: 0.3, maxTokens: 4096 });
+          const value = await chatJSON<LLMCategoryResult>(msgs, { temperature: 0.3, maxTokens: 12288 });
           if (value?.items?.length > 0) {
             settled = { status: 'fulfilled', value };
             break;
@@ -242,7 +242,7 @@ export async function POST(req: Request) {
           try {
             top3Result = await chatJSON<{ top3: LLMTop3Item[] }>(
               buildTop3Prompt(dateStr, top3Input),
-              { temperature: 0.2, maxTokens: 2048 },
+              { temperature: 0.2, maxTokens: 8192 },
             );
             if (top3Result?.top3?.length > 0) break;
             console.warn(`[generate] top3 attempt ${attempt + 1}: empty top3 array, retrying`);

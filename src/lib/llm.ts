@@ -22,7 +22,7 @@ export interface ChatOptions {
 }
 
 interface OllamaChoice {
-  message: { role: string; content: string };
+  message: { role: string; content: string; reasoning?: string };
   finish_reason: string;
 }
 
@@ -87,9 +87,18 @@ async function callOllama(
 
   const text = await httpPost(`${OLLAMA_BASE}/chat/completions`, JSON.stringify(body));
   const data = JSON.parse(text) as OllamaResponse;
-  const content = data.choices?.[0]?.message?.content;
+  const msg = data.choices?.[0]?.message;
+  let content = msg?.content ?? '';
 
-  if (content === undefined || content === null) {
+  // gemma4 with thinking puts JSON in reasoning field and returns empty content
+  if (!content.trim() && msg?.reasoning) {
+    const jsonMatch = msg.reasoning.match(/[{[]/);
+    if (jsonMatch) {
+      content = msg.reasoning.slice(msg.reasoning.indexOf(jsonMatch[0]));
+    }
+  }
+
+  if (!content.trim()) {
     throw new Error('Ollama returned no content');
   }
 
