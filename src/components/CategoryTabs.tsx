@@ -62,17 +62,24 @@ export function CategoryTabs({ categories }: { categories: CategoryTabData[] }) 
 
   return (
     <section>
-      {/* Tab bar */}
-      <div className="flex gap-1 overflow-x-auto pb-1 mb-4 border-b border-gray-200 scrollbar-hide">
+      {/* Tab bar — role=tablist required by ARIA tabs pattern */}
+      <div
+        role="tablist"
+        aria-label="뉴스 카테고리"
+        className="flex gap-1 overflow-x-auto pb-1 mb-4 border-b border-gray-200 scrollbar-hide"
+      >
         {categories.map((cat) => {
           const isActive = cat.key === activeKey;
           const bc = breakingCount(cat);
           return (
             <button
               key={cat.key}
-              onClick={() => handleTabChange(cat.key)}
-              aria-selected={isActive}
+              id={`tab-${cat.key}`}
               role="tab"
+              aria-selected={isActive}
+              aria-controls={`tabpanel-${cat.key}`}
+              tabIndex={isActive ? 0 : -1}
+              onClick={() => handleTabChange(cat.key)}
               className={`shrink-0 flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-t
                 border-b-2 transition-all duration-200 ease-out
                 ${isActive
@@ -95,8 +102,14 @@ export function CategoryTabs({ categories }: { categories: CategoryTabData[] }) 
         })}
       </div>
 
-      {/* Active category content — key forces remount so fade-in re-triggers on tab switch */}
-      <div key={activeKey} className="animate-fade-in">
+      {/* Active category content — role=tabpanel links to active tab via aria-labelledby */}
+      <div
+        key={activeKey}
+        id={`tabpanel-${activeKey}`}
+        role="tabpanel"
+        aria-labelledby={`tab-${activeKey}`}
+        className="animate-fade-in"
+      >
         {active.summary && (
           <div className="text-sm text-gray-600 bg-white rounded-lg border border-gray-100 px-4 py-3 mb-4 flex items-start gap-2">
             <span className="text-gray-400 mt-0.5">💬</span>
@@ -104,8 +117,8 @@ export function CategoryTabs({ categories }: { categories: CategoryTabData[] }) 
           </div>
         )}
 
-        {/* Urgency filter buttons — clicking toggles filter; active filter is highlighted */}
-        <div className="flex flex-wrap items-center gap-2 mb-3">
+        {/* Urgency filter buttons — role=group labels the filter set for screen readers */}
+        <div role="group" aria-label="긴급도 필터" className="flex flex-wrap items-center gap-2 mb-3">
           {(['breaking', 'watch', 'note'] as Urgency[]).map((u) => {
             const count = active.items.filter((i) => i.urgency === u).length;
             if (!count) return null;
