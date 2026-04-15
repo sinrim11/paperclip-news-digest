@@ -1,11 +1,6 @@
 {
   "news_sources": [
     {
-      "name": "연합뉴스 국제",
-      "url": "https://www.yna.co.kr/rss/international.xml",
-      "category": "글로벌"
-    },
-    {
       "name": "BBC World News",
       "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
       "category": "글로벌"
@@ -16,39 +11,44 @@
       "category": "글로벌"
     },
     {
-      "name": "조선일보 국제",
-      "url": "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml",
+      "name": "Reuters World",
+      "url": "https://feeds.reuters.com/reuters/worldNews",
       "category": "글로벌"
     },
     {
-      "name": "매일경제 증권",
-      "url": "https://www.mk.co.kr/rss/50200011/",
-      "category": "증권"
+      "name": "AP News Top",
+      "url": "https://apnews.com/rss/apf-topnews",
+      "category": "글로벌"
     },
     {
-      "name": "한국경제 금융",
-      "url": "https://www.hankyung.com/feed/finance",
-      "category": "증권"
+      "name": "Al Jazeera",
+      "url": "https://www.aljazeera.com/xml/rss/all.xml",
+      "category": "글로벌"
     },
     {
-      "name": "연합뉴스 경제",
-      "url": "https://www.yna.co.kr/rss/economy.xml",
-      "category": "증권"
-    },
-    {
-      "name": "Bloomberg",
+      "name": "Bloomberg Markets",
       "url": "https://feeds.bloomberg.com/markets/news.rss",
       "category": "증권"
     },
     {
-      "name": "CNBC",
+      "name": "Reuters Business",
+      "url": "https://feeds.reuters.com/reuters/businessNews",
+      "category": "증권"
+    },
+    {
+      "name": "CNBC Markets",
       "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10001147",
       "category": "증권"
     },
     {
-      "name": "연합뉴스 산업/기술",
-      "url": "https://www.yna.co.kr/rss/industry.xml",
-      "category": "AI"
+      "name": "Financial Times",
+      "url": "https://www.ft.com/rss/home/us",
+      "category": "증권"
+    },
+    {
+      "name": "MarketWatch",
+      "url": "https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines",
+      "category": "증권"
     },
     {
       "name": "The Verge AI",
@@ -61,13 +61,18 @@
       "category": "AI"
     },
     {
-      "name": "WIRED",
-      "url": "https://www.wired.com/feed/rss",
+      "name": "Ars Technica",
+      "url": "https://feeds.arstechnica.com/arstechnica/index",
       "category": "AI"
     },
     {
-      "name": "Ars Technica AI",
-      "url": "https://feeds.arstechnica.com/arstechnica/index",
+      "name": "VentureBeat AI",
+      "url": "https://venturebeat.com/category/ai/feed/",
+      "category": "AI"
+    },
+    {
+      "name": "MIT Technology Review",
+      "url": "https://www.technologyreview.com/feed/",
       "category": "AI"
     },
     {
@@ -81,8 +86,8 @@
       "category": "정치"
     },
     {
-      "name": "경향신문 정치",
-      "url": "https://www.khan.co.kr/rss/rssdata/politic_news.xml",
+      "name": "조선일보 정치",
+      "url": "https://www.chosun.com/arc/outboundfeeds/rss/category/politics/?outputType=xml",
       "category": "정치"
     },
     {
@@ -91,8 +96,8 @@
       "category": "정치"
     },
     {
-      "name": "뉴시스 정치",
-      "url": "https://www.newsis.com/RSS/politics.xml",
+      "name": "경향신문 정치",
+      "url": "https://www.khan.co.kr/rss/rssdata/politic_news.xml",
       "category": "정치"
     },
     {
@@ -116,8 +121,8 @@
       "category": "부동산"
     },
     {
-      "name": "조선일보 경제",
-      "url": "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/?outputType=xml",
+      "name": "이데일리 부동산",
+      "url": "https://www.edaily.co.kr/rss/real_estate",
       "category": "부동산"
     },
     {

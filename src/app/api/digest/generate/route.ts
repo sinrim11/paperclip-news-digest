@@ -37,7 +37,8 @@ export async function POST(req: Request) {
   targetDate.setUTCHours(0, 0, 0, 0);
 
   // ── Guard: skip if already done (unless forced) ──────────────────────────
-  const existing = await prisma.dailyDigest.findFirst({ where: { date: targetDate } });
+  // CMP-131: only consider non-archived digests as "existing"
+  const existing = await prisma.dailyDigest.findFirst({ where: { date: targetDate, archived: false } });
   if (existing?.status === 'done' && !body.force) {
     return NextResponse.json({ message: 'Already generated', digestId: existing.id }, { status: 200 });
   }
@@ -67,13 +68,13 @@ export async function POST(req: Request) {
           nasdaqValue: mResult.nasdaq.value,  nasdaqChange: mResult.nasdaq.change,  nasdaqDir: mResult.nasdaq.direction,
         },
         update: {
-          kospiValue: mResult.kospi.value,    kospiChange: mResult.kospi.change,
-          kosdaqValue: mResult.kosdaq.value,  kosdaqChange: mResult.kosdaq.change,
-          usdKrwValue: mResult.usdKrw.value,  usdKrwChange: mResult.usdKrw.change,
-          wtiValue: mResult.wti.value,        wtiChange: mResult.wti.change,
-          us10yValue: mResult.us10y.value,    us10yChange: mResult.us10y.change,
-          btcUsdValue: mResult.btcUsd.value,  btcUsdChange: mResult.btcUsd.change,
-          nasdaqValue: mResult.nasdaq.value,  nasdaqChange: mResult.nasdaq.change,
+          kospiValue: mResult.kospi.value,    kospiChange: mResult.kospi.change,    kospiDir: mResult.kospi.direction,
+          kosdaqValue: mResult.kosdaq.value,  kosdaqChange: mResult.kosdaq.change,  kosdaqDir: mResult.kosdaq.direction,
+          usdKrwValue: mResult.usdKrw.value,  usdKrwChange: mResult.usdKrw.change,  usdKrwDir: mResult.usdKrw.direction,
+          wtiValue: mResult.wti.value,        wtiChange: mResult.wti.change,        wtiDir: mResult.wti.direction,
+          us10yValue: mResult.us10y.value,    us10yChange: mResult.us10y.change,    us10yDir: mResult.us10y.direction,
+          btcUsdValue: mResult.btcUsd.value,  btcUsdChange: mResult.btcUsd.change,  btcUsdDir: mResult.btcUsd.direction,
+          nasdaqValue: mResult.nasdaq.value,  nasdaqChange: mResult.nasdaq.change,  nasdaqDir: mResult.nasdaq.direction,
         },
       });
     } catch (err) {
@@ -180,6 +181,13 @@ export async function POST(req: Request) {
             if (k.slice(0, 20) === titleKey.slice(0, 20)) { srcInfo = v; break; }
           }
         }
+        // Lookup GitHub Trending metadata from original article
+        const articleForItem = catArticles.find((a) => {
+          const aTitle = a.title.trim().toLowerCase();
+          const iTitle = (item.title ?? '').trim().toLowerCase();
+          return aTitle === iTitle || aTitle.slice(0, 30) === iTitle.slice(0, 30);
+        });
+
         return {
           digestId: digest.id,
           categoryBriefingId: briefing.id,
@@ -197,17 +205,21 @@ export async function POST(req: Request) {
           relatedData: [],
           contextLinks: [],
           upcomingEvents: [],
-          sourceCount:     srcInfo?.sourceCount ?? 1,
-          sourceList:      srcInfo?.sourceList  ?? [],
-          consensusFacts:  item.consensusFacts  ?? null,
-          conflictingFacts: item.conflictingFacts ?? null,
+          sourceCount:      srcInfo?.sourceCount              ?? 1,
+          sourceList:       srcInfo?.sourceList               ?? [],
+          consensusFacts:   item.consensusFacts               ?? null,
+          conflictingFacts: item.conflictingFacts             ?? null,
+          // CMP-131: GitHub Trending fields
+          isGithubTrending: articleForItem?.isGithubTrending  ?? false,
+          githubStarsDelta: articleForItem?.githubStarsDelta  ?? null,
+          githubLanguage:   articleForItem?.githubLanguage    ?? null,
         };
       });
 
       await prisma.newsItem.createMany({ data: itemsToCreate });
 
       // Update context tag history
-      for (const tag of llmCat.items.flatMap((it) => it.contextTags)) {
+      for (const tag of llmCat.items.flatMap((it) => it.contextTags ?? []).filter(Boolean)) {
         await prisma.contextTagHistory.upsert({
           where: { tag },
           create: { tag, count: 1, lastSeenDate: targetDate },

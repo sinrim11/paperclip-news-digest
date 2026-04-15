@@ -81,6 +81,11 @@ export interface NewsItem {
   sourceList?: string[];
   consensusFacts?: string;
   conflictingFacts?: string | null;
+  // CMP-131 fields
+  archived?: boolean;
+  isGithubTrending?: boolean;
+  githubStarsDelta?: number;
+  githubLanguage?: string;
 }
 
 // ─── Category briefing ───────────────────────────────────────────────────────
@@ -102,6 +107,10 @@ export interface RawArticle {
   publishedAt?: string;
   sourceCount?: number;   // how many sources reported the same story (from dedup)
   sourceList?: string[];  // accumulated source names after dedup
+  // GitHub Trending specific
+  isGithubTrending?: boolean;
+  githubStarsDelta?: number;
+  githubLanguage?: string;
 }
 
 // ─── LLM structured output (prompts use Korean labels) ───────────────────────

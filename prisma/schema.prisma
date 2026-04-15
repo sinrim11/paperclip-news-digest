@@ -33,6 +33,7 @@ model DailyDigest {
   id        String       @id @default(cuid())
   date      DateTime     @unique @db.Date
   status    DigestStatus @default(pending)
+  archived  Boolean      @default(false)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
@@ -42,6 +43,7 @@ model DailyDigest {
 
   @@index([date])
   @@index([status])
+  @@index([archived])
 }
 
 // ─── 2. MarketDaily ──────────────────────────────────────────────────────────
@@ -86,6 +88,7 @@ model CategoryBriefing {
   category  Category
   summary   String   @db.Text
   newsCount Int      @default(0)
+  archived  Boolean  @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -96,6 +99,7 @@ model CategoryBriefing {
   @@unique([digestId, category])
   @@index([digestId])
   @@index([category])
+  @@index([archived])
 }
 
 // ─── 4. NewsItem ─────────────────────────────────────────────────────────────
@@ -129,6 +133,12 @@ model NewsItem {
   consensusFacts   String?  @db.Text
   conflictingFacts String?  @db.Text
 
+  // CMP-131: archive flag + GitHub Trending fields
+  archived          Boolean @default(false)
+  isGithubTrending  Boolean @default(false)
+  githubStarsDelta  Int?
+  githubLanguage    String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -140,6 +150,8 @@ model NewsItem {
   @@index([category])
   @@index([urgency])
   @@index([isTop3])
+  @@index([isGithubTrending])
+  @@index([archived])
   @@index([contextTags])
 }
 
