@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { SearchBar } from '@/components/SearchBar';
+import { SearchFilters } from '@/components/SearchBar';
 import { UrgencyBadge } from '@/components/UrgencyBadge';
 import { CATEGORY_LABEL, type CategoryKey } from '@/lib/types';
 import Link from 'next/link';
@@ -32,7 +32,7 @@ interface SearchResult {
 
 async function fetchSearchResults(params: URLSearchParams): Promise<SearchResult | null> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000';
-  const res = await fetch(`${baseUrl}/api/digest/search?${params.toString()}`, {
+  const res = await fetch(`${baseUrl}/api/search?${params.toString()}`, {
     cache: 'no-store',
   });
   if (!res.ok) return null;
@@ -63,7 +63,7 @@ export default async function SearchPage({
       </div>
 
       <Suspense>
-        <SearchBar />
+        <SearchFilters />
       </Suspense>
 
       {/* Results */}

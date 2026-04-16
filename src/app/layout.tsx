@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { NavLinks } from '@/components/NavLinks';
+import { SearchBar } from '@/components/SearchBar';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -24,7 +26,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="text-xl font-bold hover:opacity-80 transition-opacity">
               📰 뉴스 다이제스트
             </Link>
-            <NavLinks />
+            <div className="flex items-center gap-4">
+              <Suspense>
+                <SearchBar />
+              </Suspense>
+              <NavLinks />
+            </div>
           </div>
         </header>
         <main id="main-content" className="max-w-7xl mx-auto px-6 py-8">{children}</main>
