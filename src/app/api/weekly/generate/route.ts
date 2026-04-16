@@ -8,7 +8,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { chatJSON } from '@/lib/llm';
+import { chatJSON } from '@/lib/claude';
 import { buildWeeklyPrompt } from '@/lib/prompts/weekly-digest';
 import type { WeeklyDigestContent, Category } from '@/lib/types';
 

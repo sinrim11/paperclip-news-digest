@@ -11,7 +11,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { chatJSON } from '@/lib/llm';
+import { chatJSON } from '@/lib/claude';
 import { collectByCategory, clusterArticles } from '@/lib/news-collector';
 import { fetchRealMarketData } from '@/lib/market-fetcher';
 import { buildCategoryPrompt, buildTop3Prompt } from '@/lib/prompts/daily-digest';
@@ -147,11 +147,12 @@ export async function POST(req: Request) {
         where: { digestId: digest.id, category: catKey },
       });
 
-      // Build cluster lookup by normalised title prefix for fast matching
+      // Index all member URLs → cluster (LLM may translate titles; URL is stable)
       const catClusters = clustersByCategory.get(catKey) ?? [];
-      const clusterMap = new Map<string, RawCluster>();
+      const clusterByUrl = new Map<string, RawCluster>();
       for (const c of catClusters) {
-        clusterMap.set(c.title.trim().toLowerCase(), c);
+        clusterByUrl.set(c.url, c);
+        for (const a of c.articles) clusterByUrl.set(a.url, c);
       }
 
       // Sort LLM items by urgency; dedup by title
@@ -174,14 +175,11 @@ export async function POST(req: Request) {
       });
 
       const itemsToCreate = finalItems.map((item, idx) => {
-        // Match LLM item back to original cluster (exact then prefix-20)
+        // URL match is stable even when LLM translates/rewrites titles
         const itemTitleKey = (item.title ?? '').trim().toLowerCase();
-        let cluster = clusterMap.get(itemTitleKey);
-        if (!cluster) {
-          for (const [k, c] of clusterMap.entries()) {
-            if (k.slice(0, 20) === itemTitleKey.slice(0, 20)) { cluster = c; break; }
-          }
-        }
+        const cluster = clusterByUrl.get(item.sourceUrl ?? '')
+          ?? [...clusterByUrl.values()].find((c) =>
+              c.title.trim().toLowerCase().slice(0, 20) === itemTitleKey.slice(0, 20));
 
         return {
           digestId: digest.id,
