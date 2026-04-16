@@ -135,7 +135,8 @@ ${articlesText}${githubSection}
 - 다중 출처 기사는 각 출처 본문을 비교해 consensusFacts(공통 사실)와 conflictingFacts(이견)를 반드시 추출하세요.
 - source_count >= 2이면 fact 앞에 "[N곳 공통 보도]" 접두사를 붙이세요.
 - 단일 출처이면 consensusFacts는 null, conflictingFacts는 null.
-- 최대 10건. urgency "breaking"은 카테고리당 최대 2건.
+- 반드시 최소 8건 이상, 최대 10건 출력. 수집된 기사가 부족하면 ${date} 기준 학습 데이터에서 해당 카테고리 주요 뉴스를 보충해 최소 8건을 채우세요.
+- urgency "breaking"은 카테고리당 최대 2건.
 
 출력 형식 (순수 JSON):
 {
