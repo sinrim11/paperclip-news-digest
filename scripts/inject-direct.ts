@@ -13,6 +13,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { PrismaClient } from '@prisma/client';
 import { chatJSON } from '../src/lib/llm';
+import { clusterArticles } from '../src/lib/news-collector';
 import { buildCategoryPrompt, buildTop3Prompt } from '../src/lib/prompts/daily-digest';
 import {
   CATEGORIES,
@@ -107,12 +108,12 @@ async function main() {
   const successfulCategories: LLMCategoryResult[] = [];
 
   for (const catKey of categoriesToProcess) {
-    // Cap at 6 articles to keep prompt size manageable for large-content categories
-    const articles = (byCategory[catKey] ?? []).slice(0, 6);
-    console.log(`\n[direct] === ${catKey} (${articles.length} articles) ===`);
+    const rawArticles = (byCategory[catKey] ?? []).slice(0, 12);
+    const clusters = clusterArticles(rawArticles, 6);
+    console.log(`\n[direct] === ${catKey} (${rawArticles.length} articles → ${clusters.length} clusters) ===`);
 
     const koreanLabel = toCategoryLabel(catKey);
-    const msgs = buildCategoryPrompt(dateArg, koreanLabel, articles);
+    const msgs = buildCategoryPrompt(dateArg, koreanLabel, clusters);
 
     let result: LLMCategoryResult | null = null;
     for (let attempt = 0; attempt < 2; attempt++) {

@@ -9,7 +9,7 @@
  * CMP-131: new system+user prompt spec — fact accuracy first, no hallucination.
  */
 
-import type { Category, RawArticle, MarketSnapshot } from '../types';
+import type { Category, RawCluster, MarketSnapshot } from '../types';
 
 // ─── Stage 1: Market data collection ─────────────────────────────────────────
 
@@ -73,56 +73,28 @@ const SYSTEM_PROMPT = `너는 사실 중심의 한국어 뉴스 요약 분석가
 
 반드시 JSON만 출력. 마크다운·코드블록·설명 절대 금지.`;
 
-function buildArticleUserPrompt(
-  article: { title: string; content: string; source: string; url: string; sourceCount?: number; sourceList?: string[] },
-): string {
-  const sc = article.sourceCount ?? 1;
-  const multiSourceBlock = sc >= 2
-    ? `출처 정보:\n- 총 소스 수: ${sc}\n- 출처 목록: ${(article.sourceList ?? [article.source]).join(', ')}\n- 공통 사실: (아래 본문에서 추출)\n- 출처 간 이견: (아래 본문에서 추출)\n\n`
+/** Render one cluster as the article block fed into the batch prompt. */
+function renderCluster(cluster: RawCluster, index: number): string {
+  const sc = cluster.sourceCount;
+  const isMulti = sc >= 2;
+  const srcLabel = isMulti
+    ? `출처(${sc}개): ${cluster.sourceList.join(', ')}`
+    : `출처: ${cluster.source}`;
+  const multiHeader = isMulti
+    ? `[다중 출처 기사 — 아래 각 출처별 본문을 비교하여 공통 사실과 이견을 추출하세요]\n`
     : '';
 
-  const titleBadge = sc >= 2 ? `[${sc}개 출처 공통 보도] ${article.title}` : article.title;
-
-  return `다음 뉴스 본문을 요약해라.
-
-목표:
-- 기사를 읽지 않은 사람도 핵심을 바로 이해하게 한다.
-
-제약:
-- 기사 본문 밖 정보 추가 금지
-- 숫자/단위 원문 유지
-- 추정 금지
-- 반복 금지
-- 쉬운 한국어 사용
-
-${multiSourceBlock}본문:
-제목: ${titleBadge}
-출처: ${article.source} | URL: ${article.url}
-${article.content}
-
-출력 형식 (순수 JSON):
-{
-  "title": "뉴스 제목",
-  "urgency": "breaking|watch|note",
-  "fact": "${sc >= 2 ? `[${sc}개 출처 공통 보도] ` : ''}핵심 사실 1문장 (숫자/날짜/주체 포함)",
-  "consensusFacts": "${sc >= 2 ? '3~5문장 공통 사실' : '2~3문장 핵심 사실 상세'}",
-  "conflictingFacts": ${sc >= 2 ? '"출처 간 이견 또는 null"' : 'null'},
-  "impact": "영향 1문장",
-  "action": "행동 지침 1문장 (~검토|~주시|~대비)",
-  "contextTags": ["태그1", "태그2"],
-  "source": "${article.source}",
-  "sourceUrl": "${article.url}"
-}
-
-최종 점검:
-- 숫자/단위 검토 완료
-- 기사 밖 정보 미추가 확인`;
+  return `[${index + 1}] ${multiHeader}제목: ${cluster.title}
+${srcLabel} | source_count=${sc}
+URL: ${cluster.url}
+본문:
+${cluster.mergedContent.slice(0, isMulti ? 2400 : 800)}`;
 }
 
 export function buildCategoryPrompt(
   date: string,
   category: Category,
-  articles: RawArticle[],
+  clusters: RawCluster[],
   marketSnapshot?: MarketSnapshot,
 ): Array<{ role: 'system' | 'user'; content: string }> {
   const marketContext = marketSnapshot
@@ -132,42 +104,26 @@ export function buildCategoryPrompt(
       `BTC ${marketSnapshot.btcUsd.value.toLocaleString()}USD(${marketSnapshot.btcUsd.change})`
     : '';
 
-  // Separate GitHub Trending from regular articles
-  const githubTrending = articles.filter((a) => a.isGithubTrending);
-  const regularArticles = articles.filter((a) => !a.isGithubTrending);
+  const regularClusters = clusters.filter((c) => !c.isGithubTrending);
+  const trendingClusters = clusters.filter((c) => c.isGithubTrending);
 
-  const articlesText =
-    regularArticles.length > 0
-      ? regularArticles
-          .map((a, i) => {
-            const sc = a.sourceCount ?? 1;
-            const srcLabel = sc > 1
-              ? `출처(${sc}개): ${a.sourceList?.join(', ') ?? a.source}`
-              : `출처: ${a.source}`;
-            return `[${i + 1}] 제목: ${a.title}\n${srcLabel} | source_count=${sc}\nURL: ${a.url}\n내용: ${(a.content || '').slice(0, 600) || '(내용 없음)'}`;
-          })
-          .join('\n\n')
-      : '(수집된 기사 없음 — 학습 데이터 기반 주요 뉴스 생성)';
+  const articlesText = regularClusters.length > 0
+    ? regularClusters.map(renderCluster).join('\n\n')
+    : '(수집된 기사 없음 — 학습 데이터 기반 주요 뉴스 생성)';
 
-  const githubSection =
-    githubTrending.length > 0
-      ? `\n\n## GitHub Trending AI 오픈소스 (${githubTrending.length}개)\n` +
-        githubTrending
-          .map((a, i) => `[G${i + 1}] ${a.title}\n${a.content}\nURL: ${a.url}`)
-          .join('\n\n')
-      : '';
+  const githubSection = trendingClusters.length > 0
+    ? `\n\n## GitHub Trending AI 오픈소스 (${trendingClusters.length}개)\n` +
+      trendingClusters.map((c, i) => `[G${i + 1}] ${c.title}\n${c.mergedContent}\nURL: ${c.url}`).join('\n\n')
+    : '';
 
   return [
-    {
-      role: 'system',
-      content: SYSTEM_PROMPT,
-    },
+    { role: 'system', content: SYSTEM_PROMPT },
     {
       role: 'user',
       content: `오늘 날짜: ${date}
 카테고리: ${category}${marketContext}
 
-## 수집된 뉴스 기사 (${regularArticles.length}건)
+## 수집된 뉴스 클러스터 (${regularClusters.length}건)
 
 ${articlesText}${githubSection}
 
@@ -175,12 +131,11 @@ ${articlesText}${githubSection}
 
 위 기사들을 분석해 아래 JSON을 출력하세요.
 
-선정 기준:
-- 중복·무관 기사 제외
-- 최대 10건 (GitHub Trending 있으면 별도 섹션으로 추가)
-- urgency: "breaking"(즉시 의사결정, 최대 2건), "watch"(1~2주 모니터링), "note"(배경지식)
-- contextTags: 카테고리 간 연결 키워드 2~4개
-- source_count >= 2이면 fact 앞에 "[N개 출처 공통 보도]" 접두사
+중요:
+- 다중 출처 기사는 각 출처 본문을 비교해 consensusFacts(공통 사실)와 conflictingFacts(이견)를 반드시 추출하세요.
+- source_count >= 2이면 fact 앞에 "[N곳 공통 보도]" 접두사를 붙이세요.
+- 단일 출처이면 consensusFacts는 null, conflictingFacts는 null.
+- 최대 10건. urgency "breaking"은 카테고리당 최대 2건.
 
 출력 형식 (순수 JSON):
 {
@@ -190,20 +145,19 @@ ${articlesText}${githubSection}
     {
       "title": "뉴스 제목",
       "urgency": "breaking|watch|note",
-      "fact": "핵심 사실 1문장 (숫자/날짜/주체 포함)",
-      "consensusFacts": "2~5문장 사실 상세",
+      "fact": "핵심 사실 1문장 (source_count>=2이면 [N곳 공통 보도] 접두사)",
+      "consensusFacts": "공통 사실 3~5문장 또는 null",
       "conflictingFacts": "출처 간 이견 또는 null",
       "impact": "영향 1문장",
       "action": "행동 지침 1문장 (~검토|~주시|~대비)",
       "contextTags": ["태그1", "태그2"],
-      "source": "출처명",
+      "source": "출처명(들)",
       "sourceUrl": "https://..."
     }
   ]
 }
 
-urgency는 반드시 "breaking", "watch", "note" 중 하나.
-순수 JSON만 출력. 코드블록 없음.`,
+urgency는 반드시 "breaking", "watch", "note" 중 하나. 순수 JSON만 출력.`,
     },
   ];
 }

@@ -105,9 +105,32 @@ export interface RawArticle {
   source: string;
   category: CategoryKey;
   publishedAt?: string;
-  sourceCount?: number;   // how many sources reported the same story (from dedup)
-  sourceList?: string[];  // accumulated source names after dedup
+  sourceCount?: number;
+  sourceList?: string[];
   // GitHub Trending specific
+  isGithubTrending?: boolean;
+  githubStarsDelta?: number;
+  githubLanguage?: string;
+}
+
+// ─── Multi-source cluster (CMP-131) ──────────────────────────────────────────
+// One cluster = all articles about the same story, grouped by 3-signal similarity.
+
+export interface RawCluster {
+  // Representative article (longest content among members)
+  title: string;
+  url: string;
+  source: string;
+  category: CategoryKey;
+  publishedAt?: string;
+  // Merged body: "[출처 1: Reuters]\n<body>\n---\n[출처 2: Bloomberg]\n<body>"
+  mergedContent: string;
+  // All member articles in the cluster
+  articles: RawArticle[];
+  // Convenience roll-ups
+  sourceCount: number;
+  sourceList: string[];
+  // GitHub Trending (passed through from the single member when applicable)
   isGithubTrending?: boolean;
   githubStarsDelta?: number;
   githubLanguage?: string;

@@ -12,7 +12,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { chatJSON } from '@/lib/llm';
-import { collectByCategory } from '@/lib/news-collector';
+import { collectByCategory, clusterArticles } from '@/lib/news-collector';
 import { fetchRealMarketData } from '@/lib/market-fetcher';
 import { buildCategoryPrompt, buildTop3Prompt } from '@/lib/prompts/daily-digest';
 import {
@@ -24,13 +24,14 @@ import {
   type LLMCategoryResult,
   type LLMTop3Item,
   type RawArticle,
+  type RawCluster,
 } from '@/lib/types';
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({})) as {
     date?: string;
     force?: boolean;
-    preCollectedArticles?: Record<string, RawArticle[]>; // CategoryKey → articles (bypasses RSS)
+    preCollectedArticles?: Record<string, RawArticle[]>;
   };
   const dateStr = body.date ?? new Date().toISOString().slice(0, 10);
   const targetDate = new Date(dateStr);
@@ -81,9 +82,14 @@ export async function POST(req: Request) {
       console.error('[generate] market step failed:', err);
     }
 
-    // ── Step 2: Collect articles (RSS or pre-collected) ───────────────────
-    const articlesByCategory: Map<CategoryKey, RawArticle[]> = body.preCollectedArticles
-      ? new Map(Object.entries(body.preCollectedArticles) as [CategoryKey, RawArticle[]][])
+    // ── Step 2: Collect and cluster articles ─────────────────────────────
+    const clustersByCategory: Map<CategoryKey, RawCluster[]> = body.preCollectedArticles
+      ? new Map(
+          Object.entries(body.preCollectedArticles).map(([cat, arts]) => [
+            cat as CategoryKey,
+            clusterArticles(arts as RawArticle[], 12),
+          ]),
+        )
       : await collectByCategory(12);
 
     // ── Step 3: Category LLM calls (sequential — rate-limit safe) ──────────
@@ -93,12 +99,14 @@ export async function POST(req: Request) {
     const categoryResults: SettledResult[] = [];
 
     for (const catKey of CATEGORIES) {
-      const articles = articlesByCategory.get(catKey) ?? [];
-      if (articles.length === 0) {
-        console.warn(`[generate] ${catKey}: 0 RSS articles — LLM will use training-data fallback`);
+      const clusters = clustersByCategory.get(catKey) ?? [];
+      if (clusters.length === 0) {
+        console.warn(`[generate] ${catKey}: 0 clusters — LLM will use training-data fallback`);
       }
+      const multiCount = clusters.filter((c) => c.sourceCount >= 2).length;
+      console.log(`[generate] ${catKey}: ${clusters.length} clusters (${multiCount} multi-source)`);
       const koreanLabel = toCategoryLabel(catKey);
-      const msgs = buildCategoryPrompt(dateStr, koreanLabel, articles, marketSnapshot);
+      const msgs = buildCategoryPrompt(dateStr, koreanLabel, clusters, marketSnapshot);
 
       let settled: SettledResult = { status: 'rejected', reason: new Error('not started') };
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -139,18 +147,14 @@ export async function POST(req: Request) {
         where: { digestId: digest.id, category: catKey },
       });
 
-      // Build a lookup of article source info by title for multi-source enrichment
-      const articleSourceMap = new Map<string, { sourceCount: number; sourceList: string[] }>();
-      const catArticles = articlesByCategory.get(catKey) ?? [];
-      for (const a of catArticles) {
-        const key = a.title.trim().toLowerCase();
-        articleSourceMap.set(key, {
-          sourceCount: a.sourceCount ?? 1,
-          sourceList: a.sourceList ?? [a.source],
-        });
+      // Build cluster lookup by normalised title prefix for fast matching
+      const catClusters = clustersByCategory.get(catKey) ?? [];
+      const clusterMap = new Map<string, RawCluster>();
+      for (const c of catClusters) {
+        clusterMap.set(c.title.trim().toLowerCase(), c);
       }
 
-      // Dedup by normalized title, then sort by urgency (breaking > watch > note)
+      // Sort LLM items by urgency; dedup by title
       const urgencyOrder: Record<string, number> = { breaking: 0, watch: 1, note: 2 };
       const seenTitles = new Set<string>();
       const dedupedItems = llmCat.items.filter((item) => {
@@ -159,13 +163,10 @@ export async function POST(req: Request) {
         seenTitles.add(key);
         return true;
       });
-      dedupedItems.sort((a, b) =>
-        (urgencyOrder[a.urgency] ?? 2) - (urgencyOrder[b.urgency] ?? 2),
-      );
-
+      dedupedItems.sort((a, b) => (urgencyOrder[a.urgency] ?? 2) - (urgencyOrder[b.urgency] ?? 2));
       const finalItems = dedupedItems.slice(0, 10);
 
-      // Upsert CategoryBriefing (after dedup so newsCount is accurate)
+      // Upsert CategoryBriefing
       const briefing = await prisma.categoryBriefing.upsert({
         where: { digestId_category: { digestId: digest.id, category: catKey } },
         create: { digestId: digest.id, category: catKey, summary: llmCat.summary, newsCount: finalItems.length },
@@ -173,46 +174,42 @@ export async function POST(req: Request) {
       });
 
       const itemsToCreate = finalItems.map((item, idx) => {
-        // Find matching article for source metadata (fuzzy: first 20 chars)
-        const titleKey = (item.title ?? '').trim().toLowerCase();
-        let srcInfo = articleSourceMap.get(titleKey);
-        if (!srcInfo) {
-          for (const [k, v] of articleSourceMap.entries()) {
-            if (k.slice(0, 20) === titleKey.slice(0, 20)) { srcInfo = v; break; }
+        // Match LLM item back to original cluster (exact then prefix-20)
+        const itemTitleKey = (item.title ?? '').trim().toLowerCase();
+        let cluster = clusterMap.get(itemTitleKey);
+        if (!cluster) {
+          for (const [k, c] of clusterMap.entries()) {
+            if (k.slice(0, 20) === itemTitleKey.slice(0, 20)) { cluster = c; break; }
           }
         }
-        // Lookup GitHub Trending metadata from original article
-        const articleForItem = catArticles.find((a) => {
-          const aTitle = a.title.trim().toLowerCase();
-          const iTitle = (item.title ?? '').trim().toLowerCase();
-          return aTitle === iTitle || aTitle.slice(0, 30) === iTitle.slice(0, 30);
-        });
 
         return {
           digestId: digest.id,
           categoryBriefingId: briefing.id,
           category: catKey,
           newsOrder: idx + 1,
-          title:           item.title       ?? '',
-          urgency:         item.urgency     ?? 'note',
-          fact:            item.fact        ?? '',
-          impact:          item.impact      ?? '',
-          action:          item.action      ?? '',
-          contextTags:     item.contextTags ?? [],
-          source:          item.source      ?? '',
-          sourceUrl:       item.sourceUrl   ?? '',
+          title:            item.title        ?? '',
+          urgency:          item.urgency      ?? 'note',
+          fact:             item.fact         ?? '',
+          impact:           item.impact       ?? '',
+          action:           item.action       ?? '',
+          contextTags:      item.contextTags  ?? [],
+          source:           item.source       ?? '',
+          sourceUrl:        item.sourceUrl    ?? '',
           isTop3: false,
           relatedData: [],
           contextLinks: [],
           upcomingEvents: [],
-          sourceCount:      srcInfo?.sourceCount              ?? 1,
-          sourceList:       srcInfo?.sourceList               ?? [],
-          consensusFacts:   item.consensusFacts               ?? null,
-          conflictingFacts: item.conflictingFacts             ?? null,
-          // CMP-131: GitHub Trending fields
-          isGithubTrending: articleForItem?.isGithubTrending  ?? false,
-          githubStarsDelta: articleForItem?.githubStarsDelta  ?? null,
-          githubLanguage:   articleForItem?.githubLanguage    ?? null,
+          // Cluster-sourced metadata (authoritative)
+          sourceCount:      cluster?.sourceCount          ?? 1,
+          sourceList:       cluster?.sourceList           ?? [],
+          // LLM-generated consensus/conflict (from merged-content analysis)
+          consensusFacts:   item.consensusFacts           ?? null,
+          conflictingFacts: item.conflictingFacts         ?? null,
+          // GitHub Trending passthrough
+          isGithubTrending: cluster?.isGithubTrending     ?? false,
+          githubStarsDelta: cluster?.githubStarsDelta     ?? null,
+          githubLanguage:   cluster?.githubLanguage       ?? null,
         };
       });
 
