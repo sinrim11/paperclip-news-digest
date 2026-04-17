@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "description": "Trust scores per source type (0.0–1.0). Higher = more credible.",
+  "defaultTrust": 0.60,
+  "sourceTrust": {
+    "arxiv": 0.95,
+    "pwc": 0.90,
+    "github": 0.80,
+    "newsletter": 0.75,
+    "rss": 0.70,
+    "hn": 0.65
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "version": "1.0.0",
+  "description": "Weights and parameters for the deterministic article ranker.",
+  "weights": {
+    "W1": 0.25,
+    "W2": 0.25,
+    "W3": 0.30,
+    "W4": 0.10,
+    "W5": 1.00
+  },
+  "seenPenaltyValue": 0.50,
+  "freshness": {
+    "fullScoreHours": 24,
+    "decayTargetHours": 168,
+    "decayTargetScore": 0.10
+  },
+  "signal": {
+    "maxStarsDelta": 5000,
+    "maxSourceCount": 10,
+    "starsDeltaWeight": 0.70,
+    "sourceCountWeight": 0.30
+  }
+}
