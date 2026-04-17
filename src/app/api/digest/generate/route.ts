@@ -2,7 +2,7 @@
  * POST /api/digest/generate
  *
  * Main orchestration:
- * 1. Collect market data via Ollama
+ * 1. Collect market data via local LLM (LM Studio)
  * 2. Fetch RSS articles per category
  * 3. Run 5 category prompts in parallel (Promise.allSettled)
  * 4. Select TOP 3 with a second LLM pass
@@ -15,6 +15,9 @@ import { chatJSON } from '@/lib/claude';
 import { collectByCategory, clusterArticles } from '@/lib/news-collector';
 import { fetchRealMarketData } from '@/lib/market-fetcher';
 import { buildCategoryPrompt, buildTop3Prompt } from '@/lib/prompts/daily-digest';
+import { syncDigestToWiki } from '@/lib/wiki-sync';
+import { aggregateEntityStats } from '@/lib/entity-stat-aggregator';
+import { writeLedgerEntries, writeDailyDigestWikiEntry } from '@/lib/wiki-db';
 import {
   CATEGORIES,
   toCategoryLabel,
@@ -296,6 +299,26 @@ export async function POST(req: Request) {
 
     // ── Finalise ─────────────────────────────────────────────────────────
     await prisma.dailyDigest.update({ where: { id: digest.id }, data: { status: 'done' } });
+
+    // ── Wiki sync (non-blocking — failure doesn't affect digest) ──────
+    try {
+      await syncDigestToWiki(digest.id, prisma);
+      console.log(`[generate] wiki synced for ${dateStr}`);
+    } catch (err) {
+      console.error('[generate] wiki sync failed (non-fatal):', err);
+    }
+
+    // ── EntityStat aggregation + WikiEntry DB (non-blocking) ──────────
+    try {
+      const [entityCount] = await Promise.all([
+        aggregateEntityStats(digest.id, targetDate, prisma),
+        writeDailyDigestWikiEntry(digest.id, dateStr, prisma),
+      ]);
+      await writeLedgerEntries(targetDate, prisma);
+      console.log(`[generate] entity stats: ${entityCount} entities, ledger entries written`);
+    } catch (err) {
+      console.error('[generate] entity-stat/wiki-db failed (non-fatal):', err);
+    }
 
     return NextResponse.json({ digestId: digest.id, date: dateStr, status: 'done' });
   } catch (err) {
