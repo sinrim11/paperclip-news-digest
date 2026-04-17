@@ -184,3 +184,55 @@ model WeeklyDigest {
   @@index([weekStart])
   @@index([weekEnd])
 }
+
+// ─── v4 Phase 0: Persona ─────────────────────────────────────────────────────
+model Persona {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  role          String
+  interests     Json     @default("[]")
+  sourceWeights Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([name])
+}
+
+// ─── v4 Phase 0: EntityStat (stub) ───────────────────────────────────────────
+model EntityStat {
+  id         String   @id @default(cuid())
+  entityName String
+  entityType String
+  statDate   DateTime @db.Date
+  metrics    Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  @@unique([entityName, entityType, statDate])
+  @@index([entityName])
+  @@index([entityType])
+  @@index([statDate])
+}
+
+// ─── v4 Phase 0: WikiEntry (3-way split stub) ────────────────────────────────
+enum WikiEntryType {
+  ledger        // structured facts: entity, date, metric, source_url
+  narrative     // human-readable summaries (weekly cadence)
+  daily_digest  // daily briefing cache
+}
+
+model WikiEntry {
+  id        String        @id @default(cuid())
+  entryType WikiEntryType
+  title     String
+  body      String        @db.Text
+  tags      String[]
+  sourceUrl String?       @db.Text
+  refDate   DateTime?     @db.Date
+  metadata  Json          @default("{}")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([entryType])
+  @@index([refDate])
+  @@index([tags])
+}

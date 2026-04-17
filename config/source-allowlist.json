@@ -1,0 +1,47 @@
+{
+  "version": "1.0.0",
+  "sourceTypes": [
+    {
+      "type": "rss",
+      "label": "RSS Feed",
+      "deferred": false
+    },
+    {
+      "type": "github",
+      "label": "GitHub (Trending / Releases / Issues)",
+      "deferred": false
+    },
+    {
+      "type": "arxiv",
+      "label": "arXiv Preprints",
+      "deferred": false
+    },
+    {
+      "type": "hn",
+      "label": "Hacker News (top / new / ask)",
+      "deferred": false
+    },
+    {
+      "type": "pwc",
+      "label": "Papers With Code",
+      "deferred": false
+    },
+    {
+      "type": "newsletter",
+      "label": "Email Newsletter (Substack, Revue, etc.)",
+      "deferred": false
+    },
+    {
+      "type": "podcast",
+      "label": "Podcast",
+      "deferred": true,
+      "deferredReason": "audio transcription pipeline not yet implemented"
+    },
+    {
+      "type": "twitter",
+      "label": "X (Twitter)",
+      "deferred": true,
+      "deferredReason": "API rate limits and cost model unresolved"
+    }
+  ]
+}
