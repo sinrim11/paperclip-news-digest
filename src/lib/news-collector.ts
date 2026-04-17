@@ -1,5 +1,5 @@
 /**
- * Multi-source news collector (CMP-131).
+ * Multi-source news collector (CMP-131 / CMP-142).
  *
  * Per-category source strategy:
  *   글로벌  — overseas RSS (BBC / Guardian / Reuters / AP / Al Jazeera)
@@ -11,103 +11,30 @@
  *
  * Clustering: 3-signal composite similarity
  *   titleJaccard × 0.40 + entityOverlap × 0.35 + bigramSim × 0.25 ≥ 0.55
+ *
+ * Collector modules (Phase 1-A):
+ *   src/lib/collectors/{rss,github,arxiv,hn,pwc,newsletter}.ts
  */
 
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { CategoryKey, RawArticle, RawCluster } from './types';
-import { toCategoryKey } from './types';
-import { assertSourceAllowed } from './source-guard';
+import { collectRss, fetchFeed, type RssSource } from './collectors/rss';
+import { collectHN } from './collectors/hn';
+import { collectArxiv } from './collectors/arxiv';
+import { collectPwC } from './collectors/pwc';
+import { collectNewsletter } from './collectors/newsletter';
+import { collectGithub } from './collectors/github';
+import { dedupArticles } from './dedup';
 
-interface NewsSource {
-  name: string;
-  url: string;
-  category: string;
-}
-
-function loadSources(): NewsSource[] {
+function loadSources(): RssSource[] {
   const configPath = join(process.cwd(), 'config', 'news_sources.json');
   const raw = readFileSync(configPath, 'utf-8');
-  const parsed = JSON.parse(raw) as { news_sources: NewsSource[] };
+  const parsed = JSON.parse(raw) as { news_sources: RssSource[] };
   return parsed.news_sources;
 }
 
-// ─── RSS parser ────────────────────────────────────────────────────────────────
-
-function extractTag(xml: string, tag: string): string | null {
-  const pattern = new RegExp(`<${tag}[^>]*>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?<\\/${tag}>`, 'is');
-  const m = xml.match(pattern);
-  return m ? m[1].trim() : null;
-}
-
-function parseRssItems(xml: string, source: NewsSource): RawArticle[] {
-  const items: RawArticle[] = [];
-  const itemMatches = xml.matchAll(/<item[^>]*>([\s\S]*?)<\/item>/gi);
-
-  for (const match of itemMatches) {
-    const block = match[1];
-    const title = extractTag(block, 'title');
-    const link = extractTag(block, 'link') || extractTag(block, 'guid');
-    const description = extractTag(block, 'description') || extractTag(block, 'summary');
-    const pubDate = extractTag(block, 'pubDate') || extractTag(block, 'published');
-    if (!title || !link) continue;
-
-    const content = description
-      ? description.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-      : '';
-
-    items.push({
-      title: title.replace(/<[^>]+>/g, '').trim(),
-      content: content.slice(0, 2000),
-      url: link.trim(),
-      source: source.name,
-      category: toCategoryKey(source.category),
-      publishedAt: pubDate ?? undefined,
-    });
-
-    if (items.length >= 15) break;
-  }
-  return items;
-}
-
-async function fetchFeed(source: NewsSource): Promise<RawArticle[]> {
-  try {
-    const res = await fetch(source.url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewsDigestBot/1.0)' },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return [];
-    return parseRssItems(await res.text(), source);
-  } catch {
-    console.warn(`[collector] failed to fetch ${source.name}`);
-    return [];
-  }
-}
-
-// ─── Special AI sources ───────────────────────────────────────────────────────
-
-async function fetchHackerNews(): Promise<RawArticle[]> {
-  try {
-    const since = Math.floor(Date.now() / 1000) - 86400;
-    const url = `https://hn.algolia.com/api/v1/search?query=AI+LLM+machine+learning&tags=story&numericFilters=created_at_i>${since},points>50&hitsPerPage=15`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
-    if (!res.ok) return [];
-    const data = (await res.json()) as { hits: Array<{ title: string; url?: string; objectID: string; points: number; author: string }> };
-    return (data.hits ?? [])
-      .filter((h) => h.title && (h.url || h.objectID))
-      .slice(0, 10)
-      .map((h) => ({
-        title: h.title,
-        content: `HackerNews points: ${h.points} | by ${h.author}`,
-        url: h.url ?? `https://news.ycombinator.com/item?id=${h.objectID}`,
-        source: 'HackerNews',
-        category: 'AI' as CategoryKey,
-      }));
-  } catch {
-    console.warn('[collector] HackerNews fetch failed');
-    return [];
-  }
-}
+// ─── Reddit (not a formal collector type — kept inline) ───────────────────────
 
 async function fetchRedditSubreddit(subreddit: string): Promise<RawArticle[]> {
   try {
@@ -135,135 +62,7 @@ async function fetchRedditSubreddit(subreddit: string): Promise<RawArticle[]> {
   }
 }
 
-async function fetchArxiv(): Promise<RawArticle[]> {
-  assertSourceAllowed('arxiv');
-  try {
-    const cats = 'cat:cs.AI+OR+cat:cs.CL+OR+cat:cs.LG';
-    const url = `https://export.arxiv.org/api/query?search_query=${encodeURIComponent(cats)}&sortBy=submittedDate&sortOrder=descending&max_results=20`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
-    if (!res.ok) return [];
-    const xml = await res.text();
-    const articles: RawArticle[] = [];
-    const cutoff = Date.now() - 48 * 60 * 60 * 1000;
-    for (const match of xml.matchAll(/<entry>([\s\S]*?)<\/entry>/gi)) {
-      const block = match[1];
-      const title = extractTag(block, 'title')?.replace(/\s+/g, ' ').trim() ?? '';
-      const summary = extractTag(block, 'summary')?.replace(/\s+/g, ' ').trim() ?? '';
-      const idTag = extractTag(block, 'id') ?? '';
-      const link = idTag.includes('arxiv.org') ? idTag : '';
-      const publishedStr = extractTag(block, 'published') ?? '';
-      if (!title || !link) continue;
-      if (publishedStr && new Date(publishedStr).getTime() < cutoff) continue;
-      articles.push({ title, content: summary.slice(0, 800), url: link, source: 'ArXiv', category: 'AI' as CategoryKey, publishedAt: publishedStr || undefined });
-      if (articles.length >= 10) break;
-    }
-    return articles;
-  } catch {
-    console.warn('[collector] ArXiv fetch failed');
-    return [];
-  }
-}
-
-async function fetchPwC(): Promise<RawArticle[]> {
-  assertSourceAllowed('pwc');
-  try {
-    const url = 'https://paperswithcode.com/api/v1/papers/?ordering=-github_stars&page_size=15';
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewsDigestBot/1.0)' },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return [];
-    const data = (await res.json()) as {
-      results: Array<{
-        title: string;
-        url_abs: string;
-        abstract: string;
-        published: string;
-        repository_count: number;
-      }>;
-    };
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000; // 7 days for trending
-    return (data.results ?? [])
-      .filter((p) => p.title && p.url_abs)
-      .filter((p) => !p.published || new Date(p.published).getTime() >= cutoff)
-      .slice(0, 10)
-      .map((p) => ({
-        title: p.title,
-        content: (p.abstract ?? '').slice(0, 800) || `Papers with Code | repos: ${p.repository_count}`,
-        url: p.url_abs,
-        source: 'Papers with Code',
-        category: 'AI' as CategoryKey,
-        publishedAt: p.published || undefined,
-      }));
-  } catch {
-    console.warn('[collector] PwC fetch failed');
-    return [];
-  }
-}
-
-const NEWSLETTER_SOURCES: NewsSource[] = [
-  { name: 'The Batch (DeepLearning.AI)', url: 'https://www.deeplearning.ai/the-batch/feed/', category: 'AI' },
-  { name: 'Import AI',                   url: 'https://importai.substack.com/feed',          category: 'AI' },
-  { name: 'TLDR AI',                     url: 'https://tldr.tech/ai/rss',                    category: 'AI' },
-  { name: 'Last Week in AI',             url: 'https://lastweekin.ai/feed',                  category: 'AI' },
-];
-
-async function fetchNewsletterRSS(): Promise<RawArticle[]> {
-  assertSourceAllowed('newsletter');
-  const results = await Promise.allSettled(
-    NEWSLETTER_SOURCES.map(async (src) => {
-      const articles = await fetchFeed(src);
-      return articles.map((a) => ({ ...a, source: src.name }));
-    })
-  );
-  const all: RawArticle[] = [];
-  for (const r of results) {
-    if (r.status === 'fulfilled') all.push(...r.value);
-  }
-  return all.slice(0, 12);
-}
-
-async function fetchGithubTrending(): Promise<RawArticle[]> {
-  const articles: RawArticle[] = [];
-  for (const lang of ['python', 'typescript']) {
-    try {
-      const res = await fetch(`https://github.com/trending/${lang}?since=daily`, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewsDigestBot/1.0)', Accept: 'text/html' },
-        signal: AbortSignal.timeout(12_000),
-      });
-      if (!res.ok) continue;
-      const html = await res.text();
-      let count = 0;
-      for (const block of html.matchAll(/<article[^>]*class="[^"]*Box-row[^"]*"[^>]*>([\s\S]*?)<\/article>/gi)) {
-        if (count >= 5) break;
-        const content = block[1];
-        const repoPath = content.match(/href="\/([^"\/]+\/[^"\/]+)"/)?.[1] ?? '';
-        if (!repoPath) continue;
-        const description = content.match(/<p[^>]*>\s*([\s\S]*?)\s*<\/p>/)?.[1]?.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() ?? '';
-        const starsDelta = parseInt((content.match(/([\d,]+)\s*stars today/i)?.[1] ?? '0').replace(/,/g, ''), 10);
-        const fullText = `${repoPath} ${description}`.toLowerCase();
-        const aiKeywords = ['ai', 'llm', 'ml', 'machine learning', 'agent', 'gpt', 'transformer', 'neural', 'model', 'diffusion', 'embedding', 'rag', 'inference'];
-        if (!aiKeywords.some((kw) => fullText.includes(kw))) continue;
-        articles.push({
-          title: `[GitHub Trending] ${repoPath} — ${description || 'AI/ML 오픈소스'}`,
-          content: `${description} | Language: ${lang} | Stars today: +${starsDelta}`,
-          url: `https://github.com/${repoPath}`,
-          source: 'GitHub Trending',
-          category: 'AI' as CategoryKey,
-          isGithubTrending: true,
-          githubStarsDelta: starsDelta,
-          githubLanguage: lang.charAt(0).toUpperCase() + lang.slice(1),
-        });
-        count++;
-      }
-    } catch {
-      console.warn(`[collector] GitHub Trending (${lang}) fetch failed`);
-    }
-  }
-  return articles;
-}
-
-const AI_BLOG_SOURCES: NewsSource[] = [
+const AI_BLOG_SOURCES: RssSource[] = [
   { name: 'OpenAI Blog',     url: 'https://openai.com/blog/rss/',           category: 'AI' },
   { name: 'Anthropic News',  url: 'https://www.anthropic.com/news/rss.xml', category: 'AI' },
   { name: 'Google DeepMind', url: 'https://deepmind.google/blog/rss.xml',   category: 'AI' },
@@ -351,13 +150,11 @@ export function buildMergedContent(articles: RawArticle[]): string {
 // ─── Core clustering ──────────────────────────────────────────────────────────
 
 export function clusterArticles(articles: RawArticle[], limit: number): RawCluster[] {
-  // URL dedup first
-  const urlSeen = new Set<string>();
-  const urlDeduped = articles.filter((a) => {
-    if (urlSeen.has(a.url)) return false;
-    urlSeen.add(a.url);
-    return true;
-  });
+  // Full dedup: URL normalisation + same-source title-similarity (Phase 1-B)
+  const { dedupedArticles: urlDeduped, duplicateRate } = dedupArticles(articles);
+  if (duplicateRate > 0) {
+    console.info(`[dedup] ${(duplicateRate * 100).toFixed(1)}% duplicates removed (${articles.length - urlDeduped.length}/${articles.length})`);
+  }
 
   const clusters: RawCluster[] = [];
 
@@ -438,36 +235,18 @@ export async function collectByCategory(
 ): Promise<Map<CategoryKey, RawCluster[]>> {
   const sources = loadSources();
 
-  const rssResults = await Promise.allSettled(sources.map(fetchFeed));
+  // RSS: collect + interleave per category
+  const rawByCategory = await collectRss(sources);
 
-  // Group articles by category, then interleave across sources (round-robin) so no
-  // single prolific feed monopolises the first N cluster slots.
-  const bySourceAndCat = new Map<CategoryKey, RawArticle[][]>();
-  rssResults.forEach((result, i) => {
-    if (result.status !== 'fulfilled' || result.value.length === 0) return;
-    const cat = toCategoryKey(sources[i].category);
-    if (!bySourceAndCat.has(cat)) bySourceAndCat.set(cat, []);
-    bySourceAndCat.get(cat)!.push(result.value);
-  });
-  const rawByCategory = new Map<CategoryKey, RawArticle[]>();
-  for (const [cat, sourceLists] of bySourceAndCat.entries()) {
-    const interleaved: RawArticle[] = [];
-    const maxLen = Math.max(...sourceLists.map((s) => s.length));
-    for (let i = 0; i < maxLen; i++)
-      for (const list of sourceLists)
-        if (i < list.length) interleaved.push(list[i]);
-    rawByCategory.set(cat, interleaved);
-  }
-
-  // AI category: extra sources
+  // AI category: extra sources from modular collectors + Reddit + AI blogs
   const extraResults = await Promise.allSettled([
-    fetchHackerNews(),
+    collectHN(),
     fetchRedditSubreddit('MachineLearning'),
     fetchRedditSubreddit('LocalLLaMA'),
-    fetchArxiv(),
-    fetchPwC(),
-    fetchNewsletterRSS(),
-    fetchGithubTrending(),
+    collectArxiv(),
+    collectPwC(),
+    collectNewsletter(),
+    collectGithub(),
     ...AI_BLOG_SOURCES.map(fetchFeed),
   ]);
 
