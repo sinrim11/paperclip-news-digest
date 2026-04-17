@@ -17,6 +17,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { CategoryKey, RawArticle, RawCluster } from './types';
 import { toCategoryKey } from './types';
+import { assertSourceAllowed } from './source-guard';
 
 interface NewsSource {
   name: string;
@@ -135,28 +136,91 @@ async function fetchRedditSubreddit(subreddit: string): Promise<RawArticle[]> {
 }
 
 async function fetchArxiv(): Promise<RawArticle[]> {
+  assertSourceAllowed('arxiv');
   try {
     const cats = 'cat:cs.AI+OR+cat:cs.CL+OR+cat:cs.LG';
-    const url = `https://export.arxiv.org/api/query?search_query=${encodeURIComponent(cats)}&sortBy=submittedDate&sortOrder=descending&max_results=10`;
+    const url = `https://export.arxiv.org/api/query?search_query=${encodeURIComponent(cats)}&sortBy=submittedDate&sortOrder=descending&max_results=20`;
     const res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
     if (!res.ok) return [];
     const xml = await res.text();
     const articles: RawArticle[] = [];
+    const cutoff = Date.now() - 48 * 60 * 60 * 1000;
     for (const match of xml.matchAll(/<entry>([\s\S]*?)<\/entry>/gi)) {
       const block = match[1];
       const title = extractTag(block, 'title')?.replace(/\s+/g, ' ').trim() ?? '';
       const summary = extractTag(block, 'summary')?.replace(/\s+/g, ' ').trim() ?? '';
       const idTag = extractTag(block, 'id') ?? '';
       const link = idTag.includes('arxiv.org') ? idTag : '';
+      const publishedStr = extractTag(block, 'published') ?? '';
       if (!title || !link) continue;
-      articles.push({ title, content: summary.slice(0, 800), url: link, source: 'ArXiv', category: 'AI' as CategoryKey });
-      if (articles.length >= 8) break;
+      if (publishedStr && new Date(publishedStr).getTime() < cutoff) continue;
+      articles.push({ title, content: summary.slice(0, 800), url: link, source: 'ArXiv', category: 'AI' as CategoryKey, publishedAt: publishedStr || undefined });
+      if (articles.length >= 10) break;
     }
     return articles;
   } catch {
     console.warn('[collector] ArXiv fetch failed');
     return [];
   }
+}
+
+async function fetchPwC(): Promise<RawArticle[]> {
+  assertSourceAllowed('pwc');
+  try {
+    const url = 'https://paperswithcode.com/api/v1/papers/?ordering=-github_stars&page_size=15';
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewsDigestBot/1.0)' },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      results: Array<{
+        title: string;
+        url_abs: string;
+        abstract: string;
+        published: string;
+        repository_count: number;
+      }>;
+    };
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000; // 7 days for trending
+    return (data.results ?? [])
+      .filter((p) => p.title && p.url_abs)
+      .filter((p) => !p.published || new Date(p.published).getTime() >= cutoff)
+      .slice(0, 10)
+      .map((p) => ({
+        title: p.title,
+        content: (p.abstract ?? '').slice(0, 800) || `Papers with Code | repos: ${p.repository_count}`,
+        url: p.url_abs,
+        source: 'Papers with Code',
+        category: 'AI' as CategoryKey,
+        publishedAt: p.published || undefined,
+      }));
+  } catch {
+    console.warn('[collector] PwC fetch failed');
+    return [];
+  }
+}
+
+const NEWSLETTER_SOURCES: NewsSource[] = [
+  { name: 'The Batch (DeepLearning.AI)', url: 'https://www.deeplearning.ai/the-batch/feed/', category: 'AI' },
+  { name: 'Import AI',                   url: 'https://importai.substack.com/feed',          category: 'AI' },
+  { name: 'TLDR AI',                     url: 'https://tldr.tech/ai/rss',                    category: 'AI' },
+  { name: 'Last Week in AI',             url: 'https://lastweekin.ai/feed',                  category: 'AI' },
+];
+
+async function fetchNewsletterRSS(): Promise<RawArticle[]> {
+  assertSourceAllowed('newsletter');
+  const results = await Promise.allSettled(
+    NEWSLETTER_SOURCES.map(async (src) => {
+      const articles = await fetchFeed(src);
+      return articles.map((a) => ({ ...a, source: src.name }));
+    })
+  );
+  const all: RawArticle[] = [];
+  for (const r of results) {
+    if (r.status === 'fulfilled') all.push(...r.value);
+  }
+  return all.slice(0, 12);
 }
 
 async function fetchGithubTrending(): Promise<RawArticle[]> {
@@ -220,13 +284,19 @@ function jaccardSim(a: Set<string>, b: Set<string>): number {
   return inter / (a.size + b.size - inter);
 }
 
+// High-frequency abbreviations that appear in almost every article — they carry
+// no discriminating signal across stories and inflate cross-topic similarity.
+const ENTITY_STOP_ABBRS = new Set(['AI', 'US', 'UK', 'EU', 'UN', 'WHO', 'NATO', 'IMF', 'GDP', 'CEO', 'IT', 'IPO', 'PE', 'VC']);
+
 /** Extract named entities: English proper nouns, abbreviations, numbers+units, Korean proper nouns */
 function extractEntities(text: string): Set<string> {
   const entities = new Set<string>();
-  // English abbreviations (2-6 caps)
-  for (const m of text.matchAll(/\b[A-Z]{2,6}\b/g)) entities.add(m[0]);
-  // English capitalized words (proper nouns)
-  for (const m of text.matchAll(/\b[A-Z][a-z]{2,}\b/g)) entities.add(m[0].toLowerCase());
+  // English abbreviations (2-6 caps), skip common stop-abbreviations
+  for (const m of text.matchAll(/\b[A-Z]{2,6}\b/g)) {
+    if (!ENTITY_STOP_ABBRS.has(m[0])) entities.add(m[0]);
+  }
+  // English proper nouns: require 4+ total chars to exclude "The", "Set", "New", etc.
+  for (const m of text.matchAll(/\b[A-Z][a-z]{3,}\b/g)) entities.add(m[0].toLowerCase());
   // Numbers with units
   for (const m of text.matchAll(/\b\d+(?:[.,]\d+)?(?:%|bp|bps|B|M|K|T|x|억|조|만|달러|원|위안)?\b/g)) {
     if (m[0].length > 1) entities.add(m[0]);
@@ -246,13 +316,18 @@ function bigramSet(text: string): Set<string> {
   return bigrams;
 }
 
-const COMPOSITE_THRESHOLD = 0.55;
+// English cross-source articles use very different vocabulary for the same event.
+// Empirical composite for BBC/Guardian same-story pairs: ~0.18-0.38 (title-only).
+// Korean same-story pairs typically score 0.30+ via shared proper nouns / Korean nouns.
+const COMPOSITE_THRESHOLD = 0.15;
 
 function compositeSim(a: RawArticle, b: RawArticle): number {
   const titleSim = jaccardSim(tokenize(a.title), tokenize(b.title));
+  // Use title-only for entities: content has English sentence starters ("The",
+  // "This") that inflate cross-article entity overlap with no signal value.
   const entitySim = jaccardSim(
-    extractEntities(a.title + ' ' + a.content),
-    extractEntities(b.title + ' ' + b.content),
+    extractEntities(a.title),
+    extractEntities(b.title),
   );
   const bigramSimVal = jaccardSim(bigramSet(a.content), bigramSet(b.content));
   return titleSim * 0.40 + entitySim * 0.35 + bigramSimVal * 0.25;
@@ -310,6 +385,10 @@ export function clusterArticles(articles: RawArticle[], limit: number): RawClust
     let joined = false;
     for (const cluster of clusters) {
       if (cluster.isGithubTrending) continue;
+      // Only cluster CROSS-source: same source articles stay as separate clusters.
+      // This prevents single-source inflation and ensures sourceCount > 1 means
+      // genuinely different news organisations covered the same story.
+      if (cluster.articles.some((a) => a.source === article.source)) continue;
       // Compare against cluster representative
       const rep: RawArticle = {
         title: cluster.title,
@@ -320,8 +399,8 @@ export function clusterArticles(articles: RawArticle[], limit: number): RawClust
       };
       if (compositeSim(article, rep) >= COMPOSITE_THRESHOLD) {
         cluster.articles.push(article);
-        cluster.sourceCount = cluster.articles.length;
         cluster.sourceList = [...new Set(cluster.articles.map((a) => a.source))];
+        cluster.sourceCount = cluster.sourceList.length;
         cluster.mergedContent = buildMergedContent(cluster.articles);
         joined = true;
         break;
@@ -361,12 +440,24 @@ export async function collectByCategory(
 
   const rssResults = await Promise.allSettled(sources.map(fetchFeed));
 
-  const rawByCategory = new Map<CategoryKey, RawArticle[]>();
+  // Group articles by category, then interleave across sources (round-robin) so no
+  // single prolific feed monopolises the first N cluster slots.
+  const bySourceAndCat = new Map<CategoryKey, RawArticle[][]>();
   rssResults.forEach((result, i) => {
-    if (result.status !== 'fulfilled') return;
+    if (result.status !== 'fulfilled' || result.value.length === 0) return;
     const cat = toCategoryKey(sources[i].category);
-    rawByCategory.set(cat, [...(rawByCategory.get(cat) ?? []), ...result.value]);
+    if (!bySourceAndCat.has(cat)) bySourceAndCat.set(cat, []);
+    bySourceAndCat.get(cat)!.push(result.value);
   });
+  const rawByCategory = new Map<CategoryKey, RawArticle[]>();
+  for (const [cat, sourceLists] of bySourceAndCat.entries()) {
+    const interleaved: RawArticle[] = [];
+    const maxLen = Math.max(...sourceLists.map((s) => s.length));
+    for (let i = 0; i < maxLen; i++)
+      for (const list of sourceLists)
+        if (i < list.length) interleaved.push(list[i]);
+    rawByCategory.set(cat, interleaved);
+  }
 
   // AI category: extra sources
   const extraResults = await Promise.allSettled([
@@ -374,6 +465,8 @@ export async function collectByCategory(
     fetchRedditSubreddit('MachineLearning'),
     fetchRedditSubreddit('LocalLLaMA'),
     fetchArxiv(),
+    fetchPwC(),
+    fetchNewsletterRSS(),
     fetchGithubTrending(),
     ...AI_BLOG_SOURCES.map(fetchFeed),
   ]);
