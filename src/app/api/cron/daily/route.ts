@@ -8,6 +8,7 @@
 
 import { NextResponse } from 'next/server';
 import { sendSlack } from '@/lib/slack';
+import { sendTelegram } from '@/lib/telegram';
 
 function verifyCronSecret(req: Request): boolean {
   const cronSecret = process.env.CRON_SECRET;
@@ -52,15 +53,18 @@ export async function POST(req: Request) {
       .map((item, i) => `${i + 1}. ${item.title ?? ''}`)
       .join('\n');
 
-    await sendSlack(
-      [
-        `🔥 *오늘의 핵심 3선* (${today})`,
-        marketLine,
-        top3Lines || '다이제스트 생성 완료',
-      ]
-        .filter(Boolean)
-        .join('\n'),
-    );
+    const notifyText = [
+      `🔥 오늘의 핵심 3선 (${today})`,
+      marketLine,
+      top3Lines || '다이제스트 생성 완료',
+      `📎 ${process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3200'}`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    await Promise.all([sendSlack(notifyText), sendTelegram(notifyText)]);
+  } else {
+    await sendTelegram(`⚠️ [뉴스다이제스트] ${today} 생성 실패 (HTTP ${res.status}) — 수동 확인 필요`);
   }
 
   return NextResponse.json(data, { status: res.status });
