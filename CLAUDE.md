@@ -1,17 +1,18 @@
 # 뉴스 다이제스트 시스템 (News Digest System)
 
 ## 프로젝트 개요
-- 매일 5개 카테고리(글로벌, 증권, AI, 정부정책, 부동산)에서 각 10건, 총 50건의 뉴스를 수집
-- Claude API 웹서치로 뉴스를 수집하고, 구조화된 3줄 요약(팩트/임팩트/액션)으로 변환
-- 일일 브리핑 + 주간 브리핑을 생성하여 프론트엔드 대시보드로 제공
+- 매일 5개 카테고리(글로벌, 증권, AI, 정부정책, 부동산)에서 최대 10건씩 뉴스를 수집
+- RSS·HN·arXiv·GitHub 등 결정적 수집기로 뉴스를 모으고, 로컬 LLM이 구조화된 3줄 요약(팩트/임팩트/액션)으로 변환
+- 수집 기사가 부족하면 있는 만큼만 출력 — LLM이 뉴스를 지어내는 보충 생성은 금지됨
+- 일일 브리핑 + 주간 브리핑을 생성하여 프론트엔드 대시보드(:3200)와 Telegram으로 제공
 
 ## 기술 스택
 - Backend: Next.js API Routes (App Router)
 - Frontend: React + Next.js 14+ (App Router, Server Components)
 - Database: PostgreSQL (뉴스 저장, 주간 분석)
-- AI: Anthropic Claude API (claude-sonnet-4-20250514, 웹서치 tool 사용)
+- AI: 로컬 LM Studio (`qwen3.6-35b-a3b-mlx`, OpenAI 호환 API + Bearer 토큰 인증) — `src/lib/llm.ts`가 유일한 live 클라이언트. `src/lib/claude.ts`(Anthropic SDK)는 주간 딥다이브용 예비로만 보존(현재 미사용)
 - Styling: Tailwind CSS
-- 배포: Docker + Kubernetes (기존 인프라 활용)
+- 배포: 맥미니 로컬 (launchd 상주 + 네이티브 PostgreSQL 16 @5432) — Docker/K8s 미사용
 
 ## 프로젝트 구조
 ```
@@ -101,15 +102,23 @@ interface NewsItem {
 - Prisma ORM 사용 (PostgreSQL)
 - API Route에서 에러 핸들링 필수
 - 컴포넌트는 Server Component 우선, 인터랙션 필요시만 Client Component
-- 환경변수: ANTHROPIC_API_KEY, DATABASE_URL
+- 환경변수: DATABASE_URL, LLM_API_KEY(LM Studio 토큰), LLM_MODEL, TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID, CRON_SECRET — 비밀값은 `.env`(gitignored)에만
 
 ## 뉴스 수집 방식
-- Claude API의 web_search tool을 사용하여 뉴스 수집
-- 카테고리별로 Claude API 호출 (토큰 효율화)
+- 결정적 수집기(`src/lib/collectors/`)로 RSS·HackerNews·Reddit·arXiv·PapersWithCode·GitHub Trending·뉴스레터 수집
+- dedup + 3-신호 클러스터링 후 카테고리별로 로컬 LLM 호출 (json_schema 구조화 출력)
 - temperature: 0.3 (팩트 기반 정확성 우선)
+- 원칙: LLM은 수집된 기사만 요약한다. 기사에 없는 뉴스 생성(학습 데이터 보충) 절대 금지.
 
 ## MLX / Ollama 관련
 - MLX는 영구 폐기됨 (board 결정). MLX 코드 경로 발견 시 삭제할 것.
 - Ollama도 영구 폐기됨. Ollama 코드 경로 발견 시 삭제할 것.
-- 모든 로컬 추론은 LM Studio at localhost:1234 (supergemma4-26b-uncensored-mlx-v2) 전용.
-- `.env.local`은 read-only (444). 에이전트가 수정 금지.
+- 모든 로컬 추론은 LM Studio at localhost:1234 전용. 서버에 토큰 인증이 켜져 있으므로 `LLM_API_KEY` 필수.
+- 로드 모델: `qwen3.6-35b-a3b-mlx` (구 supergemma4-26b는 디스크에서 제거됨 — 참조 발견 시 갱신할 것)
+- `.env.local`은 read-only (444). 에이전트가 수정 금지. (모델명·신규 키는 `.env`에서 관리)
+
+## 운영
+- 웹: launchd `com.news-digest.web` → `next start -p 3200` (3000/3100은 타 프로젝트 점유)
+- 데일리: launchd `com.news-digest.daily` → 매일 06:30 `scripts/run-daily-digest.sh`
+- 검증: `scripts/verify-e2e.sh` (LM Studio 인증→DB→웹→생성→알림 전 구간)
+- Gen1 Python 파이프라인은 `_legacy/`에 아카이브됨 — 수정·실행 비대상

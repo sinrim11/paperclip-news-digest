@@ -80,10 +80,10 @@ clean:
 		echo "Cancelled"; \
 	fi
 
-# LLM connectivity
+# LLM connectivity (LM Studio는 토큰 인증 필요 — .env의 LLM_API_KEY 사용)
 test-llm:
 	@echo "Testing LM Studio connectivity..."
-	@curl -s http://localhost:1234/v1/models | jq . || echo "LM Studio not available"
+	@sh -c 'set -a; [ -f .env ] && . ./.env; set +a; curl -s -H "Authorization: Bearer $$LLM_API_KEY" http://localhost:1234/v1/models | jq .' || echo "LM Studio not available"
 
 # Pipeline management
 run-pipeline:

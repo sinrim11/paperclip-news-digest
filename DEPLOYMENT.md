@@ -1,306 +1,71 @@
-# News Digest Deployment Guide
+# 운영 가이드 (맥미니 로컬)
 
-## Quick Start with Docker
+기준일: 2026-07-03. Docker/K8s 기반 구가이드는 폐기됨 — 현재 운영은 **네이티브 스택**이다.
 
-### Prerequisites
-- Docker 20.10+
-- Docker Compose 2.0+
-- 20+ GB free disk space (for Ollama models)
-- 8+ GB RAM recommended
+## 구성 요소
 
-### Local Development
+| 구성 | 내용 | 확인 |
+|---|---|---|
+| LLM | LM Studio headless(:1234), `qwen3.6-35b-a3b-mlx`, **Bearer 토큰 인증** | `make test-llm` |
+| DB | 네이티브 PostgreSQL 16 (:5432), DB `news_digest` | `psql -d news_digest` |
+| 웹 | `next start -p 3200` (launchd `com.news-digest.web`, KeepAlive) | `curl localhost:3200` |
+| 데일리 | launchd `com.news-digest.daily` → 매일 06:30 `scripts/run-daily-digest.sh` | `output/daily_run.log` |
+| 알림 | Telegram(`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`) + Slack(선택) | 아침 메시지 수신 |
 
-1. **Setup environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
-   ```
+포트 주의: 3000(kfestival)·3100(render-worker)·5433(tradingagents PG)은 타 프로젝트 점유. 이 앱은 **3200 고정**.
 
-2. **Start services**
-   ```bash
-   docker-compose up -d
-   ```
-
-3. **Pull Ollama model** (one-time, takes 10+ minutes)
-   ```bash
-   docker exec news-digest-ollama ollama pull gemma4:26b
-   ```
-
-4. **Access the application**
-   - Web UI: http://localhost:3200
-   - Health check: http://localhost:3200/health
-   - Ollama API: http://localhost:11434
-
-### Running the News Pipeline
-
-Option 1: Run manually
-```bash
-docker exec news-digest-pipeline python main.py
-```
-
-Option 2: Schedule with cron (on host machine)
-```bash
-# Add to crontab (runs daily at 6 AM)
-0 6 * * * cd /path/to/news-digest && docker exec news-digest-pipeline python main.py
-```
-
-Option 3: Enable automatic startup (edit docker-compose.yml)
-```yaml
-pipeline:
-  command: python main.py  # Replace 'sleep infinity'
-```
-
-## Production Deployment
-
-### Container Registry
-
-1. **Build and push image**
-   ```bash
-   docker build -t your-registry/news-digest:latest .
-   docker push your-registry/news-digest:latest
-   ```
-
-2. **For multi-arch (ARM64 for Apple Silicon, etc.)**
-   ```bash
-   docker buildx build --platform linux/amd64,linux/arm64 \
-     -t your-registry/news-digest:latest \
-     --push .
-   ```
-
-### Environment-Specific Configuration
-
-Create environment files:
-- `.env.production` - Production secrets
-- `.env.staging` - Staging configuration
-- `.env.development` - Local development
-
-Load with:
-```bash
-docker-compose --env-file .env.production up -d
-```
-
-### Volume Management
-
-Persistent volumes for production:
-```yaml
-volumes:
-  news_digest_output:
-    driver: local
-  ollama_cache:
-    driver: local
-```
-
-### Health Monitoring
-
-The application exposes health check endpoints:
-
-- **Web server health**: `GET /health` → `{"status": "ok"}`
-- **Ollama health**: `GET http://ollama:11434/api/tags`
-
-### Scaling Considerations
-
-**Web Server**: Stateless, can scale horizontally with load balancer
-```bash
-# Run multiple web instances
-docker-compose up -d --scale web=3
-```
-
-**Ollama**: Single instance, GPU-accelerated. Cannot scale horizontally.
-- Option 1: Use larger GPU instance
-- Option 2: Use MLX on CPU (slower but works)
-
-**Pipeline**: Run on separate schedule/server
-- Use Kubernetes CronJob
-- AWS EventBridge + Lambda
-- GitHub Actions scheduled workflow
-
-## Docker Compose Services
-
-### ollama
-- **Port**: 11434
-- **Volume**: `ollama_data` (10+ GB)
-- **Health**: Checks `/api/tags` endpoint
-- **Model**: Requires manual pull or auto-pull (slow)
-
-### web
-- **Port**: 3200
-- **Volumes**: `output/`, `config/`, `web_app/`
-- **Command**: `uvicorn web_app.main:app --reload`
-- **Depends on**: ollama
-
-### pipeline
-- **Default**: Sleeps (manual execution)
-- **Option**: Run `python main.py` on startup
-- **Cron**: Better for scheduled execution
-- **Volumes**: `output/`, `config/`, `news_strategy/`
-
-## Troubleshooting
-
-### Ollama won't start or is slow
-- Check disk space: `df -h`
-- Check RAM: `free -h`
-- Monitor: `docker logs news-digest-ollama`
-
-### Web server connection errors
-- Verify Ollama is healthy: `docker exec news-digest-ollama ollama list`
-- Check network: `docker network ls`
-- Verify endpoints in `.env` match service names
-
-### Output directory missing
-- Create manually: `mkdir -p output`
-- Ensure Docker has write permissions
-- Check volume mounts in docker-compose
-
-### High memory usage
-- Reduce MODEL size: use `gemma2:2b` instead of `gemma4:26b`
-- Run pipeline less frequently
-- Use MLX on CPU (if available)
-
-## Performance Tuning
-
-### CPU
-```bash
-# Limit CPU usage
-docker-compose.yml:
-  services:
-    ollama:
-      cpus: '4'
-      cpu_shares: 1024
-```
-
-### Memory
-```yaml
-    ollama:
-      mem_limit: 16g
-      memswap_limit: 20g
-```
-
-### GPU Acceleration (if available)
-```yaml
-    ollama:
-      deploy:
-        resources:
-          reservations:
-            devices:
-              - driver: nvidia
-                count: 1
-                capabilities: [gpu]
-```
-
-## Monitoring & Logging
-
-### View logs
-```bash
-# All services
-docker-compose logs -f
-
-# Specific service
-docker-compose logs -f web
-docker-compose logs -f ollama
-
-# Recent logs only
-docker-compose logs --tail=100 ollama
-```
-
-### Performance metrics
-```bash
-docker stats news-digest-web
-docker stats news-digest-ollama
-```
-
-### Application metrics
-- Total articles processed: Check `output/raw_YYYYMMDD.json`
-- Summary quality: Check timestamps in web UI
-- API response time: Monitor `/health` endpoint
-
-## Cleanup
+## 최초 설치 / 재설치
 
 ```bash
-# Stop all services
-docker-compose down
+npm install
+npx prisma generate
+npm run build
 
-# Remove volumes (data loss!)
-docker-compose down -v
-
-# Remove images
-docker image rm news-digest-web ollama/ollama
-
-# Full cleanup
-docker system prune -a --volumes
+# launchd 등록
+cp config/launchd/com.news-digest.web.plist config/launchd/com.news-digest.daily.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.news-digest.web.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.news-digest.daily.plist
 ```
 
-## CI/CD Integration
+환경변수는 `.env`(비밀값, gitignored)와 `.env.local`(보드 관리, read-only 444)에 있다. `.env.example` 참고.
 
-### GitHub Actions Example
-```yaml
-name: Build and Deploy
+## 일상 운영
 
-on:
-  push:
-    branches: [main]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: docker/setup-buildx-action@v2
-      - uses: docker/build-push-action@v4
-        with:
-          push: true
-          tags: ${{ secrets.REGISTRY }}/news-digest:${{ github.sha }}
+```bash
+scripts/verify-e2e.sh                                  # 전 구간 검증 (idempotent)
+launchctl kickstart -k gui/$(id -u)/com.news-digest.web  # 웹 강제 재시작
+tail -f output/web.log output/daily_run.log            # 로그
+launchctl bootout gui/$(id -u)/com.news-digest.daily   # 스케줄 해제
 ```
 
-### Kubernetes Deployment
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: news-digest-web
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: news-digest-web
-  template:
-    metadata:
-      labels:
-        app: news-digest-web
-    spec:
-      containers:
-      - name: web
-        image: your-registry/news-digest:latest
-        ports:
-        - containerPort: 3200
-        env:
-        - name: OLLAMA_API_URL
-          value: http://ollama-service:11434/v1/chat/completions
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 3200
-          initialDelaySeconds: 30
-          periodSeconds: 10
+수동 생성(특정 날짜/강제):
+
+```bash
+curl -X POST localhost:3200/api/digest/generate \
+  -H 'Content-Type: application/json' -d '{"date":"2026-07-03","force":true}'
 ```
 
-## Maintenance
+## 코드 변경 배포
 
-### Regular tasks
-- Monitor disk usage (Ollama cache grows)
-- Archive old `output/` JSON files
-- Update base images monthly
-- Test failover/recovery procedures
+```bash
+npm test && npm run build
+launchctl kickstart -k gui/$(id -u)/com.news-digest.web
+scripts/verify-e2e.sh
+```
 
-### Upgrade path
-1. Pull latest code: `git pull`
-2. Rebuild image: `docker-compose build --no-cache`
-3. Rolling update: `docker-compose up -d` (replaces service)
-4. Verify: Check `/health` endpoint
+## 트러블슈팅
 
-## Support
+- **LLM 401**: LM Studio 토큰 재발급 → `.env`의 `LLM_API_KEY` 갱신. 확인: `make test-llm`
+- **모델 없음**: `lms ps`로 로드 모델 확인. `.env.local`의 `LLM_MODEL`이 없는 모델이면 `llm.ts`가 로드된 첫 모델로 자동 폴백함
+- **DB 접속 실패**: `brew services info postgresql@16`. 과거 Docker PG(5432 충돌)는 폐기 — 컨테이너를 되살리지 말 것
+- **06:30 미실행**: `launchctl print gui/$(id -u)/com.news-digest.daily` 로 등록 확인; 맥 절전이면 미발화 → 시스템 설정에서 절전 예외 또는 `pmset repeat wakeorpoweron MTWRFSU 06:25:00`
 
-For issues:
-1. Check logs: `docker-compose logs -f`
-2. Verify configuration: Compare `.env` with `.env.example`
-3. Test Ollama directly: `curl http://localhost:11434/api/tags`
-4. Restart services: `docker-compose restart`
+## 데이터 이력
+
+- 2026-04-13 ~ 04-25 운영 데이터는 폐기된 Docker 볼륨(`news-digest_postgres_data`)에서 2026-07-03 네이티브 PG로 복원 완료 (600 NewsItem). 전체 덤프: `backup/news_digest_full_rescue_20260703.sql`
+- 볼륨은 아카이브로 보존 중 — 복원 검증이 끝난 뒤 `docker volume rm news-digest_postgres_data`로 정리 가능
+
+## 보안 메모
+
+- 구 Telegram 봇 토큰은 git 이력에 노출 → **BotFather에서 revoke 후 재발급**하고 `.env`만 갱신할 것 (코드/커밋에 토큰 금지)
+- `CRON_SECRET`을 설정하면 크론 라우트가 Bearer 인증을 요구함 (`.env.local`)

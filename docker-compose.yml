@@ -1,51 +1,25 @@
+# ⚠️ 참고용 (기본 운영 경로 아님)
+# 실제 운영: 네이티브 PostgreSQL 16(@5432) + launchd(config/launchd/) + next start -p 3200.
+# 과거 postgres 컨테이너(news-digest-postgres)는 네이티브 PG와 5432 포트 충돌로 폐기됨.
+# 4월 데이터는 볼륨 news-digest_postgres_data에 보존 → backup/ 덤프 및 네이티브 PG로 복원 완료(2026-07-03).
+
 version: '3.8'
 
 services:
-  # ── PostgreSQL ──────────────────────────────────────────────────────────────
-  postgres:
-    image: postgres:15-alpine
-    container_name: news-digest-postgres
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: news_digest
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d news_digest"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
-  # ── Next.js App ─────────────────────────────────────────────────────────────
   app:
     build:
       context: .
       dockerfile: Dockerfile.next
     container_name: news-digest-app
     ports:
-      - "3000:3000"
+      - "3200:3000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/news_digest
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # 호스트의 네이티브 PostgreSQL 사용
+      - DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/news_digest
+      # 호스트의 LM Studio 사용 (토큰 인증)
+      - LLM_BASE_URL=http://host.docker.internal:1234/v1
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-qwen3.6-35b-a3b-mlx}
       - NODE_ENV=production
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/market"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-volumes:
-  postgres_data:
-    driver: local
-
-networks:
-  default:
-    name: news-digest-network
-    driver: bridge
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
