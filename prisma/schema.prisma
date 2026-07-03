@@ -274,6 +274,81 @@ model PersonaRankResult {
   @@index([createdAt])
 }
 
+// ─── 부동산 수집 (2026-07-03): 국토부 실거래 + 청약홈 + 매물 스냅샷 ─────────────
+model AptTrade {
+  id         String   @id @default(cuid())
+  lawdCd     String // 법정동코드 5자리 (11590 동작 등)
+  dong       String // 법정동명
+  aptName    String
+  jibun      String?
+  excluUseAr Float // 전용면적 ㎡
+  floor      Int?
+  dealDate   DateTime @db.Date
+  dealAmount Int // 만원
+  buildYear  Int?
+  dealingGbn String? // 중개/직거래
+  cdealType  String? // 해제여부
+  createdAt  DateTime @default(now())
+
+  @@unique([lawdCd, aptName, dealDate, excluUseAr, floor, dealAmount])
+  @@index([dong, dealDate])
+  @@index([dealDate])
+}
+
+model AptRent {
+  id           String   @id @default(cuid())
+  lawdCd       String
+  dong         String
+  aptName      String
+  excluUseAr   Float
+  floor        Int?
+  dealDate     DateTime @db.Date
+  deposit      Int // 만원
+  monthlyRent  Int // 만원 (0 = 전세)
+  contractType String? // 신규/갱신
+  createdAt    DateTime @default(now())
+
+  @@unique([lawdCd, aptName, dealDate, excluUseAr, floor, deposit, monthlyRent])
+  @@index([dong, dealDate])
+}
+
+model SubscriptionNotice {
+  id            String    @id @default(cuid())
+  houseManageNo String
+  noticeType    String // APT | 무순위
+  houseName     String
+  address       String?
+  region        String? // 공급지역명 (서울 등)
+  builder       String?
+  totalSupply   Int?
+  noticeDate    String? // 모집공고일
+  rceptBegin    String?
+  rceptEnd      String?
+  winnerDate    String?
+  url           String?
+  raw           Json      @default("{}")
+  notifiedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([houseManageNo, noticeType])
+  @@index([region, rceptBegin])
+}
+
+model ListingSnapshot {
+  id           String   @id @default(cuid())
+  complexNo    String
+  complexName  String
+  date         DateTime @db.Date
+  tradeType    String   @default("A1")
+  articleCount Int?
+  minPrice     Int? // 만원
+  maxPrice     Int? // 만원
+  raw          Json     @default("{}")
+  createdAt    DateTime @default(now())
+
+  @@unique([complexNo, date, tradeType])
+}
+
 // ─── v4 Phase 1-A: Raw collected articles ─────────────────────────────────────
 model Article {
   id          String    @id @default(cuid())

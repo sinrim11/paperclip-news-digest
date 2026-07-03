@@ -66,6 +66,34 @@ export default async function TrackerPage() {
     .filter((i) => i.category === 'REALESTATE' && localRe.test(i.title + ' ' + i.fact))
     .slice(0, 10);
 
+  // ── 실거래·청약·매물 (일 1회 자동 수집: com.news-digest.collect 06:00) ──
+  const WATCH_DONGS = ['신대방동', '상도동', '상도1동', '봉천동', '신림동', '신길동', '대방동', '노량진동', '흑석동', '대림동', '문래동6가'];
+  const tradesRaw = await prisma.aptTrade
+    .findMany({
+      where: { dong: { in: WATCH_DONGS } },
+      orderBy: { dealDate: 'desc' },
+      take: 25,
+    })
+    .catch(() => []);
+  const trades = tradesRaw.filter((t) => t.cdealType !== 'O').slice(0, 12);
+
+  const noticesRaw = await prisma.subscriptionNotice
+    .findMany({ where: { region: '서울' }, orderBy: { rceptBegin: 'desc' }, take: 20 })
+    .catch(() => []);
+  const todayStr = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
+  const upcoming = noticesRaw
+    .filter((n) => (n.rceptBegin ?? '') >= todayStr)
+    .sort((a, b) => (a.rceptBegin ?? '').localeCompare(b.rceptBegin ?? ''));
+  const recentNotices = noticesRaw.filter((n) => (n.rceptBegin ?? '') < todayStr).slice(0, 5);
+
+  const snapshotsRaw = await prisma.listingSnapshot.findMany({ orderBy: { date: 'desc' }, take: 20 }).catch(() => []);
+  const seenComplex = new Set<string>();
+  const snapshots = snapshotsRaw.filter((s) => {
+    if (seenComplex.has(s.complexNo)) return false;
+    seenComplex.add(s.complexNo);
+    return true;
+  });
+
   const scenarios = params && fin ? computeBudget(params, fin) : [];
   const jeonseExpiry = fin?.jeonseExpiry;
   const noticeDeadline = jeonseExpiry ? monthsBefore(jeonseExpiry, 2) : null;
@@ -188,6 +216,95 @@ export default async function TrackerPage() {
                   )}
                   <span className="ml-1 text-xs text-gray-400">{h.date}</span>
                 </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* ── 청약 공고 (자동 수집) ──────────────────────────────── */}
+      <section className="rounded-lg border bg-white p-5">
+        <h2 className="font-semibold text-gray-900">🏗️ 청약 공고 <span className="text-xs font-normal text-gray-400">(청약홈 API · 서울 · 매일 06:00 수집, 신규 공고는 Telegram 즉시 알림)</span></h2>
+        {upcoming.length === 0 && recentNotices.length === 0 ? (
+          <p className="mt-3 text-sm text-gray-500">수집된 공고 없음</p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {upcoming.map((n) => (
+              <div key={n.id} className="flex items-start gap-2 text-sm">
+                <span className="mt-0.5 shrink-0 rounded bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
+                  접수 D-{ddayKST(n.rceptBegin!)}
+                </span>
+                <span className="text-gray-800">
+                  <b>[{n.noticeType}] {n.houseName}</b>
+                  <span className="ml-1 text-xs text-gray-500">
+                    {n.rceptBegin}{n.rceptEnd ? `~${n.rceptEnd}` : ''} · {n.address ?? ''}
+                  </span>
+                </span>
+              </div>
+            ))}
+            {recentNotices.map((n) => (
+              <div key={n.id} className="flex items-start gap-2 text-sm opacity-70">
+                <span className="mt-0.5 shrink-0 rounded bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-500">접수됨</span>
+                <span className="text-gray-700">
+                  [{n.noticeType}] {n.houseName}
+                  <span className="ml-1 text-xs text-gray-400">{n.rceptBegin} · {n.address ?? ''}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── 관심동네 실거래 (자동 수집) ─────────────────────────── */}
+      <section className="rounded-lg border bg-white p-5">
+        <h2 className="font-semibold text-gray-900">📈 관심동네 최근 실거래 <span className="text-xs font-normal text-gray-400">(국토부 API · 동작/관악/영등포 · 매일 06:00 수집)</span></h2>
+        {trades.length === 0 ? (
+          <p className="mt-3 text-sm text-gray-500">수집된 실거래 없음</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-gray-500">
+                  <th className="py-1.5 pr-3">계약일</th>
+                  <th className="py-1.5 pr-3">동</th>
+                  <th className="py-1.5 pr-3">단지</th>
+                  <th className="py-1.5 pr-3">전용</th>
+                  <th className="py-1.5 pr-3">층</th>
+                  <th className="py-1.5">금액</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trades.map((t) => (
+                  <tr key={t.id} className="border-b last:border-0">
+                    <td className="py-1.5 pr-3 text-xs text-gray-500">{t.dealDate.toISOString().slice(0, 10)}</td>
+                    <td className="py-1.5 pr-3">{t.dong}</td>
+                    <td className="py-1.5 pr-3 font-medium text-gray-900">{t.aptName}</td>
+                    <td className="py-1.5 pr-3">{t.excluUseAr.toFixed(1)}㎡</td>
+                    <td className="py-1.5 pr-3">{t.floor ?? '-'}</td>
+                    <td className="py-1.5 font-bold text-blue-700">{formatKRW(t.dealAmount * 10_000)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* ── 매물 스냅샷 ────────────────────────────────────────── */}
+      <section className="rounded-lg border bg-white p-5">
+        <h2 className="font-semibold text-gray-900">🏷️ 관심단지 매물 호가 <span className="text-xs font-normal text-gray-400">(네이버 · 하루 1회 스냅샷)</span></h2>
+        {snapshots.length === 0 ? (
+          <p className="mt-3 text-sm text-gray-500">
+            수집 대기 — 네이버 비공식 API가 현재 차단 상태(2026-07-03 확인). 헤드리스 브라우저 방식 전환 예정.
+            의사결정은 위 실거래(진실) 기준, 호가는 보조 지표.
+          </p>
+        ) : (
+          <ul className="mt-3 space-y-1.5 text-sm">
+            {snapshots.map((s) => (
+              <li key={s.id} className="text-gray-800">
+                <b>{s.complexName}</b> — 매물 {s.articleCount ?? '?'}건
+                {s.minPrice ? ` · 최저 ${formatKRW(s.minPrice * 10_000)}` : ''}
+                <span className="ml-1 text-xs text-gray-400">{s.date.toISOString().slice(0, 10)}</span>
               </li>
             ))}
           </ul>
