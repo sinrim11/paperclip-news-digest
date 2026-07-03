@@ -23,7 +23,8 @@ npm run build
 npx next start -p 3200          # 또는 launchd: config/launchd/ 참고
 ```
 
-- 상시 운영: `config/launchd/com.news-digest.web.plist` (웹, KeepAlive) + `com.news-digest.daily.plist` (매일 06:30 생성 트리거) → `~/Library/LaunchAgents`에 복사 후 `launchctl bootstrap gui/$(id -u) <plist>`
+- 공개 접속: **https://makeagent.dev** (Cloudflare tunnel → :3200, 모바일에서도 접근 가능)
+- 상시 운영: `config/launchd/com.news-digest.web.plist` (웹, KeepAlive) + `com.news-digest.daily.plist` (매일 06:30 생성 트리거) + `com.news-digest.weekly-deepdive.plist` (일요일 19:00) → `~/Library/LaunchAgents`에 복사 후 `launchctl bootstrap gui/$(id -u) <plist>`
 - 수동 생성: `curl -X POST localhost:3200/api/cron/daily -H "Authorization: Bearer $CRON_SECRET"`
 
 ## 환경변수

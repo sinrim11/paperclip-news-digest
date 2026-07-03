@@ -226,22 +226,16 @@ export const TOP3_SCHEMA: Record<string, unknown> = {
 
 export function buildTop3Prompt(
   date: string,
-  categorySummaries: Array<{
+  /** Flat, persisted item list — array position i ↔ prompt label [i+1] ↔ LLM "index" field */
+  allItems: Array<{
     category: Category;
-    items: Array<{
-      title: string;
-      urgency: string;
-      fact: string;
-      impact: string;
-      action: string;
-      category?: Category;
-    }>;
+    title: string;
+    urgency: string;
+    fact: string;
+    impact: string;
+    action?: string;
   }>,
 ): Array<{ role: 'system' | 'user'; content: string }> {
-  const allItems = categorySummaries.flatMap((cs) =>
-    cs.items.map((item) => ({ ...item, category: cs.category })),
-  );
-
   const itemsText = allItems
     .map(
       (item, i) =>
@@ -286,6 +280,7 @@ ${itemsText}
   "top3": [
     {
       "rank": 1,
+      "index": 12,
       "category": "카테고리명",
       "title": "뉴스 제목",
       "urgency": "breaking|watch|note",
@@ -302,7 +297,8 @@ ${itemsText}
   ]
 }
 
-urgency는 반드시 "breaking", "watch", "note" 중 하나.`,
+urgency는 반드시 "breaking", "watch", "note" 중 하나.
+index는 반드시 위 목록의 [N] 번호를 그대로 사용 (선정 근거가 된 항목의 번호). title을 수정·번역하더라도 index는 원본 번호여야 함.`,
     },
   ];
 }

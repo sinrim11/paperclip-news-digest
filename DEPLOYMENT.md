@@ -12,6 +12,7 @@
 | 데일리 | launchd `com.news-digest.daily` → 매일 06:30 `scripts/run-daily-digest.sh` | `output/daily_run.log` |
 | 주간 딥다이브 | launchd `com.news-digest.weekly-deepdive` → 일요일 19:00 `scripts/weekly-deep-dive.sh` (헤드리스 `claude -p`, 주 1회만 Claude API 사용) | `output/weekly_deepdive.log` |
 | 알림 | Telegram(`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`) + Slack(선택) | 아침 메시지 수신 |
+| 공개 웹 | Cloudflare tunnel(`com.cloudflare.makeagent-tunnel`): **https://makeagent.dev** · https://app.makeagent.dev → :3200 | `curl -sI https://makeagent.dev` |
 
 포트 주의: 3000(kfestival)·3100(render-worker)·5433(tradingagents PG)은 타 프로젝트 점유. 이 앱은 **3200 고정**.
 
@@ -76,3 +77,4 @@ scripts/verify-e2e.sh
 
 - 구 Telegram 봇 토큰은 git 이력에 노출 → **BotFather에서 revoke 후 재발급**하고 `.env`만 갱신할 것 (코드/커밋에 토큰 금지)
 - `CRON_SECRET`을 설정하면 크론 라우트가 Bearer 인증을 요구함 (`.env.local`)
+- **makeagent.dev는 공개 인터넷에 노출됨** — 대시보드와 `/api/*` 전체(생성 트리거 포함)가 무인증. 권장: Cloudflare Zero Trust → Access 정책으로 이메일 인증 게이트 추가, 최소한 `CRON_SECRET` 설정 유지. lmstudio.makeagent.dev(:1234)는 LM Studio 토큰 인증으로 보호 중

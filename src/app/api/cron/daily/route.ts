@@ -62,7 +62,7 @@ export async function POST(req: Request) {
       `🔥 오늘의 핵심 3선 (${today})`,
       marketLine,
       top3Lines || '다이제스트 생성 완료',
-      `📎 ${process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3200'}`,
+      `📎 ${process.env.PUBLIC_DASHBOARD_URL ?? process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3200'}`,
     ]
       .filter(Boolean)
       .join('\n');

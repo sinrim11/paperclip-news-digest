@@ -279,28 +279,29 @@ export async function generateDailyDigest(body: GenerateDigestParams): Promise<G
     // ── Step 5: TOP 3 selection ───────────────────────────────────────────
     if (successfulCategories.length > 0) {
       try {
-        // Fetch all persisted items so we can match by DB id instead of title
+        // Persisted items ARE the prompt input: array position i ↔ prompt label [i+1]
+        // ↔ LLM "index" field, so selection maps to a DB id deterministically.
+        // (Title-only fuzzy matching failed on 2026-07-03 when the LLM rephrased titles.)
         const allDbItems = await prisma.newsItem.findMany({
           where: { digestId: digest.id },
-          select: { id: true, title: true, category: true },
+          select: { id: true, title: true, category: true, urgency: true, fact: true, impact: true, action: true },
           orderBy: [{ category: 'asc' }, { newsOrder: 'asc' }],
         });
 
-        const top3Input = successfulCategories.map((c) => ({
-          category: c.category as Category,
-          items: c.items.map((it) => ({
-            title: it.title,
-            urgency: it.urgency,
-            fact: it.fact,
-            impact: it.impact,
-            action: it.action,
-          })),
+        const top3Input = allDbItems.map((it) => ({
+          category: it.category as Category,
+          title: it.title,
+          urgency: it.urgency as string,
+          fact: it.fact,
+          impact: it.impact,
+          action: it.action,
         }));
 
-        let top3Result: { top3: LLMTop3Item[] } | null = null;
+        type Top3WithIndex = LLMTop3Item & { index?: number };
+        let top3Result: { top3: Top3WithIndex[] } | null = null;
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            top3Result = await chatJSON<{ top3: LLMTop3Item[] }>(
+            top3Result = await chatJSON<{ top3: Top3WithIndex[] }>(
               buildTop3Prompt(dateStr, top3Input),
               { temperature: 0.2, maxTokens: CATEGORY_MAX_TOKENS },
             );
@@ -317,15 +318,19 @@ export async function generateDailyDigest(body: GenerateDigestParams): Promise<G
           console.error('[generate] top3: all attempts returned empty — skipping');
         }
 
-        // Match TOP 3 items by closest title (LLM may slightly alter titles)
+        // Match by prompt index first; title matching is the fallback only
         for (const topItem of (top3Result?.top3 ?? []).slice(0, 3)) {
-          const normalizedTop = topItem.title.trim().toLowerCase();
-          const match = allDbItems.find(
+          const byIndex =
+            typeof topItem.index === 'number' && topItem.index >= 1 && topItem.index <= allDbItems.length
+              ? allDbItems[topItem.index - 1]
+              : undefined;
+          const normalizedTop = (topItem.title ?? '').trim().toLowerCase();
+          const match = byIndex ?? (allDbItems.find(
             (db) => db.title.trim().toLowerCase() === normalizedTop,
           ) ?? allDbItems.find(
             (db) => normalizedTop.includes(db.title.trim().toLowerCase().slice(0, 15))
               || db.title.trim().toLowerCase().includes(normalizedTop.slice(0, 15)),
-          );
+          ));
 
           if (match) {
             await prisma.newsItem.update({
