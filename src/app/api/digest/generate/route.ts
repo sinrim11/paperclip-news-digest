@@ -14,7 +14,7 @@ import { prisma } from '@/lib/db';
 import { chatJSON } from '@/lib/llm';
 import { collectByCategory, clusterArticles } from '@/lib/news-collector';
 import { fetchRealMarketData } from '@/lib/market-fetcher';
-import { buildCategoryPrompt, buildTop3Prompt } from '@/lib/prompts/daily-digest';
+import { buildCategoryPrompt, buildTop3Prompt, CATEGORY_RESULT_SCHEMA, TOP3_SCHEMA } from '@/lib/prompts/daily-digest';
 import { syncDigestToWiki } from '@/lib/wiki-sync';
 import { aggregateEntityStats } from '@/lib/entity-stat-aggregator';
 import { writeLedgerEntries, writeDailyDigestWikiEntry } from '@/lib/wiki-db';
@@ -111,7 +111,10 @@ export async function POST(req: Request) {
     for (const catKey of activeCategories) {
       const clusters = clustersByCategory.get(catKey) ?? [];
       if (clusters.length === 0) {
-        console.warn(`[generate] ${catKey}: 0 clusters — LLM will use training-data fallback`);
+        // No collected articles → skip the LLM entirely. Never let it invent news.
+        console.warn(`[generate] ${catKey}: 0 clusters — skipping category (no articles collected)`);
+        categoryResults.push({ status: 'rejected', reason: new Error(`${catKey}: no articles collected`) });
+        continue;
       }
       const multiCount = clusters.filter((c) => c.sourceCount >= 2).length;
       console.log(`[generate] ${catKey}: ${clusters.length} clusters (${multiCount} multi-source)`);
@@ -121,7 +124,7 @@ export async function POST(req: Request) {
       let settled: SettledResult = { status: 'rejected', reason: new Error('not started') };
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const value = await chatJSON<LLMCategoryResult>(msgs, { temperature: 0.3, maxTokens: 4096 });
+          const value = await chatJSON<LLMCategoryResult>(msgs, { temperature: 0.3, maxTokens: 8192, schema: CATEGORY_RESULT_SCHEMA });
           if (value?.items?.length > 0) {
             settled = { status: 'fulfilled', value };
             break;
@@ -177,34 +180,10 @@ export async function POST(req: Request) {
       dedupedItems.sort((a, b) => (urgencyOrder[a.urgency] ?? 2) - (urgencyOrder[b.urgency] ?? 2));
       const finalItems = dedupedItems.slice(0, 10);
 
-      // Supplement pass: if LLM returned < 10, request more from training data
+      // Fewer than 10 items is acceptable — never invent news to pad the count.
+      // (The old "supplement from training data" pass generated fake articles.)
       if (finalItems.length < 10) {
-        const needed = 10 - finalItems.length;
-        const existingTitles = finalItems.map((i) => i.title).join('\n- ');
-        const koreanLabel = toCategoryLabel(catKey);
-        const supplementMsgs = [
-          { role: 'system' as const, content: '반드시 한국어로 JSON만 출력. 마크다운·코드블록 금지.' },
-          {
-            role: 'user' as const,
-            content: `날짜: ${dateStr}\n카테고리: ${koreanLabel}\n\n현재 ${finalItems.length}건이 있습니다. 아래 제목과 겹치지 않는 새로운 뉴스 ${needed}건을 ${dateStr} 기준 학습 데이터에서 추가로 생성하세요.\n\n기존 제목:\n- ${existingTitles}\n\n출력 형식 (순수 JSON):\n{"items":[{"title":"...","urgency":"watch","fact":"...","impact":"...","action":"...","contextTags":[],"source":"...","sourceUrl":"https://example.com","consensusFacts":null,"conflictingFacts":null}]}\n\n반드시 ${needed}건 출력.`,
-          },
-        ];
-        try {
-          const supplementResult = await chatJSON<{ items: typeof finalItems }>(supplementMsgs, { temperature: 0.5, maxTokens: 4096 });
-          if (supplementResult?.items?.length > 0) {
-            for (const item of supplementResult.items) {
-              const key = (item.title ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
-              if (!seenTitles.has(key)) {
-                seenTitles.add(key);
-                finalItems.push(item);
-                if (finalItems.length >= 10) break;
-              }
-            }
-            console.log(`[generate] ${catKey} supplement: added ${supplementResult.items.length} → total ${finalItems.length}`);
-          }
-        } catch (err) {
-          console.warn(`[generate] ${catKey} supplement failed:`, err);
-        }
+        console.warn(`[generate] ${catKey}: only ${finalItems.length}/10 items from collected articles — publishing as-is`);
       }
 
       // Upsert CategoryBriefing
@@ -289,7 +268,7 @@ export async function POST(req: Request) {
           try {
             top3Result = await chatJSON<{ top3: LLMTop3Item[] }>(
               buildTop3Prompt(dateStr, top3Input),
-              { temperature: 0.2, maxTokens: 8192 },
+              { temperature: 0.2, maxTokens: 8192, schema: TOP3_SCHEMA },
             );
             if (top3Result?.top3?.length > 0) break;
             console.warn(`[generate] top3 attempt ${attempt + 1}: empty top3 array, retrying`);

@@ -109,7 +109,7 @@ export function buildCategoryPrompt(
 
   const articlesText = regularClusters.length > 0
     ? regularClusters.map(renderCluster).join('\n\n')
-    : '(수집된 기사 없음 — 학습 데이터 기반 주요 뉴스 생성)';
+    : '(수집된 기사 없음)';
 
   const githubSection = trendingClusters.length > 0
     ? `\n\n## GitHub Trending AI 오픈소스 (${trendingClusters.length}개)\n` +
@@ -135,7 +135,7 @@ ${articlesText}${githubSection}
 - 다중 출처 기사는 각 출처 본문을 비교해 consensusFacts(공통 사실)와 conflictingFacts(이견)를 반드시 추출하세요.
 - source_count >= 2이면 fact 앞에 "[N곳 공통 보도]" 접두사를 붙이세요.
 - 단일 출처이면 consensusFacts는 null, conflictingFacts는 null.
-- 반드시 정확히 10건 출력. 수집된 기사가 부족하면 ${date} 기준 학습 데이터에서 해당 카테고리 주요 뉴스를 보충해 반드시 10건을 채우세요.
+- 최대 10건 출력. 반드시 위에 수집된 기사만 사용하세요. 기사가 10건 미만이면 있는 만큼만 출력하고, 절대 기사에 없는 뉴스를 지어내지 마세요.
 - urgency "breaking"은 카테고리당 최대 2건.
 
 출력 형식 (순수 JSON):
@@ -162,6 +162,65 @@ urgency는 반드시 "breaking", "watch", "note" 중 하나. 순수 JSON만 출�
     },
   ];
 }
+
+// ─── Structured-output JSON Schemas (LM Studio response_format) ──────────────
+// Constrains decoding server-side so malformed-JSON retries disappear.
+
+const NEWS_ITEM_SCHEMA = {
+  type: 'object',
+  properties: {
+    title: { type: 'string' },
+    urgency: { type: 'string', enum: ['breaking', 'watch', 'note'] },
+    fact: { type: 'string' },
+    consensusFacts: { type: ['string', 'null'] },
+    conflictingFacts: { type: ['string', 'null'] },
+    impact: { type: 'string' },
+    action: { type: 'string' },
+    contextTags: { type: 'array', items: { type: 'string' } },
+    source: { type: 'string' },
+    sourceUrl: { type: 'string' },
+  },
+  required: ['title', 'urgency', 'fact', 'impact', 'action', 'contextTags', 'source', 'sourceUrl'],
+} as const;
+
+export const CATEGORY_RESULT_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    category: { type: 'string' },
+    summary: { type: 'string' },
+    items: { type: 'array', items: NEWS_ITEM_SCHEMA },
+  },
+  required: ['category', 'summary', 'items'],
+};
+
+export const TOP3_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    top3: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          rank: { type: 'integer' },
+          category: { type: 'string' },
+          title: { type: 'string' },
+          urgency: { type: 'string', enum: ['breaking', 'watch', 'note'] },
+          fact: { type: 'string' },
+          impact: { type: 'string' },
+          action: { type: 'string' },
+          contextTags: { type: 'array', items: { type: 'string' } },
+          source: { type: 'string' },
+          sourceUrl: { type: 'string' },
+          relatedData: { type: 'array', items: { type: 'string' } },
+          contextLinks: { type: 'array', items: { type: 'string' } },
+          upcomingEvents: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['rank', 'category', 'title', 'urgency', 'fact', 'impact', 'action'],
+      },
+    },
+  },
+  required: ['top3'],
+};
 
 // ─── Stage 6: Cross-category TOP 3 selection ─────────────────────────────────
 
