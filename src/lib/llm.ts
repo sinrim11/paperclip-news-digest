@@ -8,7 +8,9 @@
 import * as http from 'node:http';
 
 const LLM_BASE = (process.env.LLM_BASE_URL ?? 'http://localhost:1234/v1').replace(/\/$/, '');
-const LLM_MODEL = process.env.LLM_MODEL ?? 'supergemma4-26b-uncensored-mlx-v2';
+const LLM_MODEL = process.env.LLM_MODEL ?? 'qwen3.6-35b-a3b-mlx';
+// LM Studio server has API-token auth enabled — requests without a Bearer token get 401.
+const LLM_API_KEY = process.env.LLM_API_KEY ?? '';
 
 // Guard: reject any backend that isn't LM Studio on localhost:1234
 if (!LLM_BASE.includes('localhost:1234')) {
@@ -28,6 +30,12 @@ export interface ChatOptions {
   maxTokens?: number;
   model?: string;
   timeoutMs?: number;
+  /**
+   * JSON Schema for structured output (LM Studio response_format json_schema).
+   * When set, the server constrains decoding to the schema; if the server
+   * rejects response_format, the call is retried once without it.
+   */
+  schema?: Record<string, unknown>;
 }
 
 interface ChatChoice {
@@ -51,6 +59,7 @@ function httpPost(url: string, body: string, timeoutMs = 600_000): Promise<strin
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(body),
+        ...(LLM_API_KEY && { Authorization: `Bearer ${LLM_API_KEY}` }),
       },
     };
 
@@ -86,7 +95,12 @@ async function fetchAvailableModel(): Promise<string> {
   return new Promise((resolve) => {
     const url = new URL(`${LLM_BASE}/models`);
     const req = http.get(
-      { hostname: url.hostname, port: url.port || 80, path: url.pathname },
+      {
+        hostname: url.hostname,
+        port: url.port || 80,
+        path: url.pathname,
+        headers: { ...(LLM_API_KEY && { Authorization: `Bearer ${LLM_API_KEY}` }) },
+      },
       (res) => {
         const chunks: Buffer[] = [];
         res.on('data', (c: Buffer) => chunks.push(c));
@@ -120,10 +134,28 @@ async function callLLM(
     stream: false,
   };
 
-  // JSON mode: rely on prompt instructions ("순수 JSON만 출력") + extractJson fallback.
-  // LM Studio does not support response_format: json_object.
+  // Structured output: current LM Studio supports response_format json_schema.
+  // Prompt-level "순수 JSON만 출력" + extractJson stay as fallback for schema-less calls.
+  if (options.schema) {
+    body.response_format = {
+      type: 'json_schema',
+      json_schema: { name: 'response', schema: options.schema },
+    };
+  }
 
-  const text = await httpPost(`${LLM_BASE}/chat/completions`, JSON.stringify(body), options.timeoutMs);
+  let text: string;
+  try {
+    text = await httpPost(`${LLM_BASE}/chat/completions`, JSON.stringify(body), options.timeoutMs);
+  } catch (err) {
+    const msg = String(err);
+    if (options.schema && (msg.includes('response_format') || msg.includes('json_schema'))) {
+      console.warn('[llm] server rejected response_format json_schema — retrying without it');
+      delete body.response_format;
+      text = await httpPost(`${LLM_BASE}/chat/completions`, JSON.stringify(body), options.timeoutMs);
+    } else {
+      throw err;
+    }
+  }
   const data = JSON.parse(text) as ChatCompletionResponse;
   const content = data.choices?.[0]?.message?.content ?? '';
   if (!content.trim()) {
