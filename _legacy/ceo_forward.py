@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from telegram_bridge import _get, API_BASE, INBOX_ISSUE_ID, CEO_AGENT_ID
 
 # Telegram
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "REDACTED-ROTATED-TELEGRAM-TOKEN")
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "REDACTED-ROTATE-ME")
 CHAT_ID = "7187585050"
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 

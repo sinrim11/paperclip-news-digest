@@ -17,7 +17,7 @@ fi
 # LM Studio health check
 LLM_URL="http://localhost:1234/v1/models"
 LLM_MODEL="supergemma4-26b-uncensored-mlx-v2"
-BOT_TOKEN="REDACTED-ROTATED-TELEGRAM-TOKEN"
+BOT_TOKEN="REDACTED-ROTATE-ME"
 CHAT_ID="7187585050"
 
 if ! curl -sf "$LLM_URL" >/dev/null 2>&1; then

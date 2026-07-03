@@ -14,7 +14,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
 
 # Configuration
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "REDACTED-ROTATED-TELEGRAM-TOKEN")
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "REDACTED-ROTATE-ME")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "7187585050")
 PAPERCLIP_API = os.getenv("PAPERCLIP_API_URL", "http://127.0.0.1:3100/api")
 PAPERCLIP_COMPANY_ID = os.getenv("PAPERCLIP_COMPANY_ID", "64e10e8b-55f9-4792-ada5-d6ab564be978")

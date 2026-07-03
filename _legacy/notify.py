@@ -6,7 +6,7 @@ State file tracks (id → status) snapshot; diff against it to find transitions.
 """
 import json, urllib.request, urllib.parse
 
-BOT_TOKEN = "REDACTED-ROTATED-TELEGRAM-TOKEN"
+BOT_TOKEN = "REDACTED-ROTATE-ME"
 CHAT_ID = "7187585050"
 API = "http://127.0.0.1:3100/api"
 COMPANY_ID = "64e10e8b-55f9-4792-ada5-d6ab564be978"

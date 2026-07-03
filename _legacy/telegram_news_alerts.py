@@ -10,7 +10,7 @@ import urllib.parse
 from typing import Optional, Dict, Any
 from datetime import datetime
 
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "REDACTED-ROTATED-TELEGRAM-TOKEN")
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "REDACTED-ROTATE-ME")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "7187585050")
 
 def send_telegram_message(text: str, parse_mode: str = "HTML") -> bool:
