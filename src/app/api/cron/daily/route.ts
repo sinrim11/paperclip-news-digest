@@ -1,12 +1,16 @@
 /**
  * GET /api/cron/daily  (also POST for backward compat)
- * Triggered at 07:00 KST every day (cron: "0 22 * * *" UTC).
- * Generates today's digest and sends a Slack notification.
+ * Triggered at 06:30 KST by launchd (com.news-digest.daily).
+ * Generates today's digest via direct function call — NOT an HTTP self-call,
+ * which used to die on undici's 300s headersTimeout during long generations —
+ * then sends Slack/Telegram notifications with market + TOP3 from the DB.
  *
  * Authentication: Authorization: Bearer <CRON_SECRET>
  */
 
 import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/db';
+import { generateDailyDigest } from '@/lib/generate-digest';
 import { sendSlack } from '@/lib/slack';
 import { sendTelegram } from '@/lib/telegram';
 
@@ -22,35 +26,36 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const host = req.headers.get('host') ?? 'localhost:3000';
-  const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-  const baseUrl = process.env.NEXTAUTH_URL ?? `${protocol}://${host}`;
-  // Use KST (UTC+9) — cron fires at 22:00 UTC = 07:00 KST next day,
-  // so raw UTC date would be yesterday's date. Must offset to get KST date.
+  // KST 기준 오늘 날짜 (06:30 KST 실행)
   const kst = new Date();
   kst.setTime(kst.getTime() + 9 * 60 * 60 * 1000);
   const today = kst.toISOString().slice(0, 10);
 
-  const res = await fetch(`${baseUrl}/api/digest/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ date: today }),
-  });
+  const { status, payload } = await generateDailyDigest({ date: today });
 
-  const data = await res.json() as {
-    digestId?: string;
-    message?: string;
-    market?: { kospi?: { value?: number; change?: string }; usdKrw?: { value?: number } };
-    top3?: Array<{ title?: string; urgency?: string }>;
-  };
+  if (status === 200) {
+    // Notification content comes from the DB (single source of truth)
+    const targetDate = new Date(today);
+    targetDate.setUTCHours(0, 0, 0, 0);
+    const digest = await prisma.dailyDigest.findFirst({
+      where: { date: targetDate, archived: false },
+      include: {
+        marketDaily: true,
+        newsItems: {
+          where: { isTop3: true },
+          orderBy: { top3Rank: 'asc' },
+          select: { title: true, top3Rank: true, category: true },
+        },
+      },
+    });
 
-  if (res.ok) {
-    const marketLine = data.market?.kospi
-      ? `📊 KOSPI ${data.market.kospi.value} (${data.market.kospi.change})  ·  USD/KRW ${data.market.usdKrw?.value}`
+    const m = digest?.marketDaily;
+    const marketLine = m?.kospiValue
+      ? `📊 KOSPI ${m.kospiValue} (${m.kospiChange ?? ''})  ·  USD/KRW ${m.usdKrwValue ?? '-'}`
       : '';
-    const top3Lines = (data.top3 ?? [])
+    const top3Lines = (digest?.newsItems ?? [])
       .slice(0, 3)
-      .map((item, i) => `${i + 1}. ${item.title ?? ''}`)
+      .map((item, i) => `${item.top3Rank ?? i + 1}. [${item.category}] ${item.title}`)
       .join('\n');
 
     const notifyText = [
@@ -64,11 +69,11 @@ export async function POST(req: Request) {
 
     await Promise.all([sendSlack(notifyText), sendTelegram(notifyText)]);
   } else {
-    await sendTelegram(`⚠️ [뉴스다이제스트] ${today} 생성 실패 (HTTP ${res.status}) — 수동 확인 필요`);
+    await sendTelegram(`⚠️ [뉴스다이제스트] ${today} 생성 실패 — 수동 확인 필요 (${JSON.stringify(payload).slice(0, 150)})`);
   }
 
-  return NextResponse.json(data, { status: res.status });
+  return NextResponse.json(payload, { status });
 }
 
-// Spec requires GET (Vercel Cron / GitHub Actions / external schedulers use GET)
+// GET for external schedulers / manual curl
 export const GET = POST;

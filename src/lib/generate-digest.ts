@@ -1,0 +1,379 @@
+/**
+ * Daily digest orchestration (extracted from /api/digest/generate).
+ *
+ * 1. Market data (live Yahoo Finance)
+ * 2. Collect + cluster articles per category
+ * 3. Sequential category LLM curation (local LM Studio)
+ * 4. TOP 3 selection (second LLM pass)
+ * 5. Persist to PostgreSQL + wiki sync
+ *
+ * Called directly by both /api/digest/generate and /api/cron/daily —
+ * the cron route used to self-call over HTTP, which hit undici's 300s
+ * headersTimeout on long generations (verified 2026-07-03).
+ */
+
+import { prisma } from '@/lib/db';
+import { chatJSON } from '@/lib/llm';
+import { collectByCategory, clusterArticles } from '@/lib/news-collector';
+import { fetchRealMarketData } from '@/lib/market-fetcher';
+import { buildCategoryPrompt, buildTop3Prompt } from '@/lib/prompts/daily-digest';
+import { syncDigestToWiki } from '@/lib/wiki-sync';
+import { aggregateEntityStats } from '@/lib/entity-stat-aggregator';
+import { writeLedgerEntries, writeDailyDigestWikiEntry } from '@/lib/wiki-db';
+import {
+  CATEGORIES,
+  toCategoryLabel,
+  type CategoryKey,
+  type Category,
+  type MarketSnapshot,
+  type LLMCategoryResult,
+  type LLMTop3Item,
+  type RawArticle,
+  type RawCluster,
+} from '@/lib/types';
+
+// NOTE: json_schema response_format is NOT passed here — verified 2026-07-03 that
+// qwen3.6-35b-a3b-mlx returns empty content under it (llm.ts still auto-falls-back
+// if a schema is ever supplied). Prompt-JSON + repair is the reliable path.
+// maxTokens 16384: qwen3.6 thinking can consume 7k+ tokens before content —
+// 8192 truncated category JSON mid-string on 2026-07-03.
+const CATEGORY_MAX_TOKENS = 16_384;
+
+const VALID_URGENCY = ['breaking', 'watch', 'note'] as const;
+type UrgencyValue = (typeof VALID_URGENCY)[number];
+
+/** qwen3.6 returns consensus/conflicting facts as a string array at times — schema wants String?. */
+function asTextOrNull(v: unknown): string | null {
+  if (v == null) return null;
+  if (Array.isArray(v)) return v.map(String).join(' ') || null;
+  return String(v);
+}
+
+function asUrgency(v: unknown): UrgencyValue {
+  return VALID_URGENCY.includes(v as UrgencyValue) ? (v as UrgencyValue) : 'note';
+}
+
+export interface GenerateDigestParams {
+  date?: string;
+  force?: boolean;
+  categories?: CategoryKey[];
+  preCollectedArticles?: Record<string, RawArticle[]>;
+}
+
+export interface GenerateDigestResult {
+  status: number;
+  payload: Record<string, unknown>;
+}
+
+export async function generateDailyDigest(body: GenerateDigestParams): Promise<GenerateDigestResult> {
+  const dateStr = body.date ?? new Date().toISOString().slice(0, 10);
+  const targetDate = new Date(dateStr);
+  targetDate.setUTCHours(0, 0, 0, 0);
+  // When specific categories are requested, treat it as a partial fill (always run)
+  const activeCategories: CategoryKey[] = (body.categories && body.categories.length > 0)
+    ? body.categories.filter((c) => (CATEGORIES as readonly string[]).includes(c))
+    : [...CATEGORIES];
+
+  // ── Guard: skip if already done (unless forced or partial category run) ──
+  // CMP-131: only consider non-archived digests as "existing" for the skip guard
+  const existingActive = await prisma.dailyDigest.findFirst({ where: { date: targetDate, archived: false } });
+  if (existingActive?.status === 'done' && !body.force && activeCategories.length === CATEGORIES.length) {
+    return { status: 200, payload: { message: 'Already generated', digestId: existingActive.id } };
+  }
+
+  // ── Create / reset DailyDigest record ────────────────────────────────────
+  // Include archived records so we update-in-place rather than hit a unique constraint
+  const existing = existingActive ?? await prisma.dailyDigest.findFirst({ where: { date: targetDate } });
+  const digest = existing
+    ? await prisma.dailyDigest.update({ where: { id: existing.id }, data: { status: 'in_progress', archived: false } })
+    : await prisma.dailyDigest.create({ data: { date: targetDate, status: 'in_progress' } });
+
+  try {
+    // ── Step 1: Market data (live from Yahoo Finance) ─────────────────────
+    let marketSnapshot: MarketSnapshot | undefined;
+    try {
+      const mResult = await fetchRealMarketData(dateStr);
+      marketSnapshot = mResult;
+      await prisma.marketDaily.upsert({
+        where: { digestId: digest.id },
+        create: {
+          digestId: digest.id,
+          date: targetDate,
+          kospiValue: mResult.kospi.value,    kospiChange: mResult.kospi.change,    kospiDir: mResult.kospi.direction,
+          kosdaqValue: mResult.kosdaq.value,  kosdaqChange: mResult.kosdaq.change,  kosdaqDir: mResult.kosdaq.direction,
+          usdKrwValue: mResult.usdKrw.value,  usdKrwChange: mResult.usdKrw.change,  usdKrwDir: mResult.usdKrw.direction,
+          wtiValue: mResult.wti.value,        wtiChange: mResult.wti.change,        wtiDir: mResult.wti.direction,
+          us10yValue: mResult.us10y.value,    us10yChange: mResult.us10y.change,    us10yDir: mResult.us10y.direction,
+          btcUsdValue: mResult.btcUsd.value,  btcUsdChange: mResult.btcUsd.change,  btcUsdDir: mResult.btcUsd.direction,
+          nasdaqValue: mResult.nasdaq.value,  nasdaqChange: mResult.nasdaq.change,  nasdaqDir: mResult.nasdaq.direction,
+        },
+        update: {
+          kospiValue: mResult.kospi.value,    kospiChange: mResult.kospi.change,    kospiDir: mResult.kospi.direction,
+          kosdaqValue: mResult.kosdaq.value,  kosdaqChange: mResult.kosdaq.change,  kosdaqDir: mResult.kosdaq.direction,
+          usdKrwValue: mResult.usdKrw.value,  usdKrwChange: mResult.usdKrw.change,  usdKrwDir: mResult.usdKrw.direction,
+          wtiValue: mResult.wti.value,        wtiChange: mResult.wti.change,        wtiDir: mResult.wti.direction,
+          us10yValue: mResult.us10y.value,    us10yChange: mResult.us10y.change,    us10yDir: mResult.us10y.direction,
+          btcUsdValue: mResult.btcUsd.value,  btcUsdChange: mResult.btcUsd.change,  btcUsdDir: mResult.btcUsd.direction,
+          nasdaqValue: mResult.nasdaq.value,  nasdaqChange: mResult.nasdaq.change,  nasdaqDir: mResult.nasdaq.direction,
+        },
+      });
+    } catch (err) {
+      console.error('[generate] market step failed:', err);
+    }
+
+    // ── Step 2: Collect and cluster articles ─────────────────────────────
+    const clustersByCategory: Map<CategoryKey, RawCluster[]> = body.preCollectedArticles
+      ? new Map(
+          Object.entries(body.preCollectedArticles).map(([cat, arts]) => [
+            cat as CategoryKey,
+            clusterArticles(arts as RawArticle[], 20),
+          ]),
+        )
+      : await collectByCategory(20);
+
+    // ── Step 3: Category LLM calls (sequential — local server, one at a time) ──
+    type SettledResult = { status: 'fulfilled'; value: LLMCategoryResult } | { status: 'rejected'; reason: unknown };
+    const categoryResults: SettledResult[] = [];
+
+    for (const catKey of activeCategories) {
+      const clusters = clustersByCategory.get(catKey) ?? [];
+      if (clusters.length === 0) {
+        // No collected articles → skip the LLM entirely. Never let it invent news.
+        console.warn(`[generate] ${catKey}: 0 clusters — skipping category (no articles collected)`);
+        categoryResults.push({ status: 'rejected', reason: new Error(`${catKey}: no articles collected`) });
+        continue;
+      }
+      const multiCount = clusters.filter((c) => c.sourceCount >= 2).length;
+      console.log(`[generate] ${catKey}: ${clusters.length} clusters (${multiCount} multi-source)`);
+      const koreanLabel = toCategoryLabel(catKey);
+      const msgs = buildCategoryPrompt(dateStr, koreanLabel, clusters, marketSnapshot);
+
+      let settled: SettledResult = { status: 'rejected', reason: new Error('not started') };
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const value = await chatJSON<LLMCategoryResult>(msgs, { temperature: 0.3, maxTokens: CATEGORY_MAX_TOKENS });
+          if (value?.items?.length > 0) {
+            settled = { status: 'fulfilled', value };
+            break;
+          }
+          console.warn(`[generate] ${catKey} attempt ${attempt + 1}: 0 items returned, retrying`);
+        } catch (err) {
+          console.warn(`[generate] ${catKey} attempt ${attempt + 1} failed:`, err);
+        }
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 3000));
+        else settled = { status: 'rejected', reason: new Error(`${catKey}: all 3 attempts failed or empty`) };
+      }
+      categoryResults.push(settled);
+      console.log(`[generate] ${catKey}: ${settled.status}`);
+    }
+
+    // ── Step 4: Persist category briefings + news items ───────────────────
+    const successfulCategories: LLMCategoryResult[] = [];
+
+    for (let i = 0; i < activeCategories.length; i++) {
+      const result = categoryResults[i];
+      const catKey = activeCategories[i];
+
+      if (result.status === 'rejected') {
+        console.error(`[generate] category ${catKey} failed:`, result.reason);
+        continue;
+      }
+
+      const llmCat = result.value;
+
+      // Per-category persistence isolation: one bad payload must not fail the digest
+      try {
+
+      // Delete old items for this category then bulk-create
+      await prisma.newsItem.deleteMany({
+        where: { digestId: digest.id, category: catKey },
+      });
+
+      // Index all member URLs → cluster (LLM may translate titles; URL is stable)
+      const catClusters = clustersByCategory.get(catKey) ?? [];
+      const clusterByUrl = new Map<string, RawCluster>();
+      for (const c of catClusters) {
+        clusterByUrl.set(c.url, c);
+        for (const a of c.articles) clusterByUrl.set(a.url, c);
+      }
+
+      // Sort LLM items by urgency; dedup by title
+      const urgencyOrder: Record<string, number> = { breaking: 0, watch: 1, note: 2 };
+      const seenTitles = new Set<string>();
+      const dedupedItems = llmCat.items.filter((item) => {
+        const key = (item.title ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+        if (seenTitles.has(key)) return false;
+        seenTitles.add(key);
+        return true;
+      });
+      dedupedItems.sort((a, b) => (urgencyOrder[a.urgency] ?? 2) - (urgencyOrder[b.urgency] ?? 2));
+      const finalItems = dedupedItems.slice(0, 10);
+
+      // Fewer than 10 items is acceptable — never invent news to pad the count.
+      // (The old "supplement from training data" pass generated fake articles.)
+      if (finalItems.length < 10) {
+        console.warn(`[generate] ${catKey}: only ${finalItems.length}/10 items from collected articles — publishing as-is`);
+      }
+
+      // Upsert CategoryBriefing
+      const briefing = await prisma.categoryBriefing.upsert({
+        where: { digestId_category: { digestId: digest.id, category: catKey } },
+        create: { digestId: digest.id, category: catKey, summary: llmCat.summary, newsCount: finalItems.length },
+        update: { summary: llmCat.summary, newsCount: finalItems.length },
+      });
+
+      const itemsToCreate = finalItems.map((item, idx) => {
+        // URL match is stable even when LLM translates/rewrites titles
+        const itemTitleKey = (item.title ?? '').trim().toLowerCase();
+        const cluster = clusterByUrl.get(item.sourceUrl ?? '')
+          ?? [...clusterByUrl.values()].find((c) =>
+              c.title.trim().toLowerCase().slice(0, 20) === itemTitleKey.slice(0, 20));
+
+        return {
+          digestId: digest.id,
+          categoryBriefingId: briefing.id,
+          category: catKey,
+          newsOrder: idx + 1,
+          title:            item.title        ?? '',
+          urgency:          asUrgency(item.urgency),
+          fact:             item.fact         ?? '',
+          impact:           item.impact       ?? '',
+          action:           item.action       ?? '',
+          contextTags:      item.contextTags  ?? [],
+          source:           item.source       ?? '',
+          sourceUrl:        item.sourceUrl    ?? '',
+          isTop3: false,
+          relatedData: [],
+          contextLinks: [],
+          upcomingEvents: [],
+          // Cluster-sourced metadata (authoritative)
+          sourceCount:      cluster?.sourceCount          ?? 1,
+          sourceList:       cluster?.sourceList           ?? [],
+          // LLM-generated consensus/conflict (coerced — qwen3.6 may emit arrays)
+          consensusFacts:   asTextOrNull(item.consensusFacts),
+          conflictingFacts: asTextOrNull(item.conflictingFacts),
+          // GitHub Trending passthrough
+          isGithubTrending: cluster?.isGithubTrending     ?? false,
+          githubStarsDelta: cluster?.githubStarsDelta     ?? null,
+          githubLanguage:   cluster?.githubLanguage       ?? null,
+        };
+      });
+
+      await prisma.newsItem.createMany({ data: itemsToCreate });
+
+      // Update context tag history
+      for (const tag of llmCat.items.flatMap((it) => it.contextTags ?? []).filter(Boolean)) {
+        await prisma.contextTagHistory.upsert({
+          where: { tag },
+          create: { tag, count: 1, lastSeenDate: targetDate },
+          update: { count: { increment: 1 }, lastSeenDate: targetDate },
+        });
+      }
+
+      successfulCategories.push(llmCat);
+      } catch (err) {
+        console.error(`[generate] ${catKey}: persistence failed — skipping category:`, err);
+      }
+    }
+
+    // ── Step 5: TOP 3 selection ───────────────────────────────────────────
+    if (successfulCategories.length > 0) {
+      try {
+        // Fetch all persisted items so we can match by DB id instead of title
+        const allDbItems = await prisma.newsItem.findMany({
+          where: { digestId: digest.id },
+          select: { id: true, title: true, category: true },
+          orderBy: [{ category: 'asc' }, { newsOrder: 'asc' }],
+        });
+
+        const top3Input = successfulCategories.map((c) => ({
+          category: c.category as Category,
+          items: c.items.map((it) => ({
+            title: it.title,
+            urgency: it.urgency,
+            fact: it.fact,
+            impact: it.impact,
+            action: it.action,
+          })),
+        }));
+
+        let top3Result: { top3: LLMTop3Item[] } | null = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            top3Result = await chatJSON<{ top3: LLMTop3Item[] }>(
+              buildTop3Prompt(dateStr, top3Input),
+              { temperature: 0.2, maxTokens: CATEGORY_MAX_TOKENS },
+            );
+            if (top3Result?.top3?.length > 0) break;
+            console.warn(`[generate] top3 attempt ${attempt + 1}: empty top3 array, retrying`);
+            top3Result = null;
+          } catch (err) {
+            console.warn(`[generate] top3 attempt ${attempt + 1} failed:`, err);
+            if (attempt < 2) await new Promise((r) => setTimeout(r, 3000));
+          }
+        }
+
+        if (!top3Result?.top3?.length) {
+          console.error('[generate] top3: all attempts returned empty — skipping');
+        }
+
+        // Match TOP 3 items by closest title (LLM may slightly alter titles)
+        for (const topItem of (top3Result?.top3 ?? []).slice(0, 3)) {
+          const normalizedTop = topItem.title.trim().toLowerCase();
+          const match = allDbItems.find(
+            (db) => db.title.trim().toLowerCase() === normalizedTop,
+          ) ?? allDbItems.find(
+            (db) => normalizedTop.includes(db.title.trim().toLowerCase().slice(0, 15))
+              || db.title.trim().toLowerCase().includes(normalizedTop.slice(0, 15)),
+          );
+
+          if (match) {
+            await prisma.newsItem.update({
+              where: { id: match.id },
+              data: {
+                isTop3: true,
+                top3Rank: topItem.rank,
+                relatedData: topItem.relatedData ?? [],
+                contextLinks: topItem.contextLinks ?? [],
+                upcomingEvents: topItem.upcomingEvents ?? [],
+              },
+            });
+          } else {
+            console.warn(`[generate] top3: no DB match for "${topItem.title}"`);
+          }
+        }
+      } catch (err) {
+        console.error('[generate] top3 step failed:', err);
+      }
+    }
+
+    // ── Finalise ─────────────────────────────────────────────────────────
+    await prisma.dailyDigest.update({ where: { id: digest.id }, data: { status: 'done' } });
+
+    // ── Wiki sync (non-blocking — failure doesn't affect digest) ──────
+    try {
+      await syncDigestToWiki(digest.id, prisma);
+      console.log(`[generate] wiki synced for ${dateStr}`);
+    } catch (err) {
+      console.error('[generate] wiki sync failed (non-fatal):', err);
+    }
+
+    // ── EntityStat aggregation + WikiEntry DB (non-blocking) ──────────
+    try {
+      const [entityCount] = await Promise.all([
+        aggregateEntityStats(digest.id, targetDate, prisma),
+        writeDailyDigestWikiEntry(digest.id, dateStr, prisma),
+      ]);
+      await writeLedgerEntries(targetDate, prisma);
+      console.log(`[generate] entity stats: ${entityCount} entities, ledger entries written`);
+    } catch (err) {
+      console.error('[generate] entity-stat/wiki-db failed (non-fatal):', err);
+    }
+
+    return { status: 200, payload: { digestId: digest.id, date: dateStr, status: 'done' } };
+  } catch (err) {
+    await prisma.dailyDigest.update({ where: { id: digest.id }, data: { status: 'failed' } });
+    console.error('[generate] fatal error:', err);
+    return { status: 500, payload: { error: String(err) } };
+  }
+}
