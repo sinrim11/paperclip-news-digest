@@ -43,7 +43,19 @@ fi
 COUNT=$(echo "$DATA" | wc -l | tr -d ' ')
 echo "[$(ts)] deep-dive 시작 — ${COUNT}건 입력" >> "$LOG"
 
+# 독자 프로필 (config/reader-profile.json, gitignored) — 있으면 딥다이브를 독자 상황 관점으로
+PROFILE=""
+if [ -f config/reader-profile.json ]; then
+  PROFILE=$(python3 -c "
+import json
+p = json.load(open('config/reader-profile.json'))
+focus = ' / '.join(v for v in (p.get('focusCategories') or {}).values())
+print(f\"## 독자 프로필\n{p.get('summary','')}\n관심 초점: {focus}\n리포트의 '자산별 시사점'과 '다음 주 체크포인트'는 이 독자의 의사결정(특히 주택 매수 준비) 관점에서 작성할 것.\")" 2>>"$LOG")
+fi
+
 PROMPT="당신은 시니어 투자 전략가입니다. 아래는 지난 7일간 수집된 뉴스 다이제스트입니다 (형식: 날짜|카테고리|긴급도|TOP3여부|제목|팩트).
+
+${PROFILE}
 
 ${DATA}
 

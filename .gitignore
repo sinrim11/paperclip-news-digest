@@ -23,3 +23,6 @@ backup/
 .env.local
 *.rej
 *.rej.orig
+
+# 개인화 프로필 (재무 정보 포함 — 절대 커밋 금지)
+config/reader-profile.json

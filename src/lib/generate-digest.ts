@@ -316,6 +316,12 @@ export async function generateDailyDigest(body: GenerateDigestParams): Promise<G
 
         if (!top3Result?.top3?.length) {
           console.error('[generate] top3: all attempts returned empty — skipping');
+        } else {
+          // Clear stale flags first — partial (category) runs re-select TOP3 over the whole digest
+          await prisma.newsItem.updateMany({
+            where: { digestId: digest.id, isTop3: true },
+            data: { isTop3: false, top3Rank: null },
+          });
         }
 
         // Match by prompt index first; title matching is the fallback only

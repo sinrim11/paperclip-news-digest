@@ -9,7 +9,42 @@
  * CMP-131: new system+user prompt spec — fact accuracy first, no hallucination.
  */
 
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import type { Category, RawCluster, MarketSnapshot } from '../types';
+
+// ─── Reader profile (config/reader-profile.json, gitignored) ─────────────────
+// Personalizes category curation: focused topics get priority selection.
+
+interface ReaderProfile {
+  summary?: string;
+  focusCategories?: Record<string, string>;
+}
+
+const CATEGORY_LABEL_TO_KEY: Record<string, string> = {
+  '글로벌': 'GLOBAL', '증권': 'STOCKS', 'AI': 'AI', '정부정책': 'POLICY', '정치': 'POLICY', '부동산': 'REALESTATE',
+};
+
+let _profile: ReaderProfile | null | undefined;
+function loadReaderProfile(): ReaderProfile | null {
+  if (_profile !== undefined) return _profile;
+  try {
+    _profile = JSON.parse(readFileSync(join(process.cwd(), 'config', 'reader-profile.json'), 'utf-8')) as ReaderProfile;
+  } catch {
+    _profile = null;
+  }
+  return _profile;
+}
+
+/** Returns the reader-profile block for a category prompt, or '' when not configured. */
+function readerProfileBlock(categoryLabel: string): string {
+  const profile = loadReaderProfile();
+  if (!profile) return '';
+  const key = CATEGORY_LABEL_TO_KEY[categoryLabel] ?? categoryLabel;
+  const focus = profile.focusCategories?.[key];
+  if (!focus) return '';
+  return `\n\n## 독자 프로필 (큐레이션 우선순위에 반영)\n${profile.summary ?? ''}\n${focus}\n단, 관심사와 무관해도 그 자체로 중대한 뉴스는 정상 포함하고, 기사에 없는 내용을 지어내지 마세요.`;
+}
 
 // ─── Stage 1: Market data collection ─────────────────────────────────────────
 
@@ -121,7 +156,7 @@ export function buildCategoryPrompt(
     {
       role: 'user',
       content: `오늘 날짜: ${date}
-카테고리: ${category}${marketContext}
+카테고리: ${category}${marketContext}${readerProfileBlock(category)}
 
 ## 수집된 뉴스 클러스터 (${regularClusters.length}건)
 

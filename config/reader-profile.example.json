@@ -1,0 +1,9 @@
+{
+  "_comment": "config/reader-profile.json(gitignored)으로 복사해 개인화. summary와 focusCategories는 LLM 프롬프트에 그대로 주입됨",
+  "summary": "독자 상황 요약 (연령대, 주거 상태, 목표 등)",
+  "focusCategories": {
+    "REALESTATE": "이 카테고리 큐레이션 시 우선할 관심 주제 서술",
+    "STOCKS": "..."
+  },
+  "interests": ["키워드1", "키워드2"]
+}
