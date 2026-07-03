@@ -9,6 +9,8 @@ export function NavLinks() {
   const links = [
     { href: '/', label: '오늘' },
     { href: '/weekly', label: '주간' },
+    { href: '/tracker', label: '매수 트래커' },
+    { href: '/guide/policy', label: '정책 가이드' },
     { href: '/search', label: '검색' },
     { href: '/ab', label: 'A/B 평가' },
   ];

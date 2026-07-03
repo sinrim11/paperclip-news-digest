@@ -13,6 +13,7 @@ import { prisma } from '@/lib/db';
 import { generateDailyDigest } from '@/lib/generate-digest';
 import { sendSlack } from '@/lib/slack';
 import { sendTelegram } from '@/lib/telegram';
+import { detectTriggers } from '@/lib/tracker';
 
 function verifyCronSecret(req: Request): boolean {
   const cronSecret = process.env.CRON_SECRET;
@@ -58,11 +59,27 @@ export async function POST(req: Request) {
       .map((item, i) => `${item.top3Rank ?? i + 1}. [${item.category}] ${item.title}`)
       .join('\n');
 
+    // 매수 트리거 감지 — 변경점이 있을 때만 브리핑에 섹션 추가
+    let triggerSection = '';
+    if (digest) {
+      const todaysItems = await prisma.newsItem.findMany({
+        where: { digestId: digest.id },
+        select: { title: true, fact: true, category: true },
+      });
+      const hits = detectTriggers(todaysItems);
+      if (hits.length > 0) {
+        const lines = hits.slice(0, 5).map((h) => `· [${h.label}] ${h.title.slice(0, 60)}`);
+        triggerSection = `\n\n🚨 매수 트리거 감지 (${hits.length}건)\n${lines.join('\n')}`;
+      }
+    }
+
+    const baseUrl = process.env.PUBLIC_DASHBOARD_URL ?? process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3200';
     const notifyText = [
       `🔥 오늘의 핵심 3선 (${today})`,
       marketLine,
       top3Lines || '다이제스트 생성 완료',
-      `📎 ${process.env.PUBLIC_DASHBOARD_URL ?? process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3200'}`,
+      triggerSection ? `${triggerSection}\n📊 트래커: ${baseUrl}/tracker` : '',
+      `📎 ${baseUrl}`,
     ]
       .filter(Boolean)
       .join('\n');

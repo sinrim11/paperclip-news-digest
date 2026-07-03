@@ -1,9 +1,18 @@
 {
-  "_comment": "config/reader-profile.json(gitignored)으로 복사해 개인화. summary와 focusCategories는 LLM 프롬프트에 그대로 주입됨",
+  "_comment": "config/reader-profile.json(gitignored)으로 복사해 개인화. summary/focusCategories는 LLM 프롬프트에 주입되고, finances는 /tracker 페이지 예산 계산에 사용됨",
   "summary": "독자 상황 요약 (연령대, 주거 상태, 목표 등)",
   "focusCategories": {
     "REALESTATE": "이 카테고리 큐레이션 시 우선할 관심 주제 서술",
     "STOCKS": "..."
   },
-  "interests": ["키워드1", "키워드2"]
+  "interests": ["키워드1", "키워드2"],
+  "finances": {
+    "annualIncome": 0,
+    "usableCapital": 0,
+    "capitalBreakdown": { "항목": 0 },
+    "jeonseDeposit": 0,
+    "jeonseExpiry": "YYYY-MM-DD",
+    "jeonseInsurance": false,
+    "subscriptionAccountTotal": 0
+  }
 }

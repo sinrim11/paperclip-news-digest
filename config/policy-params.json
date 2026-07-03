@@ -1,0 +1,32 @@
+{
+  "_comment": "부동산 대출 규제 파라미터 (공개 정보). 정책 변경 시 이 파일만 갱신하면 /tracker 예산 계산과 /guide/policy가 따라감",
+  "asOf": "2026-07-03",
+  "regime": "10·15 대책 체계 — 서울 전역+경기 12곳 규제지역·토지거래허가구역, 2026-06-30 동탄·용인기흥·구리 추가",
+  "ltv": {
+    "regulatedBase": 0.4,
+    "firstTimeBonus": 0.1,
+    "nonRegulated": 0.7
+  },
+  "loanCapByPrice": [
+    { "maxPrice": 1500000000, "cap": 600000000 },
+    { "maxPrice": 2500000000, "cap": 400000000 },
+    { "maxPrice": null, "cap": 200000000 }
+  ],
+  "dsr": {
+    "ratio": 0.4,
+    "stressAddPctRegulated": 3.0,
+    "stressAddPctOther": 1.2,
+    "assumedBaseRatePct": 4.0,
+    "termYears": 30
+  },
+  "landPermitZone": {
+    "active": true,
+    "moveInMonths": 4,
+    "residenceYears": 2
+  },
+  "easedScenario": {
+    "_comment": "규제 완화 가정 시나리오 (LTV 70% + 스트레스 2단계)",
+    "ltv": 0.7,
+    "stressAddPct": 1.2
+  }
+}
