@@ -1,3 +1,5 @@
+'use client';
+
 import dynamic from 'next/dynamic';
 import type { WeeklyDigestContent } from '@/lib/types';
 import type { TimelineNewsItem } from './IssueTimeline';

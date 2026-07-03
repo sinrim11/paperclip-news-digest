@@ -56,13 +56,14 @@ export async function fetchRealMarketData(date: string): Promise<MarketSnapshot>
     direction: 'flat',
   });
 
-  const [kospi, kosdaq, usdKrw, wti, us10y, btcUsd] = await Promise.allSettled([
+  const [kospi, kosdaq, usdKrw, wti, us10y, btcUsd, nasdaq] = await Promise.allSettled([
     fetchSymbol('^KS11'),
     fetchSymbol('^KQ11'),
     fetchSymbol('KRW=X'),
     fetchSymbol('CL=F'),
     fetchSymbol('^TNX'),
     fetchSymbol('BTC-USD'),
+    fetchSymbol('^IXIC'),
   ]);
 
   const ok = <T>(r: PromiseSettledResult<T>): T | null =>
@@ -74,6 +75,7 @@ export async function fetchRealMarketData(date: string): Promise<MarketSnapshot>
   const w  = ok(wti);
   const t  = ok(us10y);
   const b  = ok(btcUsd);
+  const nd = ok(nasdaq);
 
   return {
     date,
@@ -83,5 +85,6 @@ export async function fetchRealMarketData(date: string): Promise<MarketSnapshot>
     wti:    w  ? toIndicator(w.price,  w.prev)         : zero(),
     us10y:  t  ? toIndicator(t.price,  t.prev,  true) : zero(true),
     btcUsd: b  ? toIndicator(b.price,  b.prev)         : zero(),
+    nasdaq: nd ? toIndicator(nd.price, nd.prev)        : zero(),
   };
 }

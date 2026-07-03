@@ -1,14 +1,22 @@
 /**
- * Ollama OpenAI-compatible LLM client.
- * Runtime: Ollama at http://localhost:11434/v1 — no @anthropic-ai/sdk.
+ * OpenAI-compatible LLM client (LM Studio).
+ * Runtime: LM Studio at http://localhost:1234/v1 — no @anthropic-ai/sdk.
  * Uses Node's built-in http module directly to avoid undici headersTimeout issues
  * with large model prompts (Korean article batches can take 60s+ before first byte).
  */
 
 import * as http from 'node:http';
 
-const OLLAMA_BASE = (process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/v1').replace(/\/$/, '');
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'gemma4:26b';
+const LLM_BASE = (process.env.LLM_BASE_URL ?? 'http://localhost:1234/v1').replace(/\/$/, '');
+const LLM_MODEL = process.env.LLM_MODEL ?? 'supergemma4-26b-uncensored-mlx-v2';
+
+// Guard: reject any backend that isn't LM Studio on localhost:1234
+if (!LLM_BASE.includes('localhost:1234')) {
+  throw new Error(
+    `[llm.ts] Forbidden LLM backend: "${LLM_BASE}". Only localhost:1234 (LM Studio) is allowed. ` +
+    `Check LLM_BASE_URL env var — Ollama (localhost:11434) is permanently abandoned.`
+  );
+}
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -19,15 +27,16 @@ export interface ChatOptions {
   temperature?: number;
   maxTokens?: number;
   model?: string;
+  timeoutMs?: number;
 }
 
-interface OllamaChoice {
+interface ChatChoice {
   message: { role: string; content: string; reasoning?: string };
   finish_reason: string;
 }
 
-interface OllamaResponse {
-  choices: OllamaChoice[];
+interface ChatCompletionResponse {
+  choices: ChatChoice[];
 }
 
 /** Make an HTTP POST request using node:http with configurable timeouts. */
@@ -51,7 +60,7 @@ function httpPost(url: string, body: string, timeoutMs = 600_000): Promise<strin
       res.on('end', () => {
         const text = Buffer.concat(chunks).toString('utf-8');
         if (res.statusCode && res.statusCode >= 400) {
-          reject(new Error(`Ollama error ${res.statusCode}: ${text.slice(0, 200)}`));
+          reject(new Error(`LLM error ${res.statusCode}: ${text.slice(0, 200)}`));
         } else {
           resolve(text);
         }
@@ -69,55 +78,63 @@ function httpPost(url: string, body: string, timeoutMs = 600_000): Promise<strin
   });
 }
 
-async function callOllama(
+let _resolvedModel: string | null = null;
+
+/** Returns LLM_MODEL if available, otherwise falls back to first loaded model. */
+async function fetchAvailableModel(): Promise<string> {
+  if (_resolvedModel) return _resolvedModel;
+  return new Promise((resolve) => {
+    const url = new URL(`${LLM_BASE}/models`);
+    const req = http.get(
+      { hostname: url.hostname, port: url.port || 80, path: url.pathname },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => {
+          try {
+            const data = JSON.parse(Buffer.concat(chunks).toString());
+            const models: Array<{ id: string }> = data?.data ?? [];
+            const match = models.find((m) => m.id === LLM_MODEL) ?? models[0];
+            _resolvedModel = match?.id ?? LLM_MODEL;
+          } catch { _resolvedModel = LLM_MODEL; }
+          resolve(_resolvedModel!);
+        });
+        res.on('error', () => { _resolvedModel = LLM_MODEL; resolve(_resolvedModel!); });
+      },
+    );
+    req.on('error', () => { _resolvedModel = LLM_MODEL; resolve(_resolvedModel!); });
+    req.setTimeout(5000, () => { req.destroy(); _resolvedModel = LLM_MODEL; resolve(_resolvedModel!); });
+  });
+}
+
+async function callLLM(
   messages: ChatMessage[],
   options: ChatOptions & { jsonMode?: boolean } = {},
 ): Promise<string> {
-  const nativeBase = OLLAMA_BASE.replace(/\/v1$/, '');
-
-  if (options.jsonMode) {
-    // Use native Ollama API with think:false to prevent gemma4's reasoning
-    // from consuming the token budget and returning empty content
-    const body = {
-      model: options.model ?? OLLAMA_MODEL,
-      messages,
-      format: 'json',
-      stream: false,
-      think: false,
-      options: {
-        temperature: options.temperature ?? 0.3,
-        num_predict: options.maxTokens ?? 4096,
-      },
-    };
-    const text = await httpPost(`${nativeBase}/api/chat`, JSON.stringify(body));
-    const data = JSON.parse(text) as { message?: { content?: string }; done_reason?: string };
-    const content = data.message?.content ?? '';
-    if (!content.trim()) {
-      throw new Error(`Ollama returned no content (done_reason: ${data.done_reason})`);
-    }
-    return content;
-  }
-
-  // OpenAI-compatible endpoint for non-JSON calls
-  const body = {
-    model: options.model ?? OLLAMA_MODEL,
+  const modelId = options.model ?? await fetchAvailableModel();
+  const body: Record<string, unknown> = {
+    model: modelId,
     messages,
     temperature: options.temperature ?? 0.3,
     max_tokens: options.maxTokens ?? 4096,
     stream: false,
   };
-  const text = await httpPost(`${OLLAMA_BASE}/chat/completions`, JSON.stringify(body));
-  const data = JSON.parse(text) as OllamaResponse;
+
+  // JSON mode: rely on prompt instructions ("순수 JSON만 출력") + extractJson fallback.
+  // LM Studio does not support response_format: json_object.
+
+  const text = await httpPost(`${LLM_BASE}/chat/completions`, JSON.stringify(body), options.timeoutMs);
+  const data = JSON.parse(text) as ChatCompletionResponse;
   const content = data.choices?.[0]?.message?.content ?? '';
   if (!content.trim()) {
-    throw new Error('Ollama returned no content');
+    throw new Error('LLM returned no content');
   }
   return content;
 }
 
 /** Plain text completion. */
 export async function chat(messages: ChatMessage[], options: ChatOptions = {}): Promise<string> {
-  return callOllama(messages, options);
+  return callLLM(messages, options);
 }
 
 /**
@@ -125,9 +142,9 @@ export async function chat(messages: ChatMessage[], options: ChatOptions = {}): 
  * The caller's type parameter T describes the expected shape.
  */
 export async function chatJSON<T>(messages: ChatMessage[], options: ChatOptions = {}): Promise<T> {
-  const raw = await callOllama(messages, { ...options, jsonMode: true });
+  const raw = await callLLM(messages, { ...options, jsonMode: true });
 
-  // Strip markdown code fences Ollama sometimes adds
+  // Strip markdown code fences the model sometimes adds
   const cleaned = raw
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```$/, '')
@@ -196,15 +213,15 @@ function extractJson(text: string): string | null {
   try { JSON.parse(repaired); return repaired; } catch { return null; }
 }
 
-/** Health check — returns true if Ollama is reachable. */
-export async function isOllamaHealthy(): Promise<boolean> {
+/** Health check — returns true if LLM server is reachable. */
+export async function isLLMHealthy(): Promise<boolean> {
   try {
-    const text = await httpPost(
-      `${OLLAMA_BASE.replace('/v1', '')}/api/tags`,
-      '{}',
-      5_000,
+    const res = await httpPost(
+      `${LLM_BASE}/chat/completions`,
+      JSON.stringify({ model: LLM_MODEL, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1, stream: false }),
+      10_000,
     ).catch(() => null);
-    return text !== null;
+    return res !== null;
   } catch {
     return false;
   }

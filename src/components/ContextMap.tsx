@@ -47,8 +47,10 @@ export function ContextMap({ items }: { items: ContextMapItem[] }) {
   const activeGroup = activeTag ? tagGroups.find((g) => g.tag === activeTag) : null;
 
   return (
-    <section>
-      <h3 className="font-bold text-lg mb-1">🗺️ 맥락 연결 맵</h3>
+    <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+      <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">
+        맥락 연결 맵
+      </h3>
       <p className="text-xs text-gray-400 mb-4">
         2개 이상의 뉴스에 등장한 태그 — 공통 태그를 클릭하면 관련 뉴스를 확인할 수 있습니다.
       </p>
@@ -159,7 +161,7 @@ export function ContextMap({ items }: { items: ContextMapItem[] }) {
             <button
               key={g.tag}
               onClick={() => setActiveTag(g.tag)}
-              className="text-left bg-white rounded-lg border border-gray-200 p-3 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+              className="text-left bg-white rounded-lg border border-gray-100 p-3 hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm transition-all"
             >
               <div className="font-medium text-sm text-gray-800">#{g.tag}</div>
               <div className="text-xs text-gray-400 mt-1">{g.items.length}건 연결</div>

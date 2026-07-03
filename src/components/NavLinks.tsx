@@ -10,6 +10,7 @@ export function NavLinks() {
     { href: '/', label: '오늘' },
     { href: '/weekly', label: '주간' },
     { href: '/search', label: '검색' },
+    { href: '/ab', label: 'A/B 평가' },
   ];
 
   return (

@@ -11,7 +11,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { chatJSON } from '@/lib/claude';
+import { chatJSON } from '@/lib/llm';
 import { collectByCategory, clusterArticles } from '@/lib/news-collector';
 import { fetchRealMarketData } from '@/lib/market-fetcher';
 import { buildCategoryPrompt, buildTop3Prompt } from '@/lib/prompts/daily-digest';
@@ -34,22 +34,29 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({})) as {
     date?: string;
     force?: boolean;
+    categories?: CategoryKey[];
     preCollectedArticles?: Record<string, RawArticle[]>;
   };
   const dateStr = body.date ?? new Date().toISOString().slice(0, 10);
   const targetDate = new Date(dateStr);
   targetDate.setUTCHours(0, 0, 0, 0);
+  // When specific categories are requested, treat it as a partial fill (always run)
+  const activeCategories: CategoryKey[] = (body.categories && body.categories.length > 0)
+    ? body.categories.filter((c) => (CATEGORIES as readonly string[]).includes(c))
+    : [...CATEGORIES];
 
-  // ── Guard: skip if already done (unless forced) ──────────────────────────
-  // CMP-131: only consider non-archived digests as "existing"
-  const existing = await prisma.dailyDigest.findFirst({ where: { date: targetDate, archived: false } });
-  if (existing?.status === 'done' && !body.force) {
-    return NextResponse.json({ message: 'Already generated', digestId: existing.id }, { status: 200 });
+  // ── Guard: skip if already done (unless forced or partial category run) ──
+  // CMP-131: only consider non-archived digests as "existing" for the skip guard
+  const existingActive = await prisma.dailyDigest.findFirst({ where: { date: targetDate, archived: false } });
+  if (existingActive?.status === 'done' && !body.force && activeCategories.length === CATEGORIES.length) {
+    return NextResponse.json({ message: 'Already generated', digestId: existingActive.id }, { status: 200 });
   }
 
   // ── Create / reset DailyDigest record ────────────────────────────────────
+  // Include archived records so we update-in-place rather than hit a unique constraint
+  const existing = existingActive ?? await prisma.dailyDigest.findFirst({ where: { date: targetDate } });
   const digest = existing
-    ? await prisma.dailyDigest.update({ where: { id: existing.id }, data: { status: 'in_progress' } })
+    ? await prisma.dailyDigest.update({ where: { id: existing.id }, data: { status: 'in_progress', archived: false } })
     : await prisma.dailyDigest.create({ data: { date: targetDate, status: 'in_progress' } });
 
   try {
@@ -90,10 +97,10 @@ export async function POST(req: Request) {
       ? new Map(
           Object.entries(body.preCollectedArticles).map(([cat, arts]) => [
             cat as CategoryKey,
-            clusterArticles(arts as RawArticle[], 12),
+            clusterArticles(arts as RawArticle[], 20),
           ]),
         )
-      : await collectByCategory(12);
+      : await collectByCategory(20);
 
     // ── Step 3: Category LLM calls (sequential — rate-limit safe) ──────────
     // Running sequentially avoids hammering the Anthropic API rate limit
@@ -101,7 +108,7 @@ export async function POST(req: Request) {
     type SettledResult = { status: 'fulfilled'; value: LLMCategoryResult } | { status: 'rejected'; reason: unknown };
     const categoryResults: SettledResult[] = [];
 
-    for (const catKey of CATEGORIES) {
+    for (const catKey of activeCategories) {
       const clusters = clustersByCategory.get(catKey) ?? [];
       if (clusters.length === 0) {
         console.warn(`[generate] ${catKey}: 0 clusters — LLM will use training-data fallback`);
@@ -114,7 +121,7 @@ export async function POST(req: Request) {
       let settled: SettledResult = { status: 'rejected', reason: new Error('not started') };
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const value = await chatJSON<LLMCategoryResult>(msgs, { temperature: 0.3, maxTokens: 12288 });
+          const value = await chatJSON<LLMCategoryResult>(msgs, { temperature: 0.3, maxTokens: 4096 });
           if (value?.items?.length > 0) {
             settled = { status: 'fulfilled', value };
             break;
@@ -133,9 +140,9 @@ export async function POST(req: Request) {
     // ── Step 4: Persist category briefings + news items ───────────────────
     const successfulCategories: LLMCategoryResult[] = [];
 
-    for (let i = 0; i < CATEGORIES.length; i++) {
+    for (let i = 0; i < activeCategories.length; i++) {
       const result = categoryResults[i];
-      const catKey = CATEGORIES[i];
+      const catKey = activeCategories[i];
 
       if (result.status === 'rejected') {
         console.error(`[generate] category ${catKey} failed:`, result.reason);
@@ -169,6 +176,36 @@ export async function POST(req: Request) {
       });
       dedupedItems.sort((a, b) => (urgencyOrder[a.urgency] ?? 2) - (urgencyOrder[b.urgency] ?? 2));
       const finalItems = dedupedItems.slice(0, 10);
+
+      // Supplement pass: if LLM returned < 10, request more from training data
+      if (finalItems.length < 10) {
+        const needed = 10 - finalItems.length;
+        const existingTitles = finalItems.map((i) => i.title).join('\n- ');
+        const koreanLabel = toCategoryLabel(catKey);
+        const supplementMsgs = [
+          { role: 'system' as const, content: '반드시 한국어로 JSON만 출력. 마크다운·코드블록 금지.' },
+          {
+            role: 'user' as const,
+            content: `날짜: ${dateStr}\n카테고리: ${koreanLabel}\n\n현재 ${finalItems.length}건이 있습니다. 아래 제목과 겹치지 않는 새로운 뉴스 ${needed}건을 ${dateStr} 기준 학습 데이터에서 추가로 생성하세요.\n\n기존 제목:\n- ${existingTitles}\n\n출력 형식 (순수 JSON):\n{"items":[{"title":"...","urgency":"watch","fact":"...","impact":"...","action":"...","contextTags":[],"source":"...","sourceUrl":"https://example.com","consensusFacts":null,"conflictingFacts":null}]}\n\n반드시 ${needed}건 출력.`,
+          },
+        ];
+        try {
+          const supplementResult = await chatJSON<{ items: typeof finalItems }>(supplementMsgs, { temperature: 0.5, maxTokens: 4096 });
+          if (supplementResult?.items?.length > 0) {
+            for (const item of supplementResult.items) {
+              const key = (item.title ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+              if (!seenTitles.has(key)) {
+                seenTitles.add(key);
+                finalItems.push(item);
+                if (finalItems.length >= 10) break;
+              }
+            }
+            console.log(`[generate] ${catKey} supplement: added ${supplementResult.items.length} → total ${finalItems.length}`);
+          }
+        } catch (err) {
+          console.warn(`[generate] ${catKey} supplement failed:`, err);
+        }
+      }
 
       // Upsert CategoryBriefing
       const briefing = await prisma.categoryBriefing.upsert({

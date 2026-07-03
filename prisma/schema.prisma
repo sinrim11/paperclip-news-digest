@@ -37,9 +37,10 @@ model DailyDigest {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  marketDaily       MarketDaily?
-  categoryBriefings CategoryBriefing[]
-  newsItems         NewsItem[]
+  marketDaily         MarketDaily?
+  categoryBriefings   CategoryBriefing[]
+  newsItems           NewsItem[]
+  personaRankResults  PersonaRankResult[]
 
   @@index([date])
   @@index([status])
@@ -213,6 +214,23 @@ model EntityStat {
   @@index([statDate])
 }
 
+// ─── Phase 3-C: A/B Evaluation ───────────────────────────────────────────────
+model ABEvaluation {
+  id          String   @id @default(cuid())
+  evalDate    DateTime @db.Date
+  personaName String
+  choice      String   // "A" or "B"
+  rationale   String   @db.Text
+  snapshotA   Json     // news items shown as option A
+  snapshotB   Json     // news items shown as option B
+  scoresB     Json     // persona relevance scores for B items
+  createdAt   DateTime @default(now())
+
+  @@index([evalDate])
+  @@index([choice])
+  @@index([createdAt])
+}
+
 // ─── v4 Phase 0: WikiEntry (3-way split stub) ────────────────────────────────
 enum WikiEntryType {
   ledger        // structured facts: entity, date, metric, source_url
@@ -235,4 +253,39 @@ model WikiEntry {
   @@index([entryType])
   @@index([refDate])
   @@index([tags])
+}
+
+// ─── Phase 3-B: Persona-conditional LLM Rerank ───────────────────────────────
+model PersonaRankResult {
+  id               String   @id @default(cuid())
+  digestId         String
+  personaId        String   // "A" | "B" | "C"
+  personaName      String
+  rankedItems      Json     // [{newsItemId, rank, rationale}]
+  clusterHeadlines Json     // [{headline, articleIds}]
+  usedFallback     Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  digest DailyDigest @relation(fields: [digestId], references: [id], onDelete: Cascade)
+
+  @@unique([digestId, personaId])
+  @@index([digestId])
+  @@index([createdAt])
+}
+
+// ─── v4 Phase 1-A: Raw collected articles ─────────────────────────────────────
+model Article {
+  id          String    @id @default(cuid())
+  title       String
+  url         String    @unique
+  sourceType  String
+  category    String?
+  content     String?   @db.Text
+  publishedAt DateTime?
+  metadata    Json      @default("{}")
+  createdAt   DateTime  @default(now())
+
+  @@index([sourceType])
+  @@index([createdAt])
 }

@@ -4,7 +4,7 @@ import json
 import os
 import re
 import requests
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from difflib import SequenceMatcher
 
 try:
@@ -15,6 +15,7 @@ except ImportError:
 import trafilatura
 
 FETCH_TIMEOUT = 10
+MAX_ARTICLE_AGE_DAYS = 2
 
 # Known limitations for content extraction:
 # - NYTimes articles: require authentication/subscription (HTTP 403/401)
@@ -81,10 +82,24 @@ def _extract_content(url):
     og_image = None
     try:
         meta = trafilatura.bare_extraction(html_content, only_with_metadata=False)
-        if meta and meta.get("image"):
-            og_image = meta["image"]
+        if meta:
+            # bare_extraction returns a Document object (attribute access), not a dict
+            img = getattr(meta, 'image', None) or (meta.get('image') if isinstance(meta, dict) else None)
+            if img:
+                og_image = img
     except Exception:
         pass
+
+    # Fallback: regex-based og:image extraction (catches sites where trafilatura misses it)
+    if not og_image:
+        try:
+            m = re.search(r'property=["\']og:image["\'][^>]*content=["\']([^"\']+)', html_content)
+            if not m:
+                m = re.search(r'content=["\']([^"\']+)["\'][^>]*property=["\']og:image', html_content)
+            if m:
+                og_image = m.group(1)
+        except Exception:
+            pass
 
     return content, og_image
 
@@ -101,7 +116,20 @@ def collect_news(sources_path, output_dir):
     for source in sources:
         try:
             feed = feedparser.parse(source['url'])
+            if not feed.entries:
+                print(f"  WARNING: No entries from '{source.get('name', '')}' ({source['url']})")
+                continue
+            now_utc = datetime.now(timezone.utc)
             for entry in feed.entries:
+                # Date filter: skip articles older than MAX_ARTICLE_AGE_DAYS
+                pub_parsed = getattr(entry, 'published_parsed', None)
+                if pub_parsed is not None:
+                    try:
+                        pub_dt = datetime(*pub_parsed[:6], tzinfo=timezone.utc)
+                        if (now_utc - pub_dt) > timedelta(days=MAX_ARTICLE_AGE_DAYS):
+                            continue
+                    except Exception:
+                        pass  # Include article if date parsing fails
                 image_url = None
                 if hasattr(entry, 'media_content') and entry.media_content:
                     image_url = entry.media_content[0].get('url')
@@ -129,6 +157,17 @@ def collect_news(sources_path, output_dir):
         except Exception as e:
             print(f"Error parsing {source.get('url', 'unknown')}: {e}")
             continue
+
+    # Keyword-based category override: reclassify housing articles to 부동산
+    HOUSING_KEYWORDS = [
+        'housing market', 'real estate', 'home prices', 'home sales',
+        'mortgage', 'housing prices', 'million-dollar listing',
+        '부동산', '주택', '아파트', '분양', '청약', '전세', '월세', '매매가',
+    ]
+    for a in articles:
+        title_lower = a.get('title', '').lower()
+        if any(kw.lower() in title_lower for kw in HOUSING_KEYWORDS):
+            a['category'] = '부동산'
 
     grouped = {}
     for a in articles:

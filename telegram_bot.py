@@ -23,19 +23,18 @@ PAPERCLIP_API_KEY = os.getenv("PAPERCLIP_API_KEY", "")
 # State for conversation flows
 ASK_QUESTION = 1
 
-def fetch_json(url: str, data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Any:
-    """Fetch and parse JSON from API endpoint."""
+def fetch_json(url: str, data: Optional[Dict] = None, method: Optional[str] = None, headers: Optional[Dict] = None) -> Any:
+    """Fetch and parse JSON from API endpoint. Supports GET, POST, PATCH."""
     try:
-        req = urllib.request.Request(url)
+        body = json.dumps(data).encode() if data else None
+        if method is None:
+            method = "POST" if data else "GET"
+        req = urllib.request.Request(url, data=body, method=method)
+        req.add_header("Content-Type", "application/json")
         if headers:
             for k, v in headers.items():
                 req.add_header(k, v)
-
-        if data:
-            req.add_header("Content-Type", "application/json")
-            resp = urllib.request.urlopen(req, json.dumps(data).encode(), timeout=10)
-        else:
-            resp = urllib.request.urlopen(req, timeout=10)
+        resp = urllib.request.urlopen(req, timeout=10)
         return json.loads(resp.read().decode())
     except Exception as e:
         return {"error": str(e)}
@@ -133,6 +132,15 @@ def get_help_message() -> str:
 
 <b>/status</b>
 Paperclip 작업 상태 조회
+
+<b>/agents</b>
+에이전트 목록 및 상태 조회
+
+<b>/task</b> &lt;제목&gt;
+새 태스크 생성 (CEO 할당)
+
+<b>/assign</b> &lt;이슈키&gt; &lt;에이전트명&gt;
+이슈를 에이전트에게 할당
 
 <b>/instructions</b>
 현재 업무 지시사항 확인
@@ -295,6 +303,85 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data == "news_status":
         await query.edit_message_text("📊 뉴스 알림 상태: ✅ 활성화")
 
+async def agents_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /agents command - list all agents and their status."""
+    url = f"{PAPERCLIP_API}/companies/{PAPERCLIP_COMPANY_ID}/agents"
+    data = fetch_json(url)
+    agents = data if isinstance(data, list) else data.get("agents", [])
+
+    if not agents or "error" in data:
+        await update.message.reply_text("❌ 에이전트 목록을 불러올 수 없습니다.")
+        return
+
+    status_emoji = {"running": "🟢", "idle": "⚪", "error": "🔴"}
+    lines = ["<b>🤖 에이전트 목록</b>", "━━━━━━━━━━━━━━━━━━━━━━"]
+    for a in agents:
+        emoji = status_emoji.get(a.get("status", ""), "⚪")
+        lines.append(f"{emoji} <b>{a['name']}</b> — {a.get('status', 'unknown')}")
+    lines.append(f"━━━━━━━━━━━━━━━━━━━━━━\n🕐 {datetime.now().strftime('%H:%M:%S')}")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+async def task_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /task <title> - create a new task assigned to CEO."""
+    if not context.args:
+        await update.message.reply_text("사용법: /task <제목>\n예: /task 뉴스 소스 추가")
+        return
+
+    title = " ".join(context.args)
+    url = f"{PAPERCLIP_API}/companies/{PAPERCLIP_COMPANY_ID}/issues"
+    payload = {
+        "title": title,
+        "status": "todo",
+        "assigneeAgentId": "4a7ea2fd-4426-41ad-ad94-1063dd03bf6c",
+        "projectKey": "CMP",
+    }
+    result = fetch_json(url, data=payload)
+
+    if "error" in result:
+        await update.message.reply_text(f"❌ 생성 실패: {result['error']}")
+        return
+
+    key = result.get("key", result.get("id", "?")[:8])
+    await update.message.reply_text(f"✅ 태스크 생성: <b>{key}</b> — {title}", parse_mode="HTML")
+
+
+async def assign_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /assign <issue_key> <agent_name> - assign issue to agent."""
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text("사용법: /assign <이슈키> <에이전트명>\n예: /assign CMP-72 CTO")
+        return
+
+    issue_key = context.args[0].upper()
+    agent_name = context.args[1]
+
+    # Resolve agent by name
+    agents_data = fetch_json(f"{PAPERCLIP_API}/companies/{PAPERCLIP_COMPANY_ID}/agents")
+    agents = agents_data if isinstance(agents_data, list) else agents_data.get("agents", [])
+    agent = next((a for a in agents if a["name"].lower() == agent_name.lower()), None)
+    if not agent:
+        names = ", ".join(a["name"] for a in agents)
+        await update.message.reply_text(f"❌ 에이전트 '{agent_name}' 없음\n사용 가능: {names}")
+        return
+
+    # Resolve issue by key
+    issues_data = fetch_json(f"{PAPERCLIP_API}/companies/{PAPERCLIP_COMPANY_ID}/issues?limit=200")
+    issues = issues_data if isinstance(issues_data, list) else issues_data.get("issues", [])
+    issue = next((i for i in issues if i.get("key") == issue_key), None)
+    if not issue:
+        await update.message.reply_text(f"❌ 이슈 '{issue_key}' 없음")
+        return
+
+    result = fetch_json(f"{PAPERCLIP_API}/issues/{issue['id']}", data={"assigneeAgentId": agent["id"]}, method="PATCH")
+    if "error" in result:
+        await update.message.reply_text(f"❌ 할당 실패: {result['error']}")
+        return
+
+    await update.message.reply_text(
+        f"✅ <b>{issue_key}</b> → <b>{agent['name']}</b> 할당 완료", parse_mode="HTML"
+    )
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle plain text messages."""
     if update.message:
@@ -320,6 +407,9 @@ def main() -> None:
     # Command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status_command))
+    application.add_handler(CommandHandler("agents", agents_command))
+    application.add_handler(CommandHandler("task", task_command))
+    application.add_handler(CommandHandler("assign", assign_command))
     application.add_handler(CommandHandler("instructions", instructions_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("news", news_command))

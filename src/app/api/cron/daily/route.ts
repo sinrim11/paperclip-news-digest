@@ -24,7 +24,11 @@ export async function POST(req: Request) {
   const host = req.headers.get('host') ?? 'localhost:3000';
   const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
   const baseUrl = process.env.NEXTAUTH_URL ?? `${protocol}://${host}`;
-  const today = new Date().toISOString().slice(0, 10);
+  // Use KST (UTC+9) — cron fires at 22:00 UTC = 07:00 KST next day,
+  // so raw UTC date would be yesterday's date. Must offset to get KST date.
+  const kst = new Date();
+  kst.setTime(kst.getTime() + 9 * 60 * 60 * 1000);
+  const today = kst.toISOString().slice(0, 10);
 
   const res = await fetch(`${baseUrl}/api/digest/generate`, {
     method: 'POST',

@@ -8,3 +8,18 @@ output/*.json
 .omc/
 .playwright-mcp/
 *.png
+
+# ── added 2026-07-03 (revival cleanup) ──
+node_modules/
+.next/
+.idea/
+.ux-audit/
+prisma/dev.db
+*.tsbuildinfo
+wiki/
+report/
+backup/
+.telegram_liaison_state.json
+.env.local
+*.rej
+*.rej.orig

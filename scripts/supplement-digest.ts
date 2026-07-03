@@ -1,18 +1,18 @@
 /**
  * Supplement an under-filled daily digest.
  * Usage: npx tsx scripts/supplement-digest.ts [date]
- * Default date: 2026-04-17
+ * Default date: 2026-04-18
  *
- * For each category with < 10 items, calls Claude (web search enabled)
- * to collect additional real news and inserts them directly into the DB.
+ * For each category with < 10 items, calls LM Studio to generate
+ * additional training-data-based news items and inserts them into the DB.
  */
 
 import { PrismaClient } from '@prisma/client';
-import { chatJSON } from '../src/lib/claude';
+import { chatJSON } from '../src/lib/llm';
 
 const prisma = new PrismaClient();
 
-const TARGET_DATE = process.argv[2] ?? '2026-04-17';
+const TARGET_DATE = process.argv[2] ?? '2026-04-18';
 const TARGET_PER_CAT = 10;
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -34,6 +34,12 @@ interface SupplementItem {
   sourceUrl: string;
 }
 
+function normalizeUrgency(u: unknown): 'breaking' | 'watch' | 'note' {
+  if (u === 'breaking' || u === 'critical' || u === 'urgent') return 'breaking';
+  if (u === 'watch' || u === 'warning') return 'watch';
+  return 'note';
+}
+
 async function generateSupplements(
   category: string,
   label: string,
@@ -42,49 +48,49 @@ async function generateSupplements(
   existing: string[],
 ): Promise<SupplementItem[]> {
   const existingList = existing.length > 0
-    ? `\n이미 수집된 기사 제목 (중복 금지):\n${existing.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
+    ? `\n기존 제목 (중복 금지):\n${existing.map((t) => `- ${t}`).join('\n')}`
     : '';
 
   const messages = [
     {
       role: 'system' as const,
-      content: `너는 한국어 뉴스 큐레이터다. ${date} 날짜 기준 실제 뉴스를 웹 검색으로 수집해 JSON으로 반환한다.
-규칙:
-- 실제 기사 기반 뉴스만 출력. 없으면 근접 날짜 뉴스 허용.
-- 순수 JSON 배열만 출력. 마크다운 없이.
-- urgency는 "breaking", "watch", "note" 중 하나.`,
+      content: '반드시 한국어로 JSON만 출력. 마크다운·코드블록 금지. urgency는 "breaking", "watch", "note" 중 하나.',
     },
     {
       role: 'user' as const,
-      content: `${date} 날짜 기준 ${label} 카테고리 주요 뉴스 ${needed}건을 웹 검색해서 수집하세요.${existingList}
+      content: `날짜: ${date}\n카테고리: ${label}\n\n현재 ${existing.length}건이 있습니다. 아래 기존 제목과 겹치지 않는 새로운 뉴스 ${needed}건을 ${date} 기준 학습 데이터에서 생성하세요.${existingList}
 
-출력 형식 (순수 JSON 배열):
-[
-  {
-    "title": "뉴스 제목",
-    "urgency": "breaking|watch|note",
-    "fact": "핵심 사실 1문장",
-    "impact": "영향 1문장",
-    "action": "행동 지침 1문장",
-    "contextTags": ["태그1", "태그2"],
-    "source": "출처명",
-    "sourceUrl": "https://..."
-  }
-]`,
+반드시 ${needed}건 출력, 순수 JSON:
+{"items":[{"title":"...","urgency":"watch","fact":"1문장","impact":"1문장","action":"1문장","contextTags":["태그"],"source":"출처명","sourceUrl":"https://example.com"}]}`,
     },
   ];
 
-  try {
-    const result = await chatJSON<SupplementItem[]>(messages, {
-      temperature: 0.3,
-      maxTokens: 8192,
-      useWebSearch: true,
-    });
-    return Array.isArray(result) ? result.slice(0, needed) : [];
-  } catch (err) {
-    console.error(`[supplement] ${category} failed:`, err);
-    return [];
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const result = await chatJSON<{ items?: SupplementItem[] } | SupplementItem[]>(messages, {
+        temperature: 0.6,
+        maxTokens: 3000,
+      });
+      let items: SupplementItem[];
+      if (Array.isArray(result)) {
+        items = result;
+      } else if (result && typeof result === 'object' && Array.isArray((result as { items?: SupplementItem[] }).items)) {
+        items = (result as { items: SupplementItem[] }).items;
+      } else {
+        console.warn(`  [${category}] attempt ${attempt + 1}: unexpected response shape`);
+        continue;
+      }
+      const valid = items.filter(i => i.title).map(i => ({
+        ...i,
+        urgency: normalizeUrgency(i.urgency) as 'breaking' | 'watch' | 'note',
+      }));
+      if (valid.length > 0) return valid.slice(0, needed);
+    } catch (err) {
+      console.error(`  [${category}] attempt ${attempt + 1} failed:`, err);
+    }
+    await new Promise(r => setTimeout(r, 2000));
   }
+  return [];
 }
 
 async function main() {
@@ -166,8 +172,13 @@ async function main() {
       relatedData: [],
       contextLinks: [],
       upcomingEvents: [],
-      sourceCount: 1,
-      sourceList: [item.source ?? ''],
+      sourceCount: 0,
+      sourceList: [],
+      consensusFacts: null,
+      conflictingFacts: null,
+      isGithubTrending: false,
+      githubStarsDelta: null,
+      githubLanguage: null,
     }));
 
     await prisma.newsItem.createMany({ data: itemsToCreate });

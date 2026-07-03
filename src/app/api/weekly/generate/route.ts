@@ -1,14 +1,11 @@
 /**
  * POST /api/weekly/generate
  * Synthesises the past 7 daily digests into a weekly briefing (Phase 4 full spec).
- *
- * Queries: DailyDigest TOP3, breaking NewsItems, CategoryBriefing summaries,
- *          MarketDaily (7 days), ContextTagHistory (active in the past 7 days).
  */
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { chatJSON } from '@/lib/claude';
+import { chatJSON } from '@/lib/llm';
 import { buildWeeklyPrompt } from '@/lib/prompts/weekly-digest';
 import type { WeeklyDigestContent, Category } from '@/lib/types';
 
@@ -65,22 +62,25 @@ export async function POST(req: Request) {
       }),
     ]);
 
+    // ── 2. Pre-calculate breaking news grouping (Avoid object access issues) ─
+    const breakingByDate = new Map<string, string[]>();
+    for (const item of breakingNews) {
+      // Ensure we access the date from the relation object correctly
+      const d = item.digest.date;
+      const dateStr = d.toISOString().slice(0, 10);
+      const list = breakingByDate.get(dateStr) ?? [];
+      list.push(item.title);
+      breakingByDate.set(dateStr, list);
+    }
+
     if (!dailyDigests.length) {
       return NextResponse.json({ error: 'No daily digests found for this week' }, { status: 404 });
     }
 
-    const weekStart = weekStartDate.toISOString().slice(0, 10);
-    const weekEnd = weekEndDate.toISOString().slice(0, 10);
+    const weekStartStr = weekStartDate.toISOString().slice(0, 10);
+    const weekEndStr = weekEndDate.toISOString().slice(0, 10);
 
-    // ── 2. Per-day input enriched with breaking news ──────────────────────────
-    const breakingByDate = new Map<string, string[]>();
-    for (const item of breakingNews) {
-      const date = (item.digest as { date: Date }).date.toISOString().slice(0, 10);
-      const list = breakingByDate.get(date) ?? [];
-      list.push(item.title);
-      breakingByDate.set(date, list);
-    }
-
+    // ── 3. Build daily context for prompt ────────────────────────────────────
     const days = dailyDigests.map((d) => {
       const dateStr = d.date.toISOString().slice(0, 10);
       return {
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
       };
     });
 
-    // ── 3. Market summary ─────────────────────────────────────────────────────
+    // ── 4. Market summary ─────────────────────────────────────────────────────
     const marketData = marketRows.map((m) => ({
       date: m.date.toISOString().slice(0, 10),
       kospi: m.kospiValue != null ? `${m.kospiValue}(${m.kospiChange ?? ''})` : undefined,
@@ -107,22 +107,25 @@ export async function POST(req: Request) {
 
     const activeTagNames = activeTags.map((t) => t.tag);
 
-    // ── 4. Call LLM (max_tokens: 8192 per Phase 4 spec) ───────────────────────
+    // ── 5. Call LLM (max_tokens: 8192 per Phase 4 spec) ───────────────────────
     const content = await chatJSON<WeeklyDigestContent>(
-      buildWeeklyPrompt(weekStart, weekEnd, days, marketData, activeTagNames),
+      buildWeeklyPrompt(weekStartStr, weekEndStr, days, marketData, activeTagNames),
       { temperature: 0.3, maxTokens: 8192 },
     );
 
-    // ── 5. Save WeeklyDigest ──────────────────────────────────────────────────
+    // ── 6. Save WeeklyDigest ──────────────────────────────────────────────────
     const weekly = await prisma.weeklyDigest.create({
-      data: { weekStart: weekStartDate, weekEnd: weekEndDate, content: content as unknown as object },
+      data: { 
+        weekStart: weekStartDate, 
+        weekEnd: weekEndDate, 
+        content: content as unknown as object 
+      },
     });
 
     return NextResponse.json({
       weeklyId: weekly.id,
-      weekStart,
-      weekEnd,
-      // Phase 4 content fields surfaced for Slack notifications
+      weekStart: weekStartStr,
+      weekEnd: weekEndStr,
       executive_summary: content.executive_summary ?? null,
       weekly_top5: content.weekly_top5 ?? null,
     });

@@ -18,8 +18,8 @@ const prisma = new PrismaClient();
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const OLLAMA_BASE = (process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/v1').replace(/\/$/, '');
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'gemma4:26b';
+const LLM_BASE = (process.env.LLM_BASE_URL ?? 'http://localhost:1234/v1').replace(/\/$/, '');
+const LLM_MODEL = process.env.LLM_MODEL ?? 'supergemma4-26b-uncensored-mlx-v2';
 
 // ─── Category mappings ────────────────────────────────────────────────────────
 
@@ -41,19 +41,18 @@ const CATEGORY_KEY_TO_KR: Record<string, string> = {
 
 const ALL_KEYS: Category[] = ['GLOBAL', 'STOCKS', 'AI', 'POLICY', 'REALESTATE'];
 
-// ─── Ollama helpers ───────────────────────────────────────────────────────────
+// ─── LLM helpers ──────────────────────────────────────────────────────────────
 
-async function callOllamaJSON<T>(messages: Array<{ role: string; content: string }>, temp = 0.3): Promise<T> {
+async function callLLMJSON<T>(messages: Array<{ role: string; content: string }>, temp = 0.3): Promise<T> {
   const body = {
-    model: OLLAMA_MODEL,
+    model: LLM_MODEL,
     messages,
     temperature: temp,
     max_tokens: 6144,
     stream: false,
-    format: 'json',
   };
 
-  const res = await fetch(`${OLLAMA_BASE}/chat/completions`, {
+  const res = await fetch(`${LLM_BASE}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -62,7 +61,7 @@ async function callOllamaJSON<T>(messages: Array<{ role: string; content: string
 
   if (!res.ok) {
     const t = await res.text().catch(() => '');
-    throw new Error(`Ollama error ${res.status}: ${t}`);
+    throw new Error(`LLM error ${res.status}: ${t}`);
   }
 
   const data = await res.json() as { choices: Array<{ message: { content: string } }> };
@@ -304,7 +303,7 @@ async function run(dateStr: string) {
   let marketCtxLine = '';
   try {
     console.log(`[pipeline] Step 1: Fetching market data...`);
-    const mResult = await callOllamaJSON<MarketSnapshot>(buildMarketPrompt(dateStr), 0.1);
+    const mResult = await callLLMJSON<MarketSnapshot>(buildMarketPrompt(dateStr), 0.1);
     marketSnapshot = mResult;
     marketCtxLine = `KOSPI ${mResult.kospi.value} (${mResult.kospi.change}), USD/KRW ${mResult.usdKrw.value}`;
     console.log(`[pipeline]   Market: ${marketCtxLine}`);
@@ -346,7 +345,7 @@ async function run(dateStr: string) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const msgs = buildCategoryPrompt(dateStr, krLabel, articles, marketCtxLine || undefined);
-        const result = await callOllamaJSON<LLMCategoryResult>(msgs, 0.3);
+        const result = await callLLMJSON<LLMCategoryResult>(msgs, 0.3);
 
         // Validate & fix quality issues inline
         if (!result.items || result.items.length === 0) throw new Error('LLM returned 0 items');
@@ -424,7 +423,7 @@ async function run(dateStr: string) {
       const allItems = successfulCategories.flatMap((c) =>
         c.items.map((item) => ({ category: c.category, ...item })),
       );
-      const top3Result = await callOllamaJSON<{ top3: LLMTop3Item[] }>(buildTop3Prompt(dateStr, allItems), 0.2);
+      const top3Result = await callLLMJSON<{ top3: LLMTop3Item[] }>(buildTop3Prompt(dateStr, allItems), 0.2);
 
       for (const topItem of top3Result.top3.slice(0, 3)) {
         await prisma.newsItem.updateMany({

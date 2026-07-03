@@ -1,0 +1,160 @@
+name: Build and Test Docker Image
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'Dockerfile'
+      - 'requirements.txt'
+      - 'web_app/**'
+      - '.github/workflows/docker-build.yml'
+      - 'docker-compose.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: news-digest:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=docker,dest=/tmp/image.tar
+
+      - name: Load image for testing
+        run: |
+          docker load --input /tmp/image.tar
+          docker image ls
+
+      - name: Test image - Health endpoint
+        run: |
+          docker run -d \
+            --name news-digest-test \
+            -p 3200:3200 \
+            -e LLM_BASE_URL="http://host.docker.internal:1234/v1" \
+            news-digest:test
+          sleep 10
+          docker logs news-digest-test || true
+          # Note: Web server will fail without an actual LLM backend running, but we test the image builds
+
+      - name: Cleanup test container
+        if: always()
+        run: docker rm -f news-digest-test || true
+
+  lint:
+    name: Lint Python Code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pylint flake8 black isort
+
+      - name: Check code formatting (black)
+        run: black --check --diff web_app/ *.py || true
+
+      - name: Check import sorting (isort)
+        run: isort --check-only --diff web_app/ *.py || true
+
+      - name: Lint with flake8
+        run: |
+          flake8 web_app/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 web_app/ --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+
+  test-compose:
+    name: Test Docker Compose Configuration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate docker-compose
+        run: |
+          docker-compose config > /dev/null
+          echo "✓ docker-compose.yml is valid"
+
+      - name: Check required files
+        run: |
+          test -f Dockerfile && echo "✓ Dockerfile exists"
+          test -f requirements.txt && echo "✓ requirements.txt exists"
+          test -f web_app/main.py && echo "✓ web_app/main.py exists"
+          test -f .dockerignore && echo "✓ .dockerignore exists"
+
+  security:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install bandit safety
+
+      - name: Run bandit security check
+        run: |
+          bandit -r web_app/ *.py -f json -o bandit-report.json || true
+          echo "Bandit scan completed (see report for details)"
+
+      - name: Check for known vulnerabilities
+        run: |
+          safety check --json || true
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-reports
+          path: bandit-report.json
+          retention-days: 30

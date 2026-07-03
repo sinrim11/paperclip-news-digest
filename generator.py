@@ -3,12 +3,9 @@ import json
 import os
 from datetime import datetime
 
-def generate_digest(input_file, template_path, output_dir):
+def generate_digest(input_file, output_dir):
     with open(input_file, 'r', encoding='utf-8') as f:
         articles = json.load(f)
-
-    with open(template_path, 'r', encoding='utf-8') as f:
-        template = f.read()
 
     date_str = datetime.now().strftime("%Y%m%d")
     output_file = os.path.join(output_dir, f"daily_digest_{date_str}.md")
@@ -26,7 +23,7 @@ def generate_digest(input_file, template_path, output_dir):
     for cat, items in categories.items():
         digest_content += f"## {cat}\n"
         for item in items:
-            title_ko = html_lib.unescape(item.get('title_ko', item.get('title', '')))
+            title_ko = html_lib.unescape(item.get('title', ''))
             summary = html_lib.unescape(item.get('summary', ''))
             digest_content += f"- [{title_ko}]({item['url']})\n"
             if summary and '[요약 생성 중' not in summary:
@@ -43,9 +40,8 @@ if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1:
         gen_input = sys.argv[1]
-        temp_path = "news_project/config/digest_template.md"
-        out_dir = "news_project/output"
-        out_file = generate_digest(gen_input, temp_path, out_dir)
+        out_dir = "output"
+        out_file = generate_digest(gen_input, out_dir)
         print(f"Digest generated: {out_file}")
     else:
         print("Please provide the input JSON file path.")

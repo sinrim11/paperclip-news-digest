@@ -20,10 +20,11 @@ function todayKST(): string {
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams?: { date?: string };
+  searchParams?: Promise<{ date?: string }>;
 }) {
   const today = todayKST();
-  const dateStr = searchParams?.date ?? today;
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const dateStr = resolvedSearchParams.date ?? today;
 
   // Clamp to valid date
   const targetDate = new Date(dateStr);
@@ -187,7 +188,7 @@ export default async function HomePage({
       {/* Digest in progress — auto-polls every 10s until done */}
       {digest?.status === 'in_progress' && (
         <>
-          <ProgressPoller intervalMs={10_000} />
+          <ProgressPoller intervalMs={10_000} dateStr={dateStr} />
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between gap-4">
             <span className="text-sm text-blue-700">⏳ 브리핑을 생성하고 있습니다. 완료되면 자동으로 갱신됩니다.</span>
             <GenerateButton date={dateStr} force />

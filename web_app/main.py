@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.requests import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE_DIR, "..", "output")
@@ -81,11 +81,20 @@ async def index(request: Request):
     )
 
 
+@app.get("/report")
+async def report():
+    report_path = os.path.join(BASE_DIR, "..", "report", "project_report.html")
+    if not os.path.exists(report_path):
+        return HTMLResponse("<h1>Report not found</h1>", status_code=404)
+    with open(report_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(f.read())
+
+
 @app.get("/health")
 async def health():
     return JSONResponse({"status": "ok"})
 
 
 if __name__ == "__main__":
-    print("Starting Daily News Digest server at http://localhost:3200")
-    uvicorn.run(app, host="0.0.0.0", port=3200, log_level="info")
+    print("Starting Daily News Digest server at http://localhost:3201")
+    uvicorn.run(app, host="0.0.0.0", port=3201, log_level="info")

@@ -3,7 +3,7 @@
  * Reader profile: semiconductor (Hanmi/HBM), energy/nuclear (Doosan Enerbility),
  * DC pension, and metropolitan Seoul real-estate.
  *
- * Runtime: Ollama gemma4:26b — no @anthropic-ai/sdk.
+ * Runtime: LM Studio (gemma4:26b MLX) — no @anthropic-ai/sdk.
  */
 
 import type { CategoryKey } from '../types';

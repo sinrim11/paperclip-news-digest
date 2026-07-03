@@ -10,16 +10,15 @@ def main():
     config_dir = "config"
     output_dir = "output"
     sources_path = os.path.join(config_dir, "news_sources.json")
-    template_path = os.path.join(config_dir, "digest_template.md")
-    
+
     print("Step 1: Collecting news...")
     raw_file, _ = collect_news(sources_path, output_dir)
-    
+
     print(f"Step 2: Summarizing articles from {raw_file}...")
     summarize_articles(raw_file)
-    
+
     print("Step 3: Generating digest...")
-    digest_file = generate_digest(raw_file, template_path, output_dir)
+    digest_file = generate_digest(raw_file, output_dir)
     
     print(f"\nSuccess! Daily digest created: {digest_file}")
 

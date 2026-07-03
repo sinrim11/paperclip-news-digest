@@ -1,5 +1,76 @@
-node_modules
-npm-debug.log
-Dockerfile
+# Git
 .git
+.gitignore
+.gitattributes
 .github
+
+# Python & venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Node (for index.js health check)
+node_modules/
+npm-debug.log
+package-lock.json
+
+# Testing & CI
+.pytest_cache/
+.mypy_cache/
+htmlcov/
+.github/workflows/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Generated output (built at runtime, large files)
+output/
+
+# Test/dev artifacts
+*.png
+*.jpg
+*.jpeg
+.rej
+CMP-*_COMPLETION_REPORT.md
+news_*.png
+
+# Development tools
+.omc/
+.playwright-mcp/
+Oops.rej*

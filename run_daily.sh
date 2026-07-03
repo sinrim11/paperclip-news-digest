@@ -14,31 +14,26 @@ if [ -d ".venv" ]; then
     source .venv/bin/activate
 fi
 
-# Ollama health check
-OLLAMA_URL="http://localhost:11434/api/version"
+# LM Studio health check
+LLM_URL="http://localhost:1234/v1/models"
+LLM_MODEL="supergemma4-26b-uncensored-mlx-v2"
 BOT_TOKEN="REDACTED-ROTATED-TELEGRAM-TOKEN"
 CHAT_ID="7187585050"
 
-if ! curl -sf "$OLLAMA_URL" >/dev/null 2>&1; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') Ollama offline — attempting auto-start..." >> "$LOG"
-    ollama serve >> "$LOG" 2>&1 &
-    sleep 45
-    if ! curl -sf "$OLLAMA_URL" >/dev/null 2>&1; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') Ollama still offline after 45s — alerting and exiting." >> "$LOG"
-        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-            -H "Content-Type: application/json" \
-            -d "{\"chat_id\": \"${CHAT_ID}\", \"text\": \"\u26a0\ufe0f [\ub274\uc2a4\ub2e4\uc774\uc81c\uc2a4\ud2b8] Ollama \uc624\ud504\ub77c\uc778 \u2014 07:00 \ud30c\uc774\ud504\ub77c\uc778 \uc2e4\ud589 \uc2e4\ud328. \uc218\ub3d9 \ud655\uc778 \ud544\uc694.\"}" \
-            >> "$LOG" 2>&1
-        exit 1
-    fi
-    echo "$(date '+%Y-%m-%d %H:%M:%S') Ollama auto-started successfully." >> "$LOG"
+if ! curl -sf "$LLM_URL" >/dev/null 2>&1; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') LM Studio offline — alerting and exiting." >> "$LOG"
+    curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+        -H "Content-Type: application/json" \
+        -d "{\"chat_id\": \"${CHAT_ID}\", \"text\": \"\u26a0\ufe0f [\ub274\uc2a4\ub2e4\uc774\uc81c\uc2a4\ud2b8] LM Studio \uc624\ud504\ub77c\uc778 \u2014 07:00 \ud30c\uc774\ud504\ub77c\uc778 \uc2e4\ud589 \uc2e4\ud328. \uc218\ub3d9 \ud655\uc778 \ud544\uc694.\"}" \
+        >> "$LOG" 2>&1
+    exit 1
 fi
 
-# Pre-warm model: load gemma4:26b into VRAM before pipeline starts
-echo "$(date '+%Y-%m-%d %H:%M:%S') Pre-warming gemma4:26b model..." >> "$LOG"
-WARMUP_RESULT=$(curl -s -X POST "http://localhost:11434/v1/chat/completions" \
+# Pre-warm model: load into VRAM before pipeline starts
+echo "$(date '+%Y-%m-%d %H:%M:%S') Pre-warming ${LLM_MODEL}..." >> "$LOG"
+WARMUP_RESULT=$(curl -s -X POST "http://localhost:1234/v1/chat/completions" \
     -H "Content-Type: application/json" \
-    -d '{"model":"gemma4:26b","messages":[{"role":"user","content":"ping"}],"max_tokens":5,"stream":false}' \
+    -d "{\"model\":\"${LLM_MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":5,\"stream\":false}" \
     --max-time 120 2>&1)
 if echo "$WARMUP_RESULT" | grep -q '"content"'; then
     echo "$(date '+%Y-%m-%d %H:%M:%S') Model pre-warm OK." >> "$LOG"
@@ -46,7 +41,7 @@ else
     echo "$(date '+%Y-%m-%d %H:%M:%S') Model pre-warm failed — alerting and exiting. Response: ${WARMUP_RESULT:0:200}" >> "$LOG"
     curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
         -H "Content-Type: application/json" \
-        -d "{\"chat_id\": \"${CHAT_ID}\", \"text\": \"\u26a0\ufe0f [\ub274\uc2a4\ub2e4\uc774\uc81c\uc2a4\ud2b8] gemma4:26b \uc0ac\uc804 \ub85c\ub4dc \uc2e4\ud328 \u2014 07:00 \ud30c\uc774\ud504\ub77c\uc778 \uc911\ub2e8. \uc218\ub3d9 \ud655\uc778 \ud544\uc694.\"}" \
+        -d "{\"chat_id\": \"${CHAT_ID}\", \"text\": \"\u26a0\ufe0f [\ub274\uc2a4\ub2e4\uc774\uc81c\uc2a4\ud2b8] \ubaa8\ub378 \uc0ac\uc804 \ub85c\ub4dc \uc2e4\ud328 \u2014 07:00 \ud30c\uc774\ud504\ub77c\uc778 \uc911\ub2e8. \uc218\ub3d9 \ud655\uc778 \ud544\uc694.\"}" \
         >> "$LOG" 2>&1
     exit 1
 fi
