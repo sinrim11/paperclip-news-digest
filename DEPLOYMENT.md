@@ -10,6 +10,7 @@
 | DB | 네이티브 PostgreSQL 16 (:5432), DB `news_digest` | `psql -d news_digest` |
 | 웹 | `next start -p 3200` (launchd `com.news-digest.web`, KeepAlive) | `curl localhost:3200` |
 | 데일리 | launchd `com.news-digest.daily` → 매일 06:30 `scripts/run-daily-digest.sh` | `output/daily_run.log` |
+| 주간 딥다이브 | launchd `com.news-digest.weekly-deepdive` → 일요일 19:00 `scripts/weekly-deep-dive.sh` (헤드리스 `claude -p`, 주 1회만 Claude API 사용) | `output/weekly_deepdive.log` |
 | 알림 | Telegram(`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`) + Slack(선택) | 아침 메시지 수신 |
 
 포트 주의: 3000(kfestival)·3100(render-worker)·5433(tradingagents PG)은 타 프로젝트 점유. 이 앱은 **3200 고정**.
@@ -64,6 +65,12 @@ scripts/verify-e2e.sh
 
 - 2026-04-13 ~ 04-25 운영 데이터는 폐기된 Docker 볼륨(`news-digest_postgres_data`)에서 2026-07-03 네이티브 PG로 복원 완료 (600 NewsItem). 전체 덤프: `backup/news_digest_full_rescue_20260703.sql`
 - 볼륨은 아카이브로 보존 중 — 복원 검증이 끝난 뒤 `docker volume rm news-digest_postgres_data`로 정리 가능
+
+## 헤드리스 Claude (주간 딥다이브)
+
+- 인증: `ANTHROPIC_AUTH_TOKEN` (`~/.zshrc`에 정의됨). launchd 컨텍스트에서는 스크립트가 `.env` → `zsh -ic` 순으로 로드
+- 수동 실행: `scripts/weekly-deep-dive.sh` → `output/weekly-deepdive-YYYY-MM-DD.md` 생성 + Telegram 발송
+- 모델: `--model sonnet` (비용 절감 — 데일리 파이프라인은 여전히 100% 로컬)
 
 ## 보안 메모
 
