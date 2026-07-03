@@ -3,9 +3,9 @@ import { prisma } from '@/lib/db';
 
 export async function GET(
   _req: Request,
-  { params }: { params: { date: string } },
+  { params }: { params: Promise<{ date: string }> },
 ) {
-  const { date } = params;
+  const { date } = await params;
   const target = new Date(date);
 
   if (isNaN(target.getTime())) {

@@ -25,10 +25,11 @@ function parseISOWeek(s: string): Date | null {
 
 export async function GET(
   _req: Request,
-  { params }: { params: { week: string } },
+  { params }: { params: Promise<{ week: string }> },
 ) {
+  const { week } = await params;
   // Try ISO week format first, then plain date
-  let weekStart = parseISOWeek(params.week) ?? new Date(params.week);
+  let weekStart = parseISOWeek(week) ?? new Date(week);
 
   if (isNaN(weekStart.getTime())) {
     return NextResponse.json({ error: 'Invalid week parameter (use YYYY-Www or YYYY-MM-DD)' }, { status: 400 });

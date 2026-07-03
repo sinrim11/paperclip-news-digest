@@ -134,8 +134,11 @@ async function callLLM(
     stream: false,
   };
 
-  // Structured output: current LM Studio supports response_format json_schema.
-  // Prompt-level "순수 JSON만 출력" + extractJson stay as fallback for schema-less calls.
+  // Structured output: response_format json_schema is attempted first when a schema
+  // is given, but verified 2026-07-03: qwen3.6-35b-a3b-mlx on this LM Studio build
+  // returns EMPTY content under json_schema (grammar unsupported on the MLX engine).
+  // So any schema failure — HTTP error or empty content — falls back to the
+  // prompt-level "순수 JSON만 출력" + repair/extract path, which works reliably.
   if (options.schema) {
     body.response_format = {
       type: 'json_schema',
@@ -143,25 +146,28 @@ async function callLLM(
     };
   }
 
-  let text: string;
-  try {
-    text = await httpPost(`${LLM_BASE}/chat/completions`, JSON.stringify(body), options.timeoutMs);
-  } catch (err) {
-    const msg = String(err);
-    if (options.schema && (msg.includes('response_format') || msg.includes('json_schema'))) {
-      console.warn('[llm] server rejected response_format json_schema — retrying without it');
-      delete body.response_format;
+  for (let attempt = options.schema ? 0 : 1; attempt < 2; attempt++) {
+    if (attempt === 1) delete body.response_format;
+    let text: string;
+    try {
       text = await httpPost(`${LLM_BASE}/chat/completions`, JSON.stringify(body), options.timeoutMs);
-    } else {
+    } catch (err) {
+      if (attempt === 0 && /response_format|json_schema/.test(String(err))) {
+        console.warn('[llm] server rejected response_format json_schema — retrying without it');
+        continue;
+      }
       throw err;
     }
-  }
-  const data = JSON.parse(text) as ChatCompletionResponse;
-  const content = data.choices?.[0]?.message?.content ?? '';
-  if (!content.trim()) {
+    const data = JSON.parse(text) as ChatCompletionResponse;
+    const content = data.choices?.[0]?.message?.content ?? '';
+    if (content.trim()) return content;
+    if (attempt === 0) {
+      console.warn('[llm] empty content under json_schema — retrying without response_format');
+      continue;
+    }
     throw new Error('LLM returned no content');
   }
-  return content;
+  throw new Error('LLM returned no content');
 }
 
 /** Plain text completion. */
