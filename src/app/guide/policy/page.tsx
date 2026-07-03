@@ -49,6 +49,14 @@ export default function PolicyGuidePage() {
           기준일 {params?.asOf ?? '2026-07-03'} · 서울에서 첫 집을 준비하는 무주택자 관점으로 정리 ·{' '}
           <Link href="/tracker" className="text-blue-600 hover:underline">매수 트래커 →</Link>
         </p>
+        <div className="mt-3 rounded-lg border-2 border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          <p className="font-bold">3줄 결론</p>
+          <ol className="mt-1 list-inside list-decimal space-y-1">
+            <li>소득이 7천만을 넘는 무주택자에게 정책대출은 닫혀 있다 — 남는 건 생초 LTV 우대(+10%p)·취득세 감면·청약.</li>
+            <li>규제지역에선 LTV(40~50%)가 소득보다 먼저 예산을 결정한다: 최대 매수가 ≈ 자기자본 ÷ (1−LTV).</li>
+            <li>정책은 재료일 뿐 — 실행 판단(어디를·무엇을·언제)은 <Link href="/strategy" className="underline">투자 전략</Link>에서.</li>
+          </ol>
+        </div>
         <p className="mt-2 rounded bg-amber-50 p-3 text-xs text-amber-800">
           ⚠️ 정책은 수시로 변경됩니다. 실행 전 반드시 최신 공고문·은행 심사·국토부/금융위 발표로 확인하세요. 이
           페이지는 참고용 요약이며 금융 자문이 아닙니다.
