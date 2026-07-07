@@ -114,7 +114,7 @@ export default async function ListingsPage({ searchParams }: { searchParams?: Pr
         if (r.lat != null && r.lng != null) {
           const kc = kakaoByNo[r.complexNo] ?? null;
           const c2 = computeCommute(r.lat, r.lng, ctx.work, kc);
-          const a2 = kc?.counts ? computeAmenityKakao(kc.counts, kc.subway?.distanceM ?? null, r.lat, r.lng) : computeAmenity(r.lat, r.lng, r.dongHH ?? r.household);
+          const a2 = kc?.counts ? computeAmenityKakao(kc.counts, kc.subway?.distanceM ?? null, r.lat, r.lng, ctx.lifestyle) : computeAmenity(r.lat, r.lng, r.dongHH ?? r.household);
           cc = {
             cm: { station: c2.origin.name, lines: c2.origin.lines.map(lineLabel).join('·'), walkMin: c2.origin.walkMin, transfers: c2.transfers, totalMin: c2.totalMin, driveMin: c2.driveMin, driveReal: c2.driveReal, straightKm: c2.straightKm, busDependent: c2.busDependent, score: c2.score, workLabel: c2.workLabel },
             commute: { score: c2.score, formula: c2.formula, basis: c2.basis },

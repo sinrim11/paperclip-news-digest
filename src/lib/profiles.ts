@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync, readdirSync, renameSync, mkdirSync, exists
 import { join, resolve } from 'path';
 import { loadPolicyParams, loadReaderFinances, type PolicyParams, type ReaderFinances } from './tracker';
 import { loadInvestmentModel, type InvestmentModel } from './investment-model';
-import { DEFAULT_WORK, type WorkPlace } from './commute';
+import { DEFAULT_WORK, type WorkPlace, type Lifestyle } from './commute';
 
 export const PROFILE_COOKIE = 'invest_profile';
 export const DEFAULT_ID = 'default';
@@ -34,6 +34,7 @@ export interface InvestorProfile {
   id: string; name: string; updatedAt: string; finances: ProfileFinances;
   work?: WorkPlace | null; // 출근지(통근 점수 기준). 없으면 DEFAULT_WORK
   purpose?: 'invest' | 'live'; // 투자우선(통근·상권 가중 0) | 실거주우선(weightsLive 적용)
+  lifestyle?: Lifestyle; // 라이프스타일(2-C) — 학군 개인효용/가격형성 이원 가중. 미지정 시 family(현행 동일)
 }
 
 export function validId(id: string): boolean {
@@ -70,6 +71,7 @@ export function defaultProfile(): InvestorProfile | null {
     },
     work: fin.work ?? DEFAULT_WORK,
     purpose: fin.purpose ?? 'invest',
+    lifestyle: fin.lifestyle ?? 'single', // 소유자 = 비혼 1인가구(reader-profile 기본)
   };
 }
 
@@ -165,6 +167,7 @@ export interface ResolvedContext {
   model: InvestmentModel;
   work: WorkPlace; // 출근지(통근 계산 기준)
   purposeLive: boolean; // 실거주 목적 → 통근·상권 가중 반영
+  lifestyle: Lifestyle; // 학군 이원 가중(2-C) — 커스텀 프로필 미지정 시 family(현행 동일)
 }
 
 /** 쿠키 값 → 분석 컨텍스트. 무효/부재 시 default. firstTimeBuyer=false면 params/model 조정 사본. */
@@ -182,5 +185,10 @@ export function resolveContext(cookieVal: string | undefined | null): ResolvedCo
   const ftb = profile.finances.firstTimeBuyer;
   const params2: PolicyParams = ftb ? params : { ...params, ltv: { ...params.ltv, firstTimeBonus: 0 } };
   const model2: InvestmentModel = ftb ? model : { ...model, firstTimeAcqTaxReliefManwon: 0 };
-  return { profile, isDefault, fin, params: params2, model: model2, work: profile.work ?? DEFAULT_WORK, purposeLive: profile.purpose === 'live' };
+  return {
+    profile, isDefault, fin, params: params2, model: model2,
+    work: profile.work ?? DEFAULT_WORK,
+    purposeLive: profile.purpose === 'live',
+    lifestyle: profile.lifestyle ?? 'family',
+  };
 }

@@ -90,7 +90,7 @@ export default async function ComplexPage({ params }: { params: Promise<{ comple
   const kc = kc0 && kakaoAll && kakaoAll.workKey !== workKey ? { ...kc0, driveMin: null, driveKm: null } : kc0;
   const cm = ctx && c.lat != null && c.lng != null ? computeCommute(c.lat, c.lng, ctx.work, kc) : null;
   const am = c.lat != null && c.lng != null
-    ? (kc?.counts ? computeAmenityKakao(kc.counts, kc.subway?.distanceM ?? null, c.lat, c.lng) : computeAmenity(c.lat, c.lng, c.household))
+    ? (kc?.counts ? computeAmenityKakao(kc.counts, kc.subway?.distanceM ?? null, c.lat, c.lng, ctx?.lifestyle) : computeAmenity(c.lat, c.lng, c.household))
     : null;
 
   // ── 3단 투자분석(활성 프로필) + 10년 vs ──

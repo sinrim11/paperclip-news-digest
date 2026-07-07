@@ -194,12 +194,24 @@ export function computeAmenity(lat: number, lng: number, dongHouseholds: number)
   };
 }
 
+/** 라이프스타일(2-C) — 학군의 '개인 효용' 채널 판정용. family=현행(개인 효용 만점). */
+export type Lifestyle = 'family' | 'single' | 'dink';
+
+/**
+ * 학군 이원 가중(2-C): 비혼(single)·딩크(dink)는 학교·학원의 개인 효용이 0이지만,
+ * 학군은 수요층·환금성(가격 형성)에 영향하므로 해당 채널로 60%를 유지한다.
+ * "필수는 아니지만 집값 형성에 큰 영향을 주면 점수에 포함" — 사용자 지시(2026-07-08 goal).
+ */
+export const SCHOOL_PRICE_FORMATION_FACTOR = 0.6;
+
 /** 상권 점수(카카오 로컬 실데이터) — 반경 내 실제 시설 수 기반. counts 키는 kakao-map.AMENITY_CATS 참조 */
-export function computeAmenityKakao(counts: Record<string, number>, subwayDistanceM: number | null, lat: number, lng: number): AmenityInfo {
+export function computeAmenityKakao(counts: Record<string, number>, subwayDistanceM: number | null, lat: number, lng: number, lifestyle: Lifestyle = 'family'): AmenityInfo {
   const c = (k: string) => counts[k] ?? 0;
   const dM = subwayDistanceM ?? nearestStation(lat, lng).km * 1000;
   const walkMin = Math.round((dM * ROUTE_FACTOR) / WALK_SPEED);
   const stScore = dM <= 400 ? 30 : dM <= 800 ? 24 : dM <= 1200 ? 15 : dM <= 2000 ? 8 : 2;
+  const schoolFactor = lifestyle === 'family' ? 1 : SCHOOL_PRICE_FORMATION_FACTOR;
+  const schoolTag = lifestyle === 'family' ? '' : '·가격형성분';
   const parts: Array<[string, number, number]> = [ // [라벨(개수), 획득, 만점]
     [`편의점500m ${c('convenience')}`, Math.min(10, c('convenience') * 2.5), 10],
     [`대형마트1km ${c('mart')}`, c('mart') >= 1 ? 10 : 0, 10],
@@ -207,18 +219,21 @@ export function computeAmenityKakao(counts: Record<string, number>, subwayDistan
     [`카페500m ${c('cafe')}`, Math.min(8, (c('cafe') / 15) * 8), 8],
     [`병원1km ${c('hospital')}`, Math.min(10, (c('hospital') / 10) * 10), 10],
     [`약국500m ${c('pharmacy')}`, Math.min(7, (c('pharmacy') / 3) * 7), 7],
-    [`학원1km ${c('academy')}`, Math.min(5, (c('academy') / 20) * 5), 5],
-    [`학교1km ${c('school')}`, Math.min(5, (c('school') / 3) * 5), 5],
+    [`학원1km ${c('academy')}${schoolTag}`, Math.min(5, (c('academy') / 20) * 5) * schoolFactor, 5],
+    [`학교1km ${c('school')}${schoolTag}`, Math.min(5, (c('school') / 3) * 5) * schoolFactor, 5],
   ];
   const score = Math.round(clamp(stScore + parts.reduce((s, [, v]) => s + v, 0)));
   let cnt = 0;
   for (const s of loadStations()) if (distKm(lat, lng, s.lat, s.lng) <= 1.0) cnt++;
+  const lifestyleNote = lifestyle === 'family'
+    ? ''
+    : ` · 학군 이원 가중: 라이프스타일(${lifestyle === 'single' ? '비혼' : '딩크'}) 개인효용 0 — 가격형성(수요층·환금성) 채널 ${SCHOOL_PRICE_FORMATION_FACTOR * 100}%만 반영`;
   return {
     score,
     stationsIn1km: cnt,
     nearestWalkMin: walkMin,
-    formula: '점수 = 역세권(실측거리 400m↓30·800m↓24·1.2km↓15·2km↓8·초과2) + 편의점(×2.5, 최대10) + 대형마트(1개+ 10) + 음식점(40개=15) + 카페(15개=8) + 병원(10개=10) + 약국(3개=7) + 학원(20개=5) + 학교(3개=5)',
-    basis: `역 ${Math.round(dM)}m(${stScore}) + ${parts.map(([l, v]) => `${l}(${Math.round(v)})`).join(' + ')} = ${score}점 (카카오 로컬 API 실측 — dapi.kakao.com)`,
+    formula: `점수 = 역세권(실측거리 400m↓30·800m↓24·1.2km↓15·2km↓8·초과2) + 편의점(×2.5, 최대10) + 대형마트(1개+ 10) + 음식점(40개=15) + 카페(15개=8) + 병원(10개=10) + 약국(3개=7) + 학원(20개=5) + 학교(3개=5)${lifestyleNote}`,
+    basis: `역 ${Math.round(dM)}m(${stScore}) + ${parts.map(([l, v]) => `${l}(${Math.round(v)})`).join(' + ')} = ${score}점 (카카오 로컬 API 실측 — dapi.kakao.com)${lifestyleNote}`,
   };
 }
 

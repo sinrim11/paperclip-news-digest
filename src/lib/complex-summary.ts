@@ -151,7 +151,7 @@ export async function getComplexSummary(complexNo: string, ctx: ResolvedContext 
   const kc = kc0 && kakaoAll && kakaoAll.workKey !== workKey ? { ...kc0, driveMin: null, driveKm: null } : kc0;
   const cm = ctx && c.lat != null && c.lng != null ? computeCommute(c.lat, c.lng, ctx.work, kc) : null;
   const am = c.lat != null && c.lng != null
-    ? (kc?.counts ? computeAmenityKakao(kc.counts, kc.subway?.distanceM ?? null, c.lat, c.lng) : computeAmenity(c.lat, c.lng, c.household))
+    ? (kc?.counts ? computeAmenityKakao(kc.counts, kc.subway?.distanceM ?? null, c.lat, c.lng, ctx?.lifestyle) : computeAmenity(c.lat, c.lng, c.household))
     : null;
 
   const regionHeat = (loadJson<any>('config/market-context.json')?.regionHeat ?? {}) as Record<string, number>;

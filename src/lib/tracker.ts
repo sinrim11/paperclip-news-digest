@@ -60,6 +60,7 @@ export interface ReaderFinances {
   firstTimeBuyer?: boolean; // 생애최초 여부(기본 true) — 프로필 설정용
   work?: { label: string; lat: number; lng: number }; // 출근지(통근 점수 기준)
   purpose?: 'invest' | 'live'; // 투자우선 | 실거주우선
+  lifestyle?: 'family' | 'single' | 'dink'; // 라이프스타일(2-C) — 학군 이원 가중(개인효용 vs 가격형성) 판정
   jeonseExpiry?: string;
   jeonseInsurance?: boolean;
   subscriptionAccountTotal?: number;

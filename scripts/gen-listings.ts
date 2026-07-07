@@ -86,7 +86,7 @@ const FALLBACK_JEONSE = 65;
     const kc = kakaoCtx?.complexes[c.complexNo] ?? null;
     const cm = c.lat != null && c.lng != null ? computeCommute(c.lat, c.lng, work, kc) : null;
     const am = c.lat != null && c.lng != null
-      ? (kc?.counts ? computeAmenityKakao(kc.counts, kc.subway?.distanceM ?? null, c.lat, c.lng) : computeAmenity(c.lat, c.lng, dongHH.get(`${c.gu}|${c.dong}`) ?? c.household))
+      ? (kc?.counts ? computeAmenityKakao(kc.counts, kc.subway?.distanceM ?? null, c.lat, c.lng, fin.lifestyle ?? 'single') : computeAmenity(c.lat, c.lng, dongHH.get(`${c.gu}|${c.dong}`) ?? c.household))
       : null;
 
     const listings = Array.isArray(c.listings) ? (c.listings as any[]) : [];
