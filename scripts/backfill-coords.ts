@@ -27,9 +27,8 @@ interface NewLandComplex { complexNo: string; latitude?: number; longitude?: num
   if (!targets.length) { console.log('백필 대상 없음 — 전 단지 좌표 보유'); await prisma.$disconnect(); return; }
 
   // (gu,dong) → 법정동코드
-  const dongMap = JSON.parse(readFileSync(join(process.cwd(), 'config', 'seoul-legal-dongs.json'), 'utf-8')) as Record<string, Record<string, Record<string, string>>>;
-  const seoul = dongMap['서울특별시'] ?? {};
-  const resolve = (gu: string, dong: string): string | null => seoul[gu]?.[dong] ?? null;
+  const { dongCodeOf } = await import('../src/lib/legal-dongs');
+  const resolve = (gu: string, dong: string): string | null => dongCodeOf(gu, dong);
 
   const { chromium } = await import('playwright');
   const browser = await chromium.launch({ headless: true });

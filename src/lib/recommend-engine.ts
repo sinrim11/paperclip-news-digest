@@ -511,9 +511,10 @@ export async function buildDailyRecommendations(
         `최근 ${a.prices.length}건 실거래(전용 ${minA}~${maxA}㎡) — 환금성 검증`,
       ];
       if (fresh.label) reasons.push(fresh.label);
+      const regNote = regulationOf(a.gu).note;
       const cautions: string[] = [
         '무대출 갭 전제 — 주담대 받으면 6개월 전입의무로 임대 불가. 신규 세입자 전세대출은 조건부 금지 → 기존 세입자 승계 권장',
-        '⚠️ 만안구는 국토부 모니터링 대상 — 가격 급등 시 규제지정→갭 봉쇄 리스크. 매수 직전 규제 현황 재확인',
+        ...(regNote ? [`⚠️ ${regNote}`] : []),
       ];
       gapScored.push({
         rank: 0,

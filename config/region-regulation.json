@@ -85,18 +85,22 @@
       }
     },
     {
-      "name": "검증 대기 — 편입 전 개별 검증 필요",
+      "name": "비규제 — 남양주 (1-B-iii 편입, 2026-07-08 개별 검증)",
       "regions": ["남양주시"],
       "regulation": {
-        "status": "unverified",
+        "status": "non-regulated",
         "landPermit": false,
         "speculationZone": false,
         "adjusted": false,
-        "gapInvest": false,
-        "label": "규제 상태 미검증 — 추천 금지(게이트)",
-        "note": "1-B-iii(GTX-B 왕숙 생활권) 편입 후보. 규제지역 목록엔 부재하나 왕숙 공공택지 주변 개발예정지 토허 별도 지정 가능성 — 편입 전 국토부·남양주시 공고 개별 확인 필수.",
+        "gapInvest": true,
+        "label": "비규제(토허 아님) — 전세승계 무대출 갭 매수 시 즉시임대 가능. GTX-B 생활권",
+        "note": "10·15 및 2026-06-30 지정 목록 부재 = 비규제(기존 시가지 아파트 기준 — 왕숙 공공주택지구 내 토지거래와는 별개). 단 2026-06-30 구리 지정 직후 다산·별내 풍선효과 급등 보도 다수 — 추가 지정 리스크 高, 매수 직전 규제 현황 재확인 필수.",
         "verifiedAt": "2026-07-08",
-        "sourceUrls": ["https://www.korea.kr/news/policyNewsView.do?newsId=148950973"]
+        "sourceUrls": [
+          "https://v.daum.net/v/20260701103342397",
+          "https://www.etoday.co.kr/news/view/2600077",
+          "https://www.korea.kr/news/policyNewsView.do?newsId=148950973"
+        ]
       }
     }
   ]

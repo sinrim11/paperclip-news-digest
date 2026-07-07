@@ -8,6 +8,7 @@
   "longPauseEvery": 20,
   "longPauseMs": 25000,
   "dongMapFile": "config/seoul-legal-dongs.json",
+  "dongMapFiles": ["config/seoul-legal-dongs.json", "config/legal-dongs-gyeonggi.json"],
   "groups": {
     "sun": [
       "관악구", "동작구", "영등포구", "금천구", "구로구", "강서구", "양천구",
@@ -15,7 +16,8 @@
     ],
     "wed": [
       "종로구", "중구", "용산구", "성동구", "광진구", "동대문구",
-      "서대문구", "마포구", "서초구", "강남구", "송파구", "강동구"
+      "서대문구", "마포구", "서초구", "강남구", "송파구", "강동구",
+      "남양주시"
     ]
   },
   "targetGus": [

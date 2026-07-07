@@ -32,6 +32,7 @@ interface SweepConfig {
   longPauseMs: number;
   dongs?: Array<{ gu: string; dong: string; code: string }>;
   dongMapFile?: string;
+  dongMapFiles?: string[]; // 복수 맵(서울+경기, 1-B-iii) — dongMapFile보다 우선
   targetGus?: string[];
   groups?: Record<string, string[]>; // 요일 분할 그룹(1-B-ii) — --group=sun|wed
 }
@@ -52,14 +53,22 @@ function resolveDongs(cfg: SweepConfig, groupName?: string): DongEntry[] {
     if (!g?.length) throw new Error(`config.groups에 없는 그룹: ${groupName}`);
     gus = g;
   }
-  if (!cfg.dongMapFile || !gus?.length) {
-    throw new Error('config에 dongs 또는 (dongMapFile + targetGus/groups)가 필요합니다');
+  const mapFiles = cfg.dongMapFiles?.length ? cfg.dongMapFiles : cfg.dongMapFile ? [cfg.dongMapFile] : [];
+  if (!mapFiles.length || !gus?.length) {
+    throw new Error('config에 dongs 또는 (dongMapFile(s) + targetGus/groups)가 필요합니다');
   }
-  const raw = JSON.parse(readFileSync(join(process.cwd(), cfg.dongMapFile), 'utf-8')) as Record<string, Record<string, Record<string, string>>>;
-  const seoul = raw['서울특별시'] ?? {};
+  // 모든 도(province)를 병합해 구/시 → 동 → 코드 평탄화 (서울 외 지역 지원, 1-B-iii)
+  const byGu: Record<string, Record<string, string>> = {};
+  for (const file of mapFiles) {
+    const raw = JSON.parse(readFileSync(join(process.cwd(), file), 'utf-8')) as Record<string, Record<string, Record<string, string>> | string>;
+    for (const [k, province] of Object.entries(raw)) {
+      if (k.startsWith('_') || typeof province === 'string') continue;
+      for (const [gu, dongs] of Object.entries(province)) byGu[gu] = { ...byGu[gu], ...dongs };
+    }
+  }
   const out: DongEntry[] = [];
   for (const gu of gus) {
-    const dongs = seoul[gu];
+    const dongs = byGu[gu];
     if (!dongs) {
       console.error(`[sweep] ⚠ 맵에 없는 구: ${gu}`);
       continue;
@@ -92,6 +101,7 @@ function loadConfig(): SweepConfig {
  * (검증: 봉천 15/신림 16 모두 30개 이내). 따라서 SPA가 로드하는 page 0 캡처로 충분.
  */
 async function enumerateDong(page: Page, code: string, minHousehold: number): Promise<ComplexInfo[]> {
+  const si = code.slice(0, 2) + '00000000'; // 시도 코드 파생(서울 11·경기 41) — 1-B-iii에서 하드코딩 제거
   const gun = code.slice(0, 4) + '000000';
   const captured: string[] = [];
   const pattern = '**/front-api/v1/complex/region**';
@@ -108,7 +118,7 @@ async function enumerateDong(page: Page, code: string, minHousehold: number): Pr
   await page.route(pattern, handler);
   try {
     await page
-      .goto(`https://fin.land.naver.com/regions?si=1100000000&gun=${gun}&eup=${code}`, {
+      .goto(`https://fin.land.naver.com/regions?si=${si}&gun=${gun}&eup=${code}`, {
         waitUntil: 'domcontentloaded',
         timeout: 30000,
       })

@@ -49,6 +49,8 @@ const DISTRICTS: Array<{ lawdCd: string; name: string }> = [
   { lawdCd: '41171', name: '안양시 만안구' },
   { lawdCd: '41173', name: '안양시 동안구' },
   { lawdCd: '41430', name: '의왕시' },
+  // 경기 동북(1-B-iii) — 남양주=비규제, GTX-B·왕숙 생활권
+  { lawdCd: '41360', name: '남양주시' },
 ];
 
 function recentMonths(n: number): string[] {

@@ -15,8 +15,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const prisma = new PrismaClient();
   const all = process.argv.includes('--all');
   const cands = await prisma.complexCandidate.findMany({ where: { lat: { not: null } }, select: { complexNo: true, gu: true, dong: true, lat: true, lng: true, far: true } });
-  const dongMap = JSON.parse(readFileSync(join(process.cwd(), 'config', 'seoul-legal-dongs.json'), 'utf-8')) as Record<string, Record<string, Record<string, string>>>;
-  const seoul = dongMap['서울특별시'] ?? {};
+  const { loadDongCodeMap } = await import('../src/lib/legal-dongs');
+  const seoul = loadDongCodeMap(); // 서울+경기 병합 맵(구/시 → 동 → 코드)
 
   // 동별 그룹(bbox 계산)
   const byDong = new Map<string, { gu: string; dong: string; items: typeof cands }>();
