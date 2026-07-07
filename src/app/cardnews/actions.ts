@@ -24,11 +24,12 @@ export async function retryInstagramPublish() {
 
 /** 인스타그램(sklee01.ai) 캐러셀 게시 — 실제 공개 게시(버튼 클릭 = 사용자 확인) */
 export async function publishCardnewsToInstagram(formData: FormData) {
+  // date = 세트 디렉토리명(<YYYY-MM-DD>[-시리즈접미사], 3-A)
   const date = String(formData.get('date') ?? '');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) redirect('/cardnews?error=' + encodeURIComponent('잘못된 날짜'));
+  if (!/^\d{4}-\d{2}-\d{2}(-[a-z0-9]+)?$/.test(date)) redirect('/cardnews?error=' + encodeURIComponent('잘못된 세트'));
   try {
-    const idx = JSON.parse(readFileSync(join(process.cwd(), 'output', 'cardnews', 'index.json'), 'utf-8')) as Array<{ date: string; files: string[]; caption?: string }>;
-    const set = idx.find((s) => s.date === date);
+    const idx = JSON.parse(readFileSync(join(process.cwd(), 'output', 'cardnews', 'index.json'), 'utf-8')) as Array<{ date: string; dir?: string; files: string[]; caption?: string }>;
+    const set = idx.find((s) => (s.dir ?? s.date) === date);
     if (!set) throw new Error('세트 없음');
     const r = await publishCardnewsCarousel(date, set.files, set.caption ?? '');
     redirect('/cardnews?ok=' + encodeURIComponent(`인스타그램(@${r.username}) 게시 완료${r.permalink ? ` — ${r.permalink}` : ` (postId ${r.postId})`}`));
@@ -51,15 +52,16 @@ export async function generateCardnews() {
 
 /** 텔레그램으로 캐러셀 전송 — sendMediaGroup(최대 10장, 인스타 업로드용 원본 수신) */
 export async function sendCardnewsToTelegram(formData: FormData) {
+  // date = 세트 디렉토리명(<YYYY-MM-DD>[-시리즈접미사], 3-A)
   const date = String(formData.get('date') ?? '');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) redirect('/cardnews?error=' + encodeURIComponent('잘못된 날짜'));
+  if (!/^\d{4}-\d{2}-\d{2}(-[a-z0-9]+)?$/.test(date)) redirect('/cardnews?error=' + encodeURIComponent('잘못된 세트'));
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) redirect('/cardnews?error=' + encodeURIComponent('TELEGRAM_BOT_TOKEN/CHAT_ID 미설정'));
 
   try {
-    const idx = JSON.parse(readFileSync(join(process.cwd(), 'output', 'cardnews', 'index.json'), 'utf-8')) as Array<{ date: string; files: string[]; caption?: string }>;
-    const set = idx.find((s) => s.date === date);
+    const idx = JSON.parse(readFileSync(join(process.cwd(), 'output', 'cardnews', 'index.json'), 'utf-8')) as Array<{ date: string; dir?: string; files: string[]; caption?: string }>;
+    const set = idx.find((s) => (s.dir ?? s.date) === date);
     if (!set) throw new Error('세트 없음');
     const form = new FormData();
     const media = set.files.map((f, i) => ({

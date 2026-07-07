@@ -59,3 +59,8 @@ export function recoFactorsFor(gu: string, dong?: string): MomentumFactor[] {
 export function momentumAsOf(): string {
   return load().asOf;
 }
+
+/** 전체 팩터(확실성 순) — 카드뉴스 브리핑 시리즈 등 요약 소비용. */
+export function allFactors(): MomentumFactor[] {
+  return [...load().factors].sort((a, b) => CERT_ORDER[a.certainty] - CERT_ORDER[b.certainty]);
+}

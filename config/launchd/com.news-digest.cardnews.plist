@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.news-digest.cardnews</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/sklee01/news-digest/scripts/gen-cardnews.sh</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/sklee01/news-digest</string>
+  <!-- 3-A: 매일 09:00 시리즈 로테이션(화목토=8억, 그외=6억, 월=브리핑 추가) — 08:30 추천 이후 -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>9</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key><string>/Users/sklee01/news-digest/output/cardnews_gen.log</string>
+  <key>StandardErrorPath</key><string>/Users/sklee01/news-digest/output/cardnews_gen.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>
