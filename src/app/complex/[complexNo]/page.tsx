@@ -181,6 +181,77 @@ export default async function ComplexPage({ params }: { params: Promise<{ comple
 
       <ProfileBadge />
 
+      {/* ── ❓ 한눈에 Q&A — 초보의 5가지 질문에 데이터로 즉답(3-C, Phase 0 확정 스펙) ── */}
+      <section className="mb-6 rounded-xl border border-gray-300 bg-white p-4">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <h2 className="text-lg font-bold">❓ 한눈에 Q&A</h2>
+          <span className="text-xs text-gray-400">궁금한 것부터 — 각 답은 아래 상세 섹션의 원천 데이터 요약(참고자료, 판단은 본인)</span>
+        </div>
+        <div className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Q1 가격 */}
+          <a href="#trades" className="rounded-lg border border-gray-200 p-3 transition hover:border-gray-400">
+            <div className="text-[13px] font-semibold text-gray-500">지금 호가, 실거래 대비 비싼가?</div>
+            {gapPct == null ? (
+              <><div className="mt-1 text-lg font-bold text-red-600">판정 불가</div>
+              <div className="mt-0.5 text-xs text-gray-500">180일 실거래 표본 없음 — 호가만 존재</div></>
+            ) : (
+              <><div className={`mt-1 font-mono text-lg font-bold tabular-nums ${gapPct <= 2 ? 'text-emerald-600' : gapPct > 8 ? 'text-red-600' : 'text-amber-600'}`}>{gapPct >= 0 ? '+' : ''}{gapPct}% {gapPct <= 2 ? '— 시세 수준' : gapPct > 8 ? '— 높음, 협상 필수' : '— 다소 높음'}</div>
+              <div className="mt-0.5 text-xs text-gray-500">최저 호가 {c.minDealPrice ? eok(c.minDealPrice) : '-'} vs 실거래 중간 {tradeMedian ? eok(tradeMedian) : '-'}({trades.length}건·국토부) ↓</div></>
+            )}
+          </a>
+          {/* Q2 월 부담 */}
+          <a href="#monthly" className="rounded-lg border border-gray-200 p-3 transition hover:border-gray-400">
+            <div className="text-[13px] font-semibold text-gray-500">사면 매달 얼마 나가나?</div>
+            {monthly ? (
+              <><div className="mt-1 font-mono text-lg font-bold tabular-nums text-gray-900">약 {monthly.total.toLocaleString()}만/월</div>
+              <div className="mt-0.5 text-xs text-gray-500">실수령의 {monthly.burdenPct}% · 현 주거비 대비 +{monthly.netIncrease}만 (금리 {ctx?.model.loanRatePct}%·30년) ↓</div></>
+            ) : (
+              <><div className="mt-1 text-lg font-bold text-gray-400">계산 불가</div>
+              <div className="mt-0.5 text-xs text-gray-500">기준가(호가·실거래) 또는 프로필 없음</div></>
+            )}
+          </a>
+          {/* Q3 교통 */}
+          <a href="#commute" className="rounded-lg border border-gray-200 p-3 transition hover:border-gray-400">
+            <div className="text-[13px] font-semibold text-gray-500">역까지 도보 몇 분, 회사까진?</div>
+            {cm ? (
+              <><div className="mt-1 text-lg font-bold text-gray-900">{cm.origin.name} 도보 {cm.origin.walkMin}분{cm.busDependent ? ' ⚠️' : ''}</div>
+              <div className="mt-0.5 text-xs text-gray-500">{ctx?.work.label}까지 총 ~{cm.totalMin}분 · 자차 ~{cm.driveMin}분{cm.driveReal ? '(카카오 실경로)' : '(근사)'}{cm.busDependent ? ' · 역 1.2km+ 버스 의존' : ''} ↓</div></>
+            ) : (
+              <><div className="mt-1 text-lg font-bold text-gray-400">실측 없음</div>
+              <div className="mt-0.5 text-xs text-gray-500">좌표 미수집 — 다음 스윕 백필 대기</div></>
+            )}
+          </a>
+          {/* Q4 편의 */}
+          <a href="#commute" className="rounded-lg border border-gray-200 p-3 transition hover:border-gray-400">
+            <div className="text-[13px] font-semibold text-gray-500">마트·병원 근처에 있나?</div>
+            {kc?.counts ? (
+              <><div className="mt-1 text-lg font-bold text-gray-900">마트 {kc.counts.mart ?? 0} · 병원 {kc.counts.hospital ?? 0}</div>
+              <div className="mt-0.5 text-xs text-gray-500">1km 실측(카카오) · 편의점 {kc.counts.convenience ?? 0}·약국 {kc.counts.pharmacy ?? 0}(500m) ↓</div></>
+            ) : (
+              <><div className="mt-1 text-lg font-bold text-gray-400">실측 없음</div>
+              <div className="mt-0.5 text-xs text-gray-500">카카오 상권 데이터 미수집</div></>
+            )}
+          </a>
+          {/* Q5 유동성 */}
+          <a href="#trades" className="rounded-lg border border-gray-200 p-3 transition hover:border-gray-400">
+            <div className="text-[13px] font-semibold text-gray-500">팔고 싶을 때 팔리는 단지인가?</div>
+            <div className={`mt-1 font-mono text-lg font-bold tabular-nums ${trades.length >= 10 ? 'text-emerald-600' : trades.length >= 3 ? 'text-gray-900' : 'text-red-600'}`}>180일 {trades.length}건 거래</div>
+            <div className="mt-0.5 text-xs text-gray-500">{c.household.toLocaleString()}세대 · 현재 매물 {c.dealArticles}건 — {trades.length >= 10 ? '유동성 검증' : trades.length >= 3 ? '보통' : '표본 부족·환금 의문'} ↓</div>
+          </a>
+          {/* Q6 리스크 */}
+          <a href="#risks" className="rounded-lg border border-gray-200 p-3 transition hover:border-gray-400">
+            <div className="text-[13px] font-semibold text-gray-500">이 단지의 리스크는?</div>
+            {risks.length === 0 ? (
+              <><div className="mt-1 text-lg font-bold text-emerald-600">감지 없음</div>
+              <div className="mt-0.5 text-xs text-gray-500">데이터 기준 — 현장·등기 확인은 필수 ↓</div></>
+            ) : (
+              <><div className="mt-1 text-lg font-bold text-red-600">{risks.length}건 감지</div>
+              <div className="mt-0.5 line-clamp-2 text-xs text-gray-500">{risks[0]}{risks.length > 1 ? ` 외 ${risks.length - 1}건` : ''} ↓</div></>
+            )}
+          </a>
+        </div>
+      </section>
+
       {/* ── 히어로 스탯 ── */}
       <section className="mb-6 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         {[
@@ -224,7 +295,7 @@ export default async function ComplexPage({ params }: { params: Promise<{ comple
 
       {/* ── 💸 이 집을 사면 — 월 부담 명세(임장 전 필수 확인) ── */}
       {monthly && (
-        <section className="mb-6 rounded-xl border-2 border-gray-800 bg-white p-4">
+        <section id="monthly" className="mb-6 scroll-mt-4 rounded-xl border-2 border-gray-800 bg-white p-4">
           <h2 className="text-lg font-bold">💸 이 집을 사면 — 월 부담 명세 <span className="text-sm font-normal text-gray-400">기준가 {price ? eok(price) : '-'} · 대출 {breakdown ? eok(breakdown.loan) : '-'} · 금리 {ctx?.model.loanRatePct}%</span></h2>
           <div className="mt-3 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
             <div className="rounded-lg bg-gray-900 p-3 text-white">
@@ -271,7 +342,7 @@ export default async function ComplexPage({ params }: { params: Promise<{ comple
       </section>
 
       {/* ── 확인해야 할 리스크(반대 근거) — 균형 잡힌 판단용 ── */}
-      <section className="mb-6 rounded-xl border border-red-200 bg-red-50/50 p-4">
+      <section id="risks" className="mb-6 scroll-mt-4 rounded-xl border border-red-200 bg-red-50/50 p-4">
         <h2 className="text-lg font-bold text-red-800">⚠️ 확인해야 할 리스크 <span className="text-sm font-normal text-red-400">데이터 기반 반대 근거 — 임장·판단 전 필독</span></h2>
         {risks.length === 0 ? (
           <p className="mt-2 text-[13px] text-gray-600">수집 데이터 기준 특이 리스크가 감지되지 않았습니다 — 그래도 현장·등기·관리비 확인은 필수입니다.</p>
@@ -284,7 +355,7 @@ export default async function ComplexPage({ params }: { params: Promise<{ comple
 
       {/* ── 통근·상권 ── */}
       {(cm || am) && (
-        <section className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+        <section id="commute" className="mb-6 scroll-mt-4 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
           <h2 className="text-lg font-bold text-indigo-900">🚇 통근 · 상권</h2>
           {cm && (
             <p className="mt-2 text-[13px] leading-relaxed text-indigo-900">
@@ -338,7 +409,7 @@ export default async function ComplexPage({ params }: { params: Promise<{ comple
       </section>
 
       {/* ── 실거래 이력 ── */}
-      <section className="mb-6">
+      <section id="trades" className="mb-6 scroll-mt-4">
         <h2 className="mb-2 text-lg font-bold">실거래 이력 <span className="text-sm font-normal text-gray-400">최근 180일 · {trades.length}건 (국토부)</span></h2>
         {bands.size > 0 && (
           <div className="mb-2.5 flex flex-wrap gap-2">
