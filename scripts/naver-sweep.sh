@@ -8,8 +8,16 @@ set -a
 [ -f .env ] && source .env
 [ -f .env.local ] && source .env.local
 set +a
-echo "=== $(date '+%Y-%m-%d %H:%M:%S') naver-sweep 시작 ===" | tee -a "$LOG"
-npx tsx scripts/naver-sweep.ts 2>&1 | tee -a "$LOG"
+# 요일 분할 그룹(1-B-ii): 일=기존 13구(sun), 수=신규 12구(wed). 수동 실행 시 인자로 지정 가능: naver-sweep.sh wed
+GROUP="${1:-}"
+if [ -z "$GROUP" ]; then
+  case "$(date +%u)" in
+    3) GROUP="wed" ;;
+    *) GROUP="sun" ;;
+  esac
+fi
+echo "=== $(date '+%Y-%m-%d %H:%M:%S') naver-sweep 시작 (그룹 $GROUP) ===" | tee -a "$LOG"
+npx tsx scripts/naver-sweep.ts --group="$GROUP" 2>&1 | tee -a "$LOG"
 echo "--- 신규 단지 좌표 백필(통근·상권 점수용) ---" | tee -a "$LOG"
 npx tsx scripts/backfill-coords.ts 2>&1 | tee -a "$LOG"
 echo "--- 신규 단지 용적률 백필(재건축 사업성 지표) ---" | tee -a "$LOG"

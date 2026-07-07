@@ -33,6 +33,7 @@ interface SweepConfig {
   dongs?: Array<{ gu: string; dong: string; code: string }>;
   dongMapFile?: string;
   targetGus?: string[];
+  groups?: Record<string, string[]>; // 요일 분할 그룹(1-B-ii) — --group=sun|wed
 }
 
 type DongEntry = { gu: string; dong: string; code: string };
@@ -40,17 +41,24 @@ type DongEntry = { gu: string; dong: string; code: string };
 /**
  * 대상 구의 모든 법정동을 검증된 코드 맵에서 로드.
  * config.dongs(하드코딩)가 있으면 그것을 우선 사용(back-compat).
- * 없으면 dongMapFile × targetGus 로 전개 → 대림동 코드 오류류의 조용한 누락 방지.
+ * groupName이 있으면 cfg.groups[groupName](요일 분할, 1-B-ii), 없으면 targetGus.
+ * dongMapFile 전개로 대림동 코드 오류류의 조용한 누락 방지.
  */
-function resolveDongs(cfg: SweepConfig): DongEntry[] {
+function resolveDongs(cfg: SweepConfig, groupName?: string): DongEntry[] {
   if (cfg.dongs && cfg.dongs.length) return cfg.dongs;
-  if (!cfg.dongMapFile || !cfg.targetGus?.length) {
-    throw new Error('config에 dongs 또는 (dongMapFile+targetGus)가 필요합니다');
+  let gus = cfg.targetGus;
+  if (groupName) {
+    const g = cfg.groups?.[groupName];
+    if (!g?.length) throw new Error(`config.groups에 없는 그룹: ${groupName}`);
+    gus = g;
+  }
+  if (!cfg.dongMapFile || !gus?.length) {
+    throw new Error('config에 dongs 또는 (dongMapFile + targetGus/groups)가 필요합니다');
   }
   const raw = JSON.parse(readFileSync(join(process.cwd(), cfg.dongMapFile), 'utf-8')) as Record<string, Record<string, Record<string, string>>>;
   const seoul = raw['서울특별시'] ?? {};
   const out: DongEntry[] = [];
-  for (const gu of cfg.targetGus) {
+  for (const gu of gus) {
     const dongs = seoul[gu];
     if (!dongs) {
       console.error(`[sweep] ⚠ 맵에 없는 구: ${gu}`);
@@ -177,8 +185,16 @@ async function main() {
   const cfg = loadConfig();
   const ceiling = cfg.budgetCeilingManwon;
   const minArea = cfg.minExclusiveAreaM2 ?? 0;
-  const dongList = resolveDongs(cfg);
-  console.log(`[sweep] start — 예산상한 ${(ceiling / 10000).toFixed(1)}억, 최소 ${cfg.minHousehold}세대, 전용 ${minArea}㎡+, ${dongList.length}개 동`);
+  const groupArg = process.argv.find((a) => a.startsWith('--group='))?.slice('--group='.length);
+  const dongList = resolveDongs(cfg, groupArg);
+  console.log(`[sweep] start — 예산상한 ${(ceiling / 10000).toFixed(1)}억, 최소 ${cfg.minHousehold}세대, 전용 ${minArea}㎡+, ${dongList.length}개 동${groupArg ? ` (그룹 ${groupArg})` : ''}`);
+  if (process.argv.includes('--plan')) {
+    const byGu = new Map<string, number>();
+    for (const d of dongList) byGu.set(d.gu, (byGu.get(d.gu) ?? 0) + 1);
+    for (const [gu, n] of byGu) console.log(`[sweep]   ${gu}: ${n}개 동`);
+    console.log('[sweep] --plan — 열거만 하고 종료(네트워크 접근 없음)');
+    return;
+  }
 
   const browser = await chromium.launch({ headless: true });
   const ctx = await browser.newContext({ userAgent: UA_PC, locale: 'ko-KR', viewport: { width: 1400, height: 900 } });

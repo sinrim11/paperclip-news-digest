@@ -17,7 +17,7 @@ import { sendTelegram } from '../src/lib/telegram';
 
 const prisma = new PrismaClient();
 
-// 예산 사정권: 서울 13구 + 경기 남부 3(관악산 남측 통근권·2026-07-04 확장). LAWD 코드는 법정동코드 앞 5자리.
+// 서울 25구 전체(1-B-ii 확대) + 경기 남부 3(관악산 남측 통근권·2026-07-04 확장). LAWD 코드는 법정동코드 앞 5자리.
 const DISTRICTS: Array<{ lawdCd: string; name: string }> = [
   { lawdCd: '11620', name: '관악구' },
   { lawdCd: '11590', name: '동작구' },
@@ -32,6 +32,19 @@ const DISTRICTS: Array<{ lawdCd: string; name: string }> = [
   { lawdCd: '11305', name: '강북구' },
   { lawdCd: '11290', name: '성북구' },
   { lawdCd: '11380', name: '은평구' },
+  // 서울 잔여 12구 (1-B-ii 확대, 2026-07-08 — API 기반이라 부담 낮음, 즉시 25구 전체)
+  { lawdCd: '11110', name: '종로구' },
+  { lawdCd: '11140', name: '중구' },
+  { lawdCd: '11170', name: '용산구' },
+  { lawdCd: '11200', name: '성동구' },
+  { lawdCd: '11215', name: '광진구' },
+  { lawdCd: '11230', name: '동대문구' },
+  { lawdCd: '11410', name: '서대문구' },
+  { lawdCd: '11440', name: '마포구' },
+  { lawdCd: '11650', name: '서초구' },
+  { lawdCd: '11680', name: '강남구' },
+  { lawdCd: '11710', name: '송파구' },
+  { lawdCd: '11740', name: '강동구' },
   // 경기 남부(통근권 확장) — 만안구=비규제(갭투자 트랙), 동안구·의왕=토허(2년 실거주)
   { lawdCd: '41171', name: '안양시 만안구' },
   { lawdCd: '41173', name: '안양시 동안구' },
