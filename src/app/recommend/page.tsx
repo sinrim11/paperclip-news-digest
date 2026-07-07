@@ -21,6 +21,8 @@ interface StretchReco {
   overComfortManwon?: number;
   monthlyPayAddManwon?: number;
   monthsToReach?: number | null;
+  regulationLabel?: string;
+  regulationSources?: string[];
   reasons: string[];
   cautions?: string[];
   complexNo?: string;
@@ -236,6 +238,14 @@ export default async function RecommendPage() {
                     </span>
                   )}
                 </div>
+                {r.regulationLabel && (
+                  <p className="mt-2 text-[13px] text-gray-600">
+                    🧾 규제: {r.regulationLabel}
+                    {r.regulationSources?.length ? (
+                      <a href={r.regulationSources[0]} target="_blank" rel="noreferrer" className="ml-1.5 text-blue-600 hover:underline">근거 ↗</a>
+                    ) : null}
+                  </p>
+                )}
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {r.reasons.map((reason, j) => (
                     <span key={j} className="rounded bg-green-50 px-2.5 py-1 text-[13px] text-green-700">✓ {reason}</span>

@@ -35,9 +35,20 @@ export interface RecoView {
   overComfortManwon?: number;
   monthlyPayAddManwon?: number;
   monthsToReach?: number | null;
+  // 지역 규제 상태(가드레일 1 — 출처 URL 동반)
+  regulationLabel?: string;
+  regulationSources?: string[];
 }
 
 const eok = (manwon: number) => (manwon / 10000).toFixed(2).replace(/\.?0+$/, '') + '억';
+
+/** 규제 상태 표기(공통) — label + 근거 URL 1개. label 없으면 빈 배열. */
+function regulationLines(r: RecoView): string[] {
+  if (!r.regulationLabel) return [];
+  const lines = [`🧾 규제: ${r.regulationLabel}`];
+  if (r.regulationSources?.length) lines.push(`   └ 근거: ${r.regulationSources[0]}`);
+  return lines;
+}
 
 export function header(count: number, asOf: string): string {
   return [
@@ -88,6 +99,7 @@ export function formatStretchReco(r: RecoView): string {
   if (r.overComfortManwon != null) lines.push(`💸 더 보태면: +${eok(r.overComfortManwon)} (오늘 자기자본권 초과분)`);
   if (r.monthlyPayAddManwon != null) lines.push(`📈 월 상환 증가분: 약 +${r.monthlyPayAddManwon}만/월`);
   lines.push(`⏳ 조달: ${r.monthsToReach != null ? `월 적립 유지 시 약 ${r.monthsToReach}개월 뒤 도달${r.monthsToReach <= 24 ? ' ✅(2년 내)' : ' ⚠️(2년 초과)'}` : '월 적립액 미설정 — 판정 불가'}`);
+  lines.push(...regulationLines(r));
   if (r.station && r.station !== '역세권 정보 확인 필요') lines.push(`🚇 ${r.station}`);
   if (r.catalyst) lines.push(`🚧 호재: ${r.catalyst}`);
   lines.push('');
@@ -122,6 +134,7 @@ export function formatGapReco(r: RecoView): string {
   lines.push(`🏢 ${spec.join(' · ')}${r.tradeCount ? ` · 최근 ${r.tradeCount}건` : ''}`);
   lines.push(`💰 매매 ${eok(r.medianManwon)} − 전세 ${eok(r.jeonseManwon ?? 0)} = 갭 ${eok(r.gapManwon ?? 0)}`);
   lines.push(`📊 전세가율 ${r.jeonseRatioPct}% · ${r.gapCoverable ? '갭 자기자본 내 ✅' : '갭 자기자본 초과분 필요 ⚠️'}`);
+  lines.push(...regulationLines(r));
   if (r.station && r.station !== '역세권 정보 확인 필요') lines.push(`🚇 ${r.station}`);
   lines.push('');
   lines.push('📈 선정 근거');
@@ -145,6 +158,7 @@ export function formatReco(r: RecoView): string {
   lines.push(`🏢 ${spec.join(' · ')}`);
   lines.push(`💰 실거래 중간 ${eok(r.medianManwon)}${r.priceRangeText ? ` (범위 ${r.priceRangeText})` : ''}${r.tradeCount ? ` · 최근 ${r.tradeCount}건 거래` : ''}`);
   lines.push(`🎯 예산: ${budget}`);
+  lines.push(...regulationLines(r));
   if (r.station) lines.push(`🚇 ${r.station}`);
   if (r.catalyst) lines.push(`🚧 호재: ${r.catalyst}`);
   if (r.school) lines.push(`🏫 학군: ${r.school}`);

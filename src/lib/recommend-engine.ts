@@ -10,8 +10,9 @@
 import type { PrismaClient } from '@prisma/client';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { tierOf, LAWD_GU, NON_REGULATED_GU } from './tiers';
+import { tierOf, LAWD_GU } from './tiers';
 import { monthlyPaymentPerWon } from './tracker';
+import { regulationOf, nonRegulatedGus } from './region-regulation';
 
 export interface DailyReco {
   rank: number;
@@ -47,6 +48,9 @@ export interface DailyReco {
   overComfortManwon?: number; // 오늘 자기자본권 대비 초과분(만원) — "+X 더 보태면"
   monthlyPayAddManwon?: number; // 초과분 전액 대출 가정 월 상환 증가분(만원/월)
   monthsToReach?: number | null; // 월 적립 기준 도달 개월(적립액 미설정 시 null)
+  // 지역 규제 상태(config/region-regulation.json) — UI·추천 사유 명시(가드레일 1)
+  regulationLabel?: string;
+  regulationSources?: string[];
 }
 
 interface Rules {
@@ -230,11 +234,17 @@ export async function buildDailyRecommendations(
     }
   }
 
-  // 3) 스코어링
+  // 3) 스코어링 — 규제 미검증 지역은 게이트에서 제외(가드레일 1: 규제 확인 안 된 지역 추천 금지)
   const newSignalWindowMs = rules.newSignal.recentTradeWindowDays * 86_400_000;
   const scored: DailyReco[] = [];
+  const skippedUnverifiedGu = new Set<string>();
   for (const a of aggs.values()) {
     if (a.prices.length < rules.filters.minTrades180d) continue;
+    const reg = regulationOf(a.gu);
+    if (reg.status === 'unverified') {
+      skippedUnverifiedGu.add(a.gu);
+      continue;
+    }
     a.prices.sort((x, y) => x - y);
     const med = median(a.prices);
     if (med > stretch) continue;
@@ -314,6 +324,8 @@ export async function buildDailyRecommendations(
       score,
       isNew,
       signalNote,
+      regulationLabel: reg.label,
+      regulationSources: reg.sourceUrls,
     });
   }
 
@@ -358,6 +370,11 @@ export async function buildDailyRecommendations(
     const spScored: DailyReco[] = [];
     for (const a of aggsWide.values()) {
       if (a.prices.length < rules.filters.minTrades180d) continue;
+      const reg = regulationOf(a.gu);
+      if (reg.status === 'unverified') {
+        skippedUnverifiedGu.add(a.gu);
+        continue;
+      }
       if (mainKeys.has(a.key)) continue; // 메인 추천과 중복 제외
       if (lastSentStretch.has(a.key)) continue; // 스트레치+ 자체 쿨다운
       a.prices.sort((x, y) => x - y);
@@ -422,6 +439,8 @@ export async function buildDailyRecommendations(
         overComfortManwon: overComfort,
         monthlyPayAddManwon: monthlyPayAdd,
         monthsToReach,
+        regulationLabel: reg.label,
+        regulationSources: reg.sourceUrls,
       });
     }
     spScored.sort((a, b) => b.score - a.score);
@@ -444,17 +463,18 @@ export async function buildDailyRecommendations(
     }
   }
 
-  // 6) 갭투자 트랙 — 비규제 지역(NON_REGULATED_GU) 전용. 전세 승계·무대출 갭 매수 → 즉시임대 가능.
+  // 6) 갭투자 트랙 — 비규제 지역(region-regulation 테이블 non-regulated) 전용. 전세 승계·무대출 갭 매수 → 즉시임대 가능.
   const gapCfg = rules.gapTrack;
   const gapTrack: DailyReco[] = [];
-  if (gapCfg?.enabled && NON_REGULATED_GU.size > 0) {
+  const nonRegGus = nonRegulatedGus();
+  if (gapCfg?.enabled && nonRegGus.size > 0) {
     const usableManwon = Math.round(
       (loadJson<{ finances?: { usableCapital?: number } }>('config/reader-profile.json')?.finances?.usableCapital ?? 200_000_000) / 10_000,
     );
     const pickedKeys = new Set([...items, ...stretchPlus].map((r) => r.complexKey));
     const gapScored: DailyReco[] = [];
     for (const a of aggs.values()) {
-      if (!NON_REGULATED_GU.has(a.gu)) continue;
+      if (!nonRegGus.has(a.gu)) continue;
       if (a.prices.length < gapCfg.minTrades) continue;
       if (pickedKeys.has(a.key)) continue; // 메인 추천과 중복 제외
       a.prices.sort((x, y) => x - y);
@@ -505,6 +525,8 @@ export async function buildDailyRecommendations(
         jeonseRatioPct: ratioPct,
         gapCoverable: coverable,
         nonRegulated: true,
+        regulationLabel: regulationOf(a.gu).label,
+        regulationSources: regulationOf(a.gu).sourceUrls,
       });
     }
     // 전세가율 높은순(갭 작은순) → 갭 작은순 보조
@@ -521,9 +543,12 @@ export async function buildDailyRecommendations(
     });
   }
 
+  const gateNote = skippedUnverifiedGu.size
+    ? ` · ⛔ 규제 미검증 지역 제외: ${[...skippedUnverifiedGu].join(', ')}(config/region-regulation.json 검증 후 편입)`
+    : '';
   const note = items.length
-    ? `${items.length}건 추천 (신규 ${items.filter((x) => x.isNew).length} · 재등장 ${items.filter((x) => !x.isNew).length})${stretchPlus.length ? ` · 스트레치+ ${stretchPlus.length}건` : ''}${gapTrack.length ? ` · 갭투자 트랙 ${gapTrack.length}건` : ''}`
-    : '오늘은 규칙을 통과한 신규 후보가 없습니다(최근 14일 추천분 쿨다운). 시장 변화 시 재등장합니다.';
+    ? `${items.length}건 추천 (신규 ${items.filter((x) => x.isNew).length} · 재등장 ${items.filter((x) => !x.isNew).length})${stretchPlus.length ? ` · 스트레치+ ${stretchPlus.length}건` : ''}${gapTrack.length ? ` · 갭투자 트랙 ${gapTrack.length}건` : ''}${gateNote}`
+    : `오늘은 규칙을 통과한 신규 후보가 없습니다(최근 14일 추천분 쿨다운). 시장 변화 시 재등장합니다.${gateNote}`;
 
   return { asOf: todayStr, items, stretchPlus, gapTrack, note, scanned: aggs.size };
 }

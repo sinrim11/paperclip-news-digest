@@ -55,5 +55,4 @@ export const LAWD_GU: Record<string, string> = {
   '41171': '안양 만안구', '41173': '안양 동안구', '41430': '의왕시',
 };
 
-/** 비규제 지역(토허 아님) — 갭투자(전세승계·즉시임대) 가능. 구/시 이름 기준. 규제 변경 시 갱신. */
-export const NON_REGULATED_GU = new Set<string>(['안양 만안구']);
+// 비규제 지역 판정은 config/region-regulation.json + src/lib/region-regulation.ts(nonRegulatedGus)로 이관됨 (1-B-i).
