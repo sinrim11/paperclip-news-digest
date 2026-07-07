@@ -18,8 +18,10 @@ const prisma = new PrismaClient();
 
 async function main() {
   const dry = process.argv.includes('--dry');
-  const { asOf, items, stretchPlus, gapTrack, note } = await buildDailyRecommendations(prisma);
+  const { asOf, items, stretchPlus, gapTrack, excluded, note } = await buildDailyRecommendations(prisma);
   console.log(`[daily-reco] ${asOf} — ${note}`);
+  // 하방 플래그 제외 사유 로그(2-B) — launchd 로그 파일에 남아 사후 추적 가능
+  for (const e of excluded) console.log(`[daily-reco] 🚩 제외: ${e.gu} ${e.dong} ${e.name} — ${e.flags.join(' / ')}`);
 
   const messages = items.length ? [header(items.length, asOf), ...items.map(formatReco)] : [emptyMessage(asOf)];
   // 스트레치+ 트랙(조금 더 보태면 사정권) — 메인 하단 별도 섹션
@@ -34,7 +36,7 @@ async function main() {
   }
 
   // 산출물 저장(웹/검수용)
-  writeFileSync(join(process.cwd(), 'config', 'recommendations.json'), JSON.stringify({ _comment: 'daily-recommend 자동 생성', asOf, items, stretchPlus, gapTrack }, null, 2));
+  writeFileSync(join(process.cwd(), 'config', 'recommendations.json'), JSON.stringify({ _comment: 'daily-recommend 자동 생성', asOf, items, stretchPlus, gapTrack, excluded }, null, 2));
 
   // 발송
   let sent = 0;

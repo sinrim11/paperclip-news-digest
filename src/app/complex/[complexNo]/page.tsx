@@ -20,6 +20,7 @@ import DecisionFlow from '@/components/DecisionFlow';
 import { CompareToggle, CompareBar } from '@/components/CompareControls';
 import { buildRisks, buildBuyCase } from '@/lib/complex-summary';
 import { momentumFor } from '@/lib/momentum';
+import { tradeTrendFlag, DEFAULT_DOWNSIDE } from '@/lib/downside';
 import { RichText } from '@/components/RichText';
 
 export const dynamic = 'force-dynamic';
@@ -130,6 +131,9 @@ export default async function ComplexPage({ params }: { params: Promise<{ comple
     invest: breakdown ? { totalScore: breakdown.totalScore, roeAnnualPct: breakdown.base.roeAnnualPct, equityIn: breakdown.equityIn, feasibleToday: breakdown.feasibleToday, feasible2yr: breakdown.feasible2yr, breakevenApprPct: breakdown.breakevenApprPct } : null,
     vs,
   });
+  // 하방 경고 플래그(2-B) — 거래량 추세 급감은 UI에 항상 표시(숨김 금지)
+  const trendFlag = tradeTrendFlag(trades.map((t) => t.dealDate.getTime()), 180, Date.now(), DEFAULT_DOWNSIDE);
+  if (trendFlag) risks.push(`🚩 ${trendFlag.label}`);
 
   // 🎯 매수 케이스(설득 논리 + 자기검증) — 시스템 스스로 설득 안 되면 '추천 보류'
   const buyCase = buildBuyCase({

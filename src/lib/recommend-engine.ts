@@ -14,6 +14,7 @@ import { tierOf, LAWD_GU } from './tiers';
 import { monthlyPaymentPerWon } from './tracker';
 import { regulationOf, nonRegulatedGus } from './region-regulation';
 import { recoFactorsFor } from './momentum';
+import { downsideFlags, DEFAULT_DOWNSIDE, type DownsideConfig } from './downside';
 
 export interface DailyReco {
   rank: number;
@@ -63,6 +64,7 @@ interface Rules {
   jeonseRatioByPct?: Array<{ minPct: number; score: number }>;
   diversity?: { maxPerGu: number };
   dailyLimit: number;
+  downsideFlags?: Partial<DownsideConfig>;
   stretchPlus?: { enabled?: boolean; limit: number; ceilingManwon: number; maxPerGu?: number; cooldownDays?: number };
   gapTrack?: { enabled?: boolean; limit: number; minJeonseRatioPct: number; maxGapManwon: number; minTrades: number };
   rotation: { cooldownDays: number; reentryOnNewSignal: boolean };
@@ -159,7 +161,15 @@ function freshnessScore(rules: Rules, buildYear: number | null, nowYear: number)
 export async function buildDailyRecommendations(
   prisma: PrismaClient,
   now: Date = new Date(),
-): Promise<{ asOf: string; items: DailyReco[]; stretchPlus: DailyReco[]; gapTrack: DailyReco[]; note: string; scanned: number }> {
+): Promise<{
+  asOf: string;
+  items: DailyReco[];
+  stretchPlus: DailyReco[];
+  gapTrack: DailyReco[];
+  excluded: Array<{ name: string; gu: string; dong: string; flags: string[] }>;
+  note: string;
+  scanned: number;
+}> {
   const rules = loadJson<Rules>('config/recommendation-rules.json');
   if (!rules) throw new Error('config/recommendation-rules.json 로드 실패');
   const ctx = loadJson<MarketContext>('config/market-context.json');
@@ -241,6 +251,14 @@ export async function buildDailyRecommendations(
   const newSignalWindowMs = rules.newSignal.recentTradeWindowDays * 86_400_000;
   const scored: DailyReco[] = [];
   const skippedUnverifiedGu = new Set<string>();
+  // 하방 경고 플래그(2-B) — excludeThreshold개 이상이면 제외+로그, 1개는 유의점
+  const dsCfg: DownsideConfig = { ...DEFAULT_DOWNSIDE, ...(rules.downsideFlags ?? {}) };
+  const excluded: Array<{ name: string; gu: string; dong: string; flags: string[] }> = [];
+  const flagsOf = (a: ComplexAgg, jeonseRatioPct: number | null, jeonseSamples: number) =>
+    downsideFlags(
+      { tradeMs: a.recentTrades.map((t) => t.ms), lookbackDays: rules.filters.lookbackDays, nowMs: now.getTime(), jeonseRatioPct, jeonseSamples },
+      dsCfg,
+    );
   for (const a of aggs.values()) {
     if (a.prices.length < rules.filters.minTrades180d) continue;
     const reg = regulationOf(a.gu);
@@ -287,6 +305,13 @@ export async function buildDailyRecommendations(
       jeonsePts = jeonseRatioScore(rules, jeonseRatioPct);
     }
 
+    // 하방 경고 플래그(2-B) — 임계 이상이면 제외+사유 기록, 1개면 유의점으로 통과
+    const dFlags = flagsOf(a, jeonseArr && jeonseArr.length >= rentMinSamples ? jeonseRatioPct : null, jeonseArr?.length ?? 0);
+    if (dFlags.length >= dsCfg.excludeThreshold) {
+      excluded.push({ name: a.name, gu: a.gu, dong: a.dong, flags: dFlags.map((f) => f.label) });
+      continue;
+    }
+
     const score = Math.round((tierPts + liq + budgetPts + fresh.score + heat + jeonsePts) * 10) / 10;
 
     const minA = a.areas.length ? Math.round(Math.min(...a.areas)) : 0;
@@ -307,6 +332,7 @@ export async function buildDailyRecommendations(
     if (!inComfortable) cautions.push(`오늘 자기자본권(${eok(comfortable)}) 초과 — 2년 적립 또는 마통 해지로 도달`);
     if (a.buildYear != null && nowYear - a.buildYear >= 33) cautions.push('노후 단지 — 재건축 기대가 호가 선반영/분담금 리스크 확인');
     if (jeonseRatioPct >= 100) cautions.push(`전세가율 ${jeonseRatioPct}% — 매매≈전세, 역전세/깡통 위험 점검(임대전환 시 보증금 상환 여력 확인)`);
+    for (const f of dFlags) cautions.push(`🚩 하방 신호(${dFlags.length}/${dsCfg.excludeThreshold}): ${f.label}`);
 
     scored.push({
       rank: 0,
@@ -405,6 +431,12 @@ export async function buildDailyRecommendations(
         jeonseRatioPct = Math.round((median(jArr) / med) * 100);
         jeonsePts = jeonseRatioScore(rules, jeonseRatioPct);
       }
+      // 하방 경고 플래그(2-B) — 스트레치+에도 동일 적용
+      const dFlags = flagsOf(a, jArr && jArr.length >= rentMinSamples ? jeonseRatioPct : null, jArr?.length ?? 0);
+      if (dFlags.length >= dsCfg.excludeThreshold) {
+        excluded.push({ name: a.name, gu: a.gu, dong: a.dong, flags: dFlags.map((f) => f.label) });
+        continue;
+      }
       const score = Math.round((tier * rules.weights.tierMultiplier + liq + fresh.score + heat + jeonsePts) * 10) / 10;
 
       const overComfort = med - comfortable;
@@ -429,6 +461,7 @@ export async function buildDailyRecommendations(
       if (monthsToReach != null && monthsToReach > 24) cautions.push(`월 적립 기준 도달까지 약 ${monthsToReach}개월(2년 초과) — 적립 상향 또는 대출 여력 재점검 필요`);
       if (monthsToReach == null) cautions.push('월 매수펀드 적립액 미설정 — 조달 개월 판정 불가(/settings에서 입력)');
       if (a.buildYear != null && nowYear - a.buildYear >= 33) cautions.push('노후 단지 — 재건축 기대가 호가 선반영/분담금 리스크 확인');
+      for (const f of dFlags) cautions.push(`🚩 하방 신호(${dFlags.length}/${dsCfg.excludeThreshold}): ${f.label}`);
 
       spScored.push({
         rank: 0,
@@ -501,6 +534,12 @@ export async function buildDailyRecommendations(
       if (gap <= 0) continue;
       const ratioPct = Math.round((jeonseMed / med) * 100);
       if (ratioPct < gapCfg.minJeonseRatioPct || gap > gapCfg.maxGapManwon) continue;
+      // 하방 경고 플래그(2-B) — 갭 트랙에도 동일 적용(전세가율 필터로 weak-jeonse는 사실상 미발동, 거래 급감 감지용)
+      const gFlags = flagsOf(a, ratioPct, jArr.length);
+      if (gFlags.length >= dsCfg.excludeThreshold) {
+        excluded.push({ name: a.name, gu: a.gu, dong: a.dong, flags: gFlags.map((f) => f.label) });
+        continue;
+      }
       const coverable = gap <= usableManwon;
       const fresh = freshnessScore(rules, a.buildYear, nowYear);
       const minA = a.areas.length ? Math.round(Math.min(...a.areas)) : 0;
@@ -515,6 +554,7 @@ export async function buildDailyRecommendations(
       const cautions: string[] = [
         '무대출 갭 전제 — 주담대 받으면 6개월 전입의무로 임대 불가. 신규 세입자 전세대출은 조건부 금지 → 기존 세입자 승계 권장',
         ...(regNote ? [`⚠️ ${regNote}`] : []),
+        ...gFlags.map((f) => `🚩 하방 신호(${gFlags.length}/${dsCfg.excludeThreshold}): ${f.label}`),
       ];
       gapScored.push({
         rank: 0,
@@ -561,9 +601,10 @@ export async function buildDailyRecommendations(
   const gateNote = skippedUnverifiedGu.size
     ? ` · ⛔ 규제 미검증 지역 제외: ${[...skippedUnverifiedGu].join(', ')}(config/region-regulation.json 검증 후 편입)`
     : '';
+  const flagNote = excluded.length ? ` · 🚩 하방 플래그 제외 ${excluded.length}건` : '';
   const note = items.length
-    ? `${items.length}건 추천 (신규 ${items.filter((x) => x.isNew).length} · 재등장 ${items.filter((x) => !x.isNew).length})${stretchPlus.length ? ` · 스트레치+ ${stretchPlus.length}건` : ''}${gapTrack.length ? ` · 갭투자 트랙 ${gapTrack.length}건` : ''}${gateNote}`
-    : `오늘은 규칙을 통과한 신규 후보가 없습니다(최근 14일 추천분 쿨다운). 시장 변화 시 재등장합니다.${gateNote}`;
+    ? `${items.length}건 추천 (신규 ${items.filter((x) => x.isNew).length} · 재등장 ${items.filter((x) => !x.isNew).length})${stretchPlus.length ? ` · 스트레치+ ${stretchPlus.length}건` : ''}${gapTrack.length ? ` · 갭투자 트랙 ${gapTrack.length}건` : ''}${gateNote}${flagNote}`
+    : `오늘은 규칙을 통과한 신규 후보가 없습니다(최근 14일 추천분 쿨다운). 시장 변화 시 재등장합니다.${gateNote}${flagNote}`;
 
-  return { asOf: todayStr, items, stretchPlus, gapTrack, note, scanned: aggs.size };
+  return { asOf: todayStr, items, stretchPlus, gapTrack, excluded, note, scanned: aggs.size };
 }

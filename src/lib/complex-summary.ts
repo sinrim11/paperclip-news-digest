@@ -10,6 +10,7 @@ import { LAWD_GU } from './tiers';
 import { regionApprPct } from './investment-model';
 import { analyzeWithVersus } from './invest-compact';
 import { computeCommute, computeAmenity, computeAmenityKakao, lineLabel, type KakaoCtx } from './commute';
+import { tradeTrendFlag, DEFAULT_DOWNSIDE } from './downside';
 import { radarScore, type RadarResult } from './radar-score';
 import type { ResolvedContext } from './profiles';
 
@@ -200,6 +201,9 @@ export async function getComplexSummary(complexNo: string, ctx: ResolvedContext 
     invest, vs, monthly,
   };
   const risks = buildRisks(base);
+  // 하방 경고 플래그(2-B) — 거래량 추세 급감(비교·리스크 화면에서도 항상 표시)
+  const trendFlag = tradeTrendFlag(trades.map((t) => t.dealDate.getTime()), 180, Date.now(), DEFAULT_DOWNSIDE);
+  if (trendFlag) risks.push(`🚩 ${trendFlag.label}`);
   const buyCase = buildBuyCase({ ...base, risks });
   return { ...base, risks, buyCase };
 }
