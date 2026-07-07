@@ -31,6 +31,10 @@ export interface RecoView {
   jeonseRatioPct?: number;
   gapCoverable?: boolean;
   nonRegulated?: boolean;
+  // 스트레치+ 트랙
+  overComfortManwon?: number;
+  monthlyPayAddManwon?: number;
+  monthsToReach?: number | null;
 }
 
 const eok = (manwon: number) => (manwon / 10000).toFixed(2).replace(/\.?0+$/, '') + '억';
@@ -59,6 +63,43 @@ export function emptyMessage(asOf: string): string {
     '',
     '데이터는 계속 수집 중이며, 변화가 감지되면 바로 알려드립니다.',
   ].join('\n');
+}
+
+export function stretchHeader(count: number, asOf: string): string {
+  return [
+    '➕ 스트레치+ — 조금 더 보태면 사정권',
+    `🗓️ ${asOf} · ${count}건`,
+    '',
+    '💡 오늘 자기자본권을 넘지만 스윕 상한 이내인 구간 — 메인 추천과 분리된 참고 트랙입니다.',
+    '📌 각 매물에 "+얼마 더" · 월 상환 증가분 · 조달 개월(월 적립 기준)을 표기합니다.',
+    '⚠️ 실행 전 대출 한도(LTV·DSR·정책한도) 재확인 필수 — 점수는 참고자료이며 판단은 본인이 합니다.',
+    '',
+  ].join('\n');
+}
+
+export function formatStretchReco(r: RecoView): string {
+  const lines: string[] = [];
+  lines.push(`➕ ${r.rank}. ${r.name}`);
+  lines.push(`📍 ${r.gu} ${r.dong}`);
+  lines.push('━━━━━━━━━━━━━━');
+  const spec = [r.buildYear ? `${r.buildYear}년` : '연식미상', r.areaText].filter(Boolean);
+  lines.push(`🏢 ${spec.join(' · ')}${r.tradeCount ? ` · 최근 ${r.tradeCount}건` : ''}`);
+  lines.push(`💰 실거래 중간 ${eok(r.medianManwon)}${r.priceRangeText ? ` (범위 ${r.priceRangeText})` : ''}`);
+  if (r.overComfortManwon != null) lines.push(`💸 더 보태면: +${eok(r.overComfortManwon)} (오늘 자기자본권 초과분)`);
+  if (r.monthlyPayAddManwon != null) lines.push(`📈 월 상환 증가분: 약 +${r.monthlyPayAddManwon}만/월`);
+  lines.push(`⏳ 조달: ${r.monthsToReach != null ? `월 적립 유지 시 약 ${r.monthsToReach}개월 뒤 도달${r.monthsToReach <= 24 ? ' ✅(2년 내)' : ' ⚠️(2년 초과)'}` : '월 적립액 미설정 — 판정 불가'}`);
+  if (r.station && r.station !== '역세권 정보 확인 필요') lines.push(`🚇 ${r.station}`);
+  if (r.catalyst) lines.push(`🚧 호재: ${r.catalyst}`);
+  lines.push('');
+  lines.push('📈 선정 근거');
+  for (const reason of r.reasons) lines.push(`  ✅ ${reason}`);
+  if (r.cautions?.length) {
+    lines.push('');
+    lines.push('⚠️ 유의점');
+    for (const c of r.cautions) lines.push(`  • ${c}`);
+  }
+  if (r.complexNo) lines.push(`\n🔗 네이버: https://fin.land.naver.com/complexes/${r.complexNo}?tab=article`);
+  return lines.join('\n');
 }
 
 export function gapHeader(count: number, asOf: string): string {

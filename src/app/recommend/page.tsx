@@ -1,9 +1,43 @@
 import ProfileBadge from '@/components/ProfileBadge';
 import DecisionFlow from '@/components/DecisionFlow';
 import Link from 'next/link';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { prisma } from '@/lib/db';
 import { loadPolicyParams, loadReaderFinances, computeBudget, formatKRW } from '@/lib/tracker';
 import { rankCandidates, type Recommendation } from '@/lib/recommend';
+
+/** daily-recommend가 생성한 스트레치+ 트랙(config/recommendations.json) — 없으면 섹션 미노출 */
+interface StretchReco {
+  rank: number;
+  name: string;
+  gu: string;
+  dong: string;
+  buildYear?: number | null;
+  areaText: string;
+  medianManwon: number;
+  priceRangeText?: string;
+  tradeCount?: number;
+  overComfortManwon?: number;
+  monthlyPayAddManwon?: number;
+  monthsToReach?: number | null;
+  reasons: string[];
+  cautions?: string[];
+  complexNo?: string;
+}
+
+function loadStretchPlus(): { asOf: string; list: StretchReco[] } | null {
+  try {
+    const raw = JSON.parse(readFileSync(join(process.cwd(), 'config', 'recommendations.json'), 'utf-8')) as {
+      asOf?: string;
+      stretchPlus?: StretchReco[];
+    };
+    if (!raw.stretchPlus?.length) return null;
+    return { asOf: raw.asOf ?? '', list: raw.stretchPlus };
+  } catch {
+    return null;
+  }
+}
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: '추천 매물 | 뉴스 다이제스트' };
@@ -27,6 +61,7 @@ export default async function RecommendPage() {
   const scenarios = params && fin ? computeBudget(params, fin) : [];
   const nowBudget = scenarios.length > 1 ? scenarios[1].maxPrice : null;
   const easedBudget = scenarios.length > 2 ? scenarios[2].maxPrice : null;
+  const stretch = loadStretchPlus();
 
   const [candidates, trades] = await Promise.all([
     prisma.complexCandidate.findMany().catch(() => []),
@@ -150,6 +185,69 @@ export default async function RecommendPage() {
             );
           })}
         </ol>
+      )}
+
+      {stretch && (
+        <section className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-4">
+          <h2 className="text-lg font-bold text-gray-900">
+            ➕ 스트레치+ — 조금 더 보태면 사정권 <span className="text-sm font-normal text-gray-500">{stretch.asOf} · {stretch.list.length}건</span>
+          </h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-gray-600">
+            오늘 자기자본권을 넘지만 스윕 상한 이내인 <b>참고 트랙</b>입니다(일일 추천과 분리). 각 매물에 &quot;+얼마 더&quot;·월 상환
+            증가분·조달 개월(월 적립 기준)을 표기합니다. 실행 전 대출 한도(LTV·DSR·정책한도) 재확인이 필수이며, 수치는 참고자료로
+            판단을 대신하지 않습니다.
+          </p>
+          <ol className="mt-3 space-y-3">
+            {stretch.list.map((r) => (
+              <li key={`${r.gu}|${r.dong}|${r.name}`} className="rounded-lg border bg-white p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-lg font-bold tabular-nums text-gray-700">{r.rank}</span>
+                  <h3 className="text-lg font-bold text-gray-900">{r.name}</h3>
+                  <span className="ml-auto font-mono text-xl font-bold tabular-nums text-indigo-700">
+                    {formatKRW(r.medianManwon * 10_000)}
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-gray-500">
+                  <span>{r.gu} {r.dong}</span>
+                  <span>{r.buildYear ? `${r.buildYear}년` : '연식미상'}</span>
+                  <span>{r.areaText}</span>
+                  {r.tradeCount ? <span>최근 {r.tradeCount}건 실거래{r.priceRangeText ? ` (${r.priceRangeText})` : ''}</span> : null}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-gray-50 px-3 py-2 text-[13px]">
+                  {r.overComfortManwon != null && (
+                    <span className="text-gray-600">더 보태면 <b className="font-mono text-indigo-700">+{formatKRW(r.overComfortManwon * 10_000)}</b></span>
+                  )}
+                  {r.monthlyPayAddManwon != null && (
+                    <span className="text-gray-600">월 상환 증가 <b className="font-mono text-indigo-700">약 +{r.monthlyPayAddManwon}만/월</b></span>
+                  )}
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                    r.monthsToReach == null ? 'bg-gray-200 text-gray-600'
+                      : r.monthsToReach <= 24 ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {r.monthsToReach == null ? '적립액 미설정 — 판정 불가'
+                      : r.monthsToReach <= 24 ? `적립 ${r.monthsToReach}개월 뒤 도달 (2년 내)`
+                        : `적립 ${r.monthsToReach}개월 — 2년 초과`}
+                  </span>
+                  {r.complexNo && (
+                    <span className="ml-auto flex gap-3">
+                      <Link href={`/complex/${r.complexNo}`} className="rounded-full bg-gray-900 px-3 py-1 text-xs font-semibold text-white hover:bg-gray-700">📋 단지 프로필 →</Link>
+                      <a href={`https://fin.land.naver.com/complexes/${r.complexNo}?tab=article`} target="_blank" rel="noreferrer" className="self-center text-blue-600 hover:underline">네이버 ↗</a>
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {r.reasons.map((reason, j) => (
+                    <span key={j} className="rounded bg-green-50 px-2.5 py-1 text-[13px] text-green-700">✓ {reason}</span>
+                  ))}
+                  {(r.cautions ?? []).map((caution, j) => (
+                    <span key={j} className="rounded bg-amber-50 px-2.5 py-1 text-[13px] text-amber-700">⚠ {caution}</span>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
       )}
 
       <p className="text-xs leading-relaxed text-gray-400">

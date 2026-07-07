@@ -41,6 +41,14 @@
     { "maxAge": 999, "score": 1, "_note": "30년+ 재건축 연한 — 투자 상방 있으나 분담금·거주부적합·임대전환 열위로 최소 가점" }
   ],
   "dailyLimit": 5,
+  "stretchPlus": {
+    "_note": "스트레치+ 트랙 — comfortable 초과 ~ 스윕 상한 구간을 메인 5건과 분리된 섹션으로 노출(점수·로테이션 오염 금지, 쿨다운도 트랙별 분리). 표기 필수: '+X 더 보태면' + 월 상환 증가분(investment-model 금리·기간 환산) + 조달 판정(월 적립 기준 N개월).",
+    "enabled": true,
+    "limit": 3,
+    "ceilingManwon": 92000,
+    "maxPerGu": 2,
+    "cooldownDays": 14
+  },
   "gapTrack": {
     "_note": "비규제 지역(tiers.ts NON_REGULATED_GU, 현재 안양 만안구) 전용 갭투자 트랙. 전세 끼고 매수(주담대 없이)=토허 실거주 의무 없어 즉시임대 가능. 갭=매매−전세가 자기자본 커버 가능하고 전세가율 높은(전세수요 강·갭 작은) 순.",
     "enabled": true,

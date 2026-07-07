@@ -114,7 +114,7 @@ export interface BudgetScenario {
 }
 
 /** 연이율 ratePct·기간 termYears 원리금균등 월상환액 (원금 1원 기준) */
-function monthlyPaymentPerWon(ratePct: number, termYears: number): number {
+export function monthlyPaymentPerWon(ratePct: number, termYears: number): number {
   const m = ratePct / 100 / 12;
   const n = termYears * 12;
   return (m * Math.pow(1 + m, n)) / (Math.pow(1 + m, n) - 1);
