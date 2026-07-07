@@ -19,6 +19,7 @@ import ProfileBadge from '@/components/ProfileBadge';
 import DecisionFlow from '@/components/DecisionFlow';
 import { CompareToggle, CompareBar } from '@/components/CompareControls';
 import { buildRisks, buildBuyCase } from '@/lib/complex-summary';
+import { momentumFor } from '@/lib/momentum';
 import { RichText } from '@/components/RichText';
 
 export const dynamic = 'force-dynamic';
@@ -376,6 +377,38 @@ export default async function ComplexPage({ params }: { params: Promise<{ comple
           <p className="mt-2 text-xs text-indigo-300">상권 개수: 카카오 로컬 API 실측(편의점·음식점·카페·약국 500m / 마트·병원·학원·학교 1km) · 지하철 소요는 좌표 근사</p>
         </section>
       )}
+
+      {/* ── 🚧 지역 호재(모멘텀) — 확실성 등급·출처 명시(2-A) ── */}
+      {(() => {
+        const momentum = momentumFor(c.gu, c.dong);
+        if (!momentum.length) return null;
+        const badge = (cert: string) =>
+          cert === '확정' ? 'bg-emerald-600 text-white' : cert === '진행' ? 'bg-amber-500 text-white' : 'bg-gray-300 text-gray-700';
+        return (
+          <section className="mb-6 rounded-xl border border-amber-200 bg-amber-50/40 p-4">
+            <h2 className="text-lg font-bold text-amber-900">🚧 지역 호재 <span className="text-sm font-normal text-amber-500">{c.gu}{c.dong ? ` ${c.dong}` : ''} — 확실성 등급·정부/공식 발표 근거</span></h2>
+            <ul className="mt-2.5 space-y-2.5">
+              {momentum.map((m) => (
+                <li key={m.id} className="rounded-lg bg-white/80 px-3 py-2.5">
+                  <div className="flex flex-wrap items-center gap-2 text-[13px]">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${badge(m.certainty)}`}>{m.certainty}</span>
+                    <b className="text-gray-900">{m.title}</b>
+                    <span className="text-gray-500">{m.expected}</span>
+                  </div>
+                  <p className="mt-1 text-[13px] leading-relaxed text-gray-700">{m.detail}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-400">📎
+                    {m.sourceUrls.map((s, i) => (
+                      <a key={i} href={s} target="_blank" rel="noreferrer" className="rounded border border-gray-200 px-1.5 py-0.5 text-blue-500 hover:underline">{s.replace(/^https?:\/\//, '').split('/')[0]}</a>
+                    ))}
+                    <span>· 확인 {m.verifiedAt}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2.5 text-xs leading-relaxed text-amber-700">※ <b>구상</b> 단계 호재는 점수·추천에 반영하지 않고 표시만 합니다. 개통 시기는 공식 목표 기준이며 지연이 흔합니다 — 호재를 매수가에 선반영하지 마세요.</p>
+          </section>
+        );
+      })()}
 
       {/* ── 현재 호가 매물 ── */}
       <section className="mb-6">

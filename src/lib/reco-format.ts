@@ -111,6 +111,7 @@ export function formatStretchReco(r: RecoView): string {
     for (const c of r.cautions) lines.push(`  • ${c}`);
   }
   if (r.complexNo) lines.push(`\n🔗 네이버: https://fin.land.naver.com/complexes/${r.complexNo}?tab=article`);
+  if (r.sources?.length) lines.push(`📚 근거: ${r.sources.slice(0, 3).join(' · ')}`);
   return lines.join('\n');
 }
 
@@ -145,6 +146,7 @@ export function formatGapReco(r: RecoView): string {
     for (const c of r.cautions) lines.push(`  • ${c}`);
   }
   if (r.complexNo) lines.push(`\n🔗 네이버: https://fin.land.naver.com/complexes/${r.complexNo}?tab=article`);
+  if (r.sources?.length) lines.push(`📚 근거: ${r.sources.slice(0, 3).join(' · ')}`);
   return lines.join('\n');
 }
 

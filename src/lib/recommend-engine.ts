@@ -13,6 +13,7 @@ import { join } from 'path';
 import { tierOf, LAWD_GU } from './tiers';
 import { monthlyPaymentPerWon } from './tracker';
 import { regulationOf, nonRegulatedGus } from './region-regulation';
+import { recoFactorsFor } from './momentum';
 
 export interface DailyReco {
   rank: number;
@@ -51,6 +52,8 @@ export interface DailyReco {
   // 지역 규제 상태(config/region-regulation.json) — UI·추천 사유 명시(가드레일 1)
   regulationLabel?: string;
   regulationSources?: string[];
+  // 근거 URL 모음(호재 등 인터넷 수집 데이터 — 가드레일 2)
+  sources?: string[];
 }
 
 interface Rules {
@@ -342,6 +345,14 @@ export async function buildDailyRecommendations(
     picked.push(r);
   }
 
+  // 지역 호재 조인(2-A) — 확정·진행만 사유 표기(구상은 반영 금지), 근거 URL 동반(가드레일 2)
+  const applyMomentum = (r: DailyReco) => {
+    const mf = recoFactorsFor(r.gu, r.dong)[0];
+    if (!mf) return;
+    r.reasons.push(`🚧 [${mf.certainty}] ${mf.title} — ${mf.expected}`);
+    if (mf.sourceUrls.length) r.sources = [...(r.sources ?? []), mf.sourceUrls[0]];
+  };
+
   // 5) 정성 팩트(역세권·학군·호재) 조인
   const items = picked.map((r, i) => {
     const f = matchFact(facts, r.gu, r.dong, r.name);
@@ -355,6 +366,7 @@ export async function buildDailyRecommendations(
       if (f.reasons?.length) r.reasons.push(...f.reasons);
       if (f.cautions?.length) r.cautions.push(...f.cautions);
     }
+    applyMomentum(r);
     return { ...r, rank: i + 1 };
   });
 
@@ -459,6 +471,7 @@ export async function buildDailyRecommendations(
         if (f.living) r.living = f.living;
         if (f.complexNo) r.complexNo = f.complexNo;
       }
+      applyMomentum(r);
       stretchPlus.push({ ...r, rank: stretchPlus.length + 1 });
     }
   }
@@ -539,6 +552,7 @@ export async function buildDailyRecommendations(
         if (f.complexNo) r.complexNo = f.complexNo;
         if (f.reasons?.length) r.reasons.push(...f.reasons);
       }
+      applyMomentum(r);
       gapTrack.push({ ...r, rank: i + 1 });
     });
   }

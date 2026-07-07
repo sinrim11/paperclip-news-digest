@@ -1,0 +1,151 @@
+{
+  "_comment": "지역 호재(모멘텀) 데이터 레이어(2-A). src/lib/momentum.ts가 소비 — /complex 호재 섹션 + 일일 추천 사유(확정/진행만, 구상은 표시만·점수 반영 금지). 전 항목 근거 URL 필수(가드레일 2). 정부·시 공식 발표 및 보도 기준. 갱신 시 verifiedAt·sourceUrls 동반 갱신.",
+  "asOf": "2026-07-08",
+  "certaintyLevels": {
+    "확정": "착공 완료·개통일 확정 — 추천 사유 표기 가능",
+    "진행": "예타 통과·계획 승인·부분 착공 — 추천 사유 표기 가능(지연 리스크 병기)",
+    "구상": "발표·구상 단계 — 점수·추천 사유 반영 금지, 단지 프로필에 표시만"
+  },
+  "factors": [
+    {
+      "id": "line9-phase4",
+      "type": "교통",
+      "title": "9호선 4단계 연장 (중앙보훈병원→고덕강일1지구)",
+      "detail": "4.1km·4개 역 신설, 5호선 고덕역 환승. 본공사 착공 완료, 2028년 개통 시 강동→강남·여의도 접근성 개선.",
+      "certainty": "확정",
+      "expected": "2028 개통",
+      "regions": [{ "gu": "강동구" }],
+      "verifiedAt": "2026-07-08",
+      "sourceUrls": [
+        "https://mediahub.seoul.go.kr/archives/2006605",
+        "https://www.hankyung.com/article/2023010393971"
+      ]
+    },
+    {
+      "id": "dongbuk-line",
+      "type": "교통",
+      "title": "동북선 경전철 (왕십리~상계, 16개역)",
+      "detail": "13.4km 공사 중(공정률 ~50%). 개통 목표 2027-11(당초 2026-07에서 1년 4개월 연기). 상계~왕십리 환승 없이 25분.",
+      "certainty": "확정",
+      "expected": "2027-11 개통 목표",
+      "regions": [
+        { "gu": "노원구", "dongs": ["상계동", "중계동", "하계동", "월계동"] },
+        { "gu": "성북구", "dongs": ["하월곡동", "종암동", "장위동"] },
+        { "gu": "강북구", "dongs": ["미아동", "번동"] },
+        { "gu": "동대문구", "dongs": ["제기동", "청량리동"] },
+        { "gu": "성동구", "dongs": ["행당동"] }
+      ],
+      "verifiedAt": "2026-07-08",
+      "sourceUrls": [
+        "https://www.news1.kr/realestate/general/6099485",
+        "https://www.electimes.com/news/articleView.html?idxno=351826"
+      ]
+    },
+    {
+      "id": "sinansan-line",
+      "type": "교통",
+      "title": "신안산선 (여의도~시흥·안산, 19개역)",
+      "detail": "공사 중이나 광명(2025-04)·여의도(2025-12) 붕괴사고로 개통 2년+ 지연 — 2028~2029 전망(당초 2026-12). 여의도·영등포·신풍·대림삼거리·독산 정차권.",
+      "certainty": "확정",
+      "expected": "2028~2029 개통 전망(지연 리스크 大)",
+      "regions": [
+        { "gu": "영등포구", "dongs": ["여의도동", "영등포동", "신길동", "대림동"] },
+        { "gu": "구로구", "dongs": ["구로동"] },
+        { "gu": "금천구", "dongs": ["독산동", "시흥동"] }
+      ],
+      "verifiedAt": "2026-07-08",
+      "sourceUrls": [
+        "https://v.daum.net/v/20251202120005179",
+        "https://www.redaily.co.kr/news/articleView.html?idxno=8284"
+      ]
+    },
+    {
+      "id": "gtx-b",
+      "type": "교통",
+      "title": "GTX-B (인천대입구~마석)",
+      "detail": "민자구간 2025-08 통합착공계 제출·본공사 개시(공기 72개월). 개통 목표 2030이나 착공 지연분 감안 2031~32 전망. 신도림·여의도·청량리·상봉·별내·왕숙 정차.",
+      "certainty": "확정",
+      "expected": "2030 목표(현실 2031~32 전망)",
+      "regions": [
+        { "gu": "중랑구", "dongs": ["상봉동", "망우동", "묵동"] },
+        { "gu": "구로구", "dongs": ["신도림동"] },
+        { "gu": "동대문구", "dongs": ["청량리동", "전농동"] },
+        { "gu": "영등포구", "dongs": ["여의도동"] },
+        { "gu": "남양주시" }
+      ],
+      "verifiedAt": "2026-07-08",
+      "sourceUrls": [
+        "https://www.kyeongin.com/article/1748597",
+        "https://www.gg.go.kr/contents/contents.do?ciIdx=497&menuId=1850"
+      ]
+    },
+    {
+      "id": "gtx-c",
+      "type": "교통",
+      "title": "GTX-C (덕정~수원)",
+      "detail": "2026-04-30 가능 공구(덕정·의정부)부터 부분 착공. 창동역·광운대역 구간 2026 상반기 착공 예정, 전 구간 실착공은 연내 자금조달 조건. 개통 목표 2028-12(공기 60개월 — 실질 2031± 전망).",
+      "certainty": "진행",
+      "expected": "2028-12 목표(자금조달·공기 감안 2031± 전망)",
+      "regions": [
+        { "gu": "도봉구", "dongs": ["창동", "방학동"] },
+        { "gu": "노원구", "dongs": ["월계동"] },
+        { "gu": "안양 동안구" },
+        { "gu": "의왕시" }
+      ],
+      "verifiedAt": "2026-07-08",
+      "sourceUrls": [
+        "https://m.dobong.go.kr/majorWork/MajorView.asp?lidx=567",
+        "https://www.gg.go.kr/contents/contents.do?ciIdx=497&menuId=1850"
+      ]
+    },
+    {
+      "id": "seobu-line",
+      "type": "교통",
+      "title": "서부선 경전철 (새절~서울대입구, 16개역)",
+      "detail": "실시협약 민투심 통과(2024-12)·2026 착공 목표. 은평·서대문·마포·영등포·동작·관악 6개구 경유. 공사비 급등·일부 출자자 탈퇴로 착공 시기 불확실.",
+      "certainty": "진행",
+      "expected": "2026 착공 목표(불확실) · 개통 2030년대 초",
+      "regions": [
+        { "gu": "은평구", "dongs": ["신사동", "응암동"] },
+        { "gu": "서대문구" },
+        { "gu": "마포구" },
+        { "gu": "영등포구", "dongs": ["당산동"] },
+        { "gu": "동작구", "dongs": ["노량진동", "상도동", "대방동"] },
+        { "gu": "관악구", "dongs": ["봉천동", "신림동"] }
+      ],
+      "verifiedAt": "2026-07-08",
+      "sourceUrls": [
+        "https://www.newsis.com/view/NISX20241218_0003001477",
+        "https://www.metroseoul.co.kr/article/20241218500174"
+      ]
+    },
+    {
+      "id": "wangsuk-newtown",
+      "type": "개발",
+      "title": "남양주 왕숙 3기 신도시 (6.6만호)",
+      "detail": "2026 하반기 입주 개시. GTX-B 왕숙역 + 강동하남남양주선(9호선 연장, 2023 선착공·2031 개통 목표). 입주 초기는 철도 미완으로 BRT 의존 — 공급 물량이 단기 시세를 누를 수 있음.",
+      "certainty": "진행",
+      "expected": "입주 2026 하반기~ · 철도 2031±",
+      "regions": [{ "gu": "남양주시" }],
+      "verifiedAt": "2026-07-08",
+      "sourceUrls": [
+        "https://www.xn--3-3u6ey6lv7rsa.kr/kor/CMS/Contents/Contents.do?mCode=MN030",
+        "https://eiec.kdi.re.kr/policy/materialView.do?num=243602"
+      ]
+    },
+    {
+      "id": "gangdong-hanam-namyangju",
+      "type": "교통",
+      "title": "강동하남남양주선 (9호선 연장, 강동~왕숙2)",
+      "detail": "2023 하반기 선착공, 2031 개통 목표. 강동(고덕강일)~하남~왕숙2 연결 — 강동은 9호선 4단계와 이중 수혜.",
+      "certainty": "진행",
+      "expected": "2031 개통 목표",
+      "regions": [{ "gu": "강동구" }, { "gu": "남양주시" }],
+      "verifiedAt": "2026-07-08",
+      "sourceUrls": [
+        "https://www.xn--3-3u6ey6lv7rsa.kr/kor/CMS/Contents/Contents.do?mCode=MN095",
+        "https://www.innno.co.kr/2026/05/namyangju-wangsuk-transportation-9line.html"
+      ]
+    }
+  ]
+}
