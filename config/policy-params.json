@@ -1,10 +1,11 @@
 {
   "_comment": "부동산 대출 규제 파라미터 (공개 정보). 정책 변경 시 이 파일만 갱신하면 /tracker 예산 계산과 /guide/policy가 따라감",
-  "asOf": "2026-07-03",
+  "asOf": "2026-07-04",
   "regime": "10·15 대책 체계 — 서울 전역+경기 12곳 규제지역·토지거래허가구역, 2026-06-30 동탄·용인기흥·구리 추가",
+  "_correction20260704": "생애최초 규제지역 LTV 70%(6.27 대책, 일반 무주택 40%의 예외)로 교정(firstTimeBonus 0.1→0.3). 스트레스 DSR 3단계 가산 1.5%p로 교정(3.0→1.5). 근거 config/market-context.json·report/strategy-verdict-2026-07-04.md.",
   "ltv": {
     "regulatedBase": 0.4,
-    "firstTimeBonus": 0.1,
+    "firstTimeBonus": 0.3,
     "nonRegulated": 0.7
   },
   "loanCapByPrice": [
@@ -14,10 +15,15 @@
   ],
   "dsr": {
     "ratio": 0.4,
-    "stressAddPctRegulated": 3.0,
-    "stressAddPctOther": 1.2,
-    "assumedBaseRatePct": 4.0,
+    "stressAddPctRegulated": 1.5,
+    "stressAddPctOther": 0.75,
+    "assumedBaseRatePct": 4.5,
     "termYears": 30
+  },
+  "creditLine": {
+    "_comment": "기존 신용성 부채 DSR 산정. 마이너스통장(한도대출)은 한도 전액을 5년 원금균등+이자로 간주(미사용이어도 DSR 잠식). 신용대출도 유사 적용.",
+    "dsrTermYears": 5,
+    "dsrRatePct": 6.0
   },
   "landPermitZone": {
     "active": true,

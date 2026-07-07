@@ -1,0 +1,68 @@
+{
+  "_comment": "일일 매물 추천 결정적 규칙(엔진: src/lib/recommend-engine.ts). 예산은 tracker computeBudget에서 동적 로드(프로필 변경 자동 반영). 이 파일은 필터·가중치·로테이션 정책만 관리. 규칙 변경 시 updatedAt 갱신.",
+  "updatedAt": "2026-07-04",
+  "filters": {
+    "minExclusiveAreaM2": 50,
+    "minTrades180d": 3,
+    "lookbackDays": 180,
+    "rentMinSamples": 2
+  },
+  "_stance": "투자 우선(사용자 확정 2026-07-04). 규제상 서울 아파트는 '2년 실거주 후 임대전환'이 유일 합법 투자경로 — 투자 수익 신호(신축프리미엄·전세가율·환금성)를 최우선 가중. 실거주 편의(직주근접) 가중은 미포함.",
+  "weights": {
+    "tierMultiplier": 1.5,
+    "liquidityCap": 16,
+    "budgetFitComfortable": 6,
+    "budgetFitStretch": 1,
+    "freshnessMax": 12,
+    "regionHeatMax": 4,
+    "jeonseRatioMax": 6
+  },
+  "jeonseRatioByPct": [
+    { "minPct": 85, "score": 6, "_note": "전세수요 매우 강함 — 임대전환 최용이·재투자 갭 최소·투자수익 최상" },
+    { "minPct": 75, "score": 4 },
+    { "minPct": 65, "score": 2 },
+    { "minPct": 0, "score": 0 }
+  ],
+  "diversity": {
+    "maxPerGu": 2,
+    "_note": "하루 추천에서 한 구 최대 N개 — 동네 편중 방지"
+  },
+  "budgetFallback": {
+    "_note": "market-context.json 부재 시 사용. comfortable=오늘 자기자본권(약7억·마통해지 생초LTV70%), stretch=2년 적립 자기자본권(약7.8억). 가족지원은 사실상 불필요. budgetFitStretch를 1로 유지해 오늘 자기자본 내(≤7억)를 우선.",
+    "comfortableCeilingManwon": 70000,
+    "stretchCeilingManwon": 78000
+  },
+  "freshnessByAge": [
+    { "maxAge": 5, "score": 12, "_note": "신축 — 감가방어·환금성·임대선호 최상(투자 프리미엄)" },
+    { "maxAge": 10, "score": 9, "_note": "준신축 — 시세방어·임대선호 우수" },
+    { "maxAge": 15, "score": 6 },
+    { "maxAge": 20, "score": 3 },
+    { "maxAge": 30, "score": 1 },
+    { "maxAge": 999, "score": 1, "_note": "30년+ 재건축 연한 — 투자 상방 있으나 분담금·거주부적합·임대전환 열위로 최소 가점" }
+  ],
+  "dailyLimit": 5,
+  "gapTrack": {
+    "_note": "비규제 지역(tiers.ts NON_REGULATED_GU, 현재 안양 만안구) 전용 갭투자 트랙. 전세 끼고 매수(주담대 없이)=토허 실거주 의무 없어 즉시임대 가능. 갭=매매−전세가 자기자본 커버 가능하고 전세가율 높은(전세수요 강·갭 작은) 순.",
+    "enabled": true,
+    "limit": 1,
+    "_limitNote": "사용자 Path A(서울/경기 실거주→임대) 선택(2026-07-04) → 만안 갭(Path B)은 대안 참고용 1건만.",
+    "minJeonseRatioPct": 70,
+    "maxGapManwon": 25000,
+    "minTrades": 3
+  },
+  "rotation": {
+    "cooldownDays": 14,
+    "reentryOnNewSignal": true
+  },
+  "newSignal": {
+    "priceDropPct": 3,
+    "recentTradeWindowDays": 14,
+    "_note": "최근 window 내 신저가 실거래(직전 중간값 대비 priceDropPct% 이상 하락) 발생 시 쿨다운 무시하고 재등장 허용"
+  },
+  "marketContextAdjust": {
+    "_note": "claude -p 일일 리서치가 생성한 config/market-context.json의 신호로 가점(±). 없으면 0.",
+    "easedSignalHighBoost": 4,
+    "rateFallingBoostCheaper": 0,
+    "regionHotBoost": 3
+  }
+}

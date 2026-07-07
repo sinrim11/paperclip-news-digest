@@ -57,12 +57,12 @@ export async function resolveComplexNo(keyword: string): Promise<string | null> 
 // 가진 브라우저로 단지 페이지를 열면 프런트엔드가 스스로 article/list·article/count를
 // 호출한다(2026-07-03 네트워크 캡처로 확인). 그 응답을 page.on('response')로 수확.
 
-interface HarvestResult {
+export interface HarvestResult {
   articles: unknown[];
   totalCount: number | null;
 }
 
-async function harvestComplexArticles(page: Page, complexNo: string): Promise<HarvestResult> {
+export async function harvestComplexArticles(page: Page, complexNo: string): Promise<HarvestResult> {
   const articles: unknown[] = [];
   let totalCount: number | null = null;
 
@@ -145,13 +145,15 @@ function findPricesManwon(obj: unknown, depth = 0): number[] {
   return out;
 }
 
-function isDealType(rep: RepInfo): boolean {
+export function isDealType(rep: RepInfo): boolean {
   const t = String(rep.tradeType ?? '');
   return t === 'A1' || t === 'DEAL' || t.includes('매매');
 }
 
+export { repInfoOf };
+
 /** 매매 호가 (만원). priceInfo.dealPrice는 원 단위(2026-07-03 확인) — 만원 변환 */
-function dealPriceManwon(article: unknown): number | null {
+export function dealPriceManwon(article: unknown): number | null {
   const rep = repInfoOf(article);
   const p = (rep.priceInfo as { dealPrice?: number } | undefined)?.dealPrice;
   if (typeof p === 'number' && p >= 10_000_000) return Math.round(p / 10_000);

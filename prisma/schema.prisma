@@ -334,6 +334,33 @@ model SubscriptionNotice {
   @@index([region, rceptBegin])
 }
 
+// 전수 스윕 결과 — 예산 내·300세대+·관심지역 아파트 후보
+model ComplexCandidate {
+  id            String   @id @default(cuid())
+  complexNo     String   @unique
+  name          String
+  gu            String
+  dong          String
+  household     Int // 총 세대수
+  elapsedYear   Int? // 준공 경과 연수
+  approvalDate  String? // 준공일 YYYYMMDD
+  totalArticles Int      @default(0) // 전체 매물 수
+  dealArticles  Int      @default(0) // 매매 매물 수
+  inBudgetCount Int      @default(0) // 예산 내 매매 매물 수
+  minDealPrice  Int? // 최저 매매 호가(만원)
+  maxDealPrice  Int? // 최고 매매 호가(만원)
+  budgetCeiling Int // 이 스윕에 쓰인 예산 상한(만원)
+  listings      Json     @default("[]") // 예산 내 매물 상세 [{price,area,floor,dong}]
+  lat           Float? // 단지 위도(new.land API 백필) — 통근·상권 점수용
+  lng           Float? // 단지 경도
+  far           Float? // 용적률 %(new.land single-markers floorAreaRatio) — 재건축 사업성 지표
+  sweptAt       DateTime @default(now())
+
+  @@index([gu, dong])
+  @@index([minDealPrice])
+  @@index([household])
+}
+
 model ListingSnapshot {
   id           String   @id @default(cuid())
   complexNo    String
@@ -363,4 +390,23 @@ model Article {
 
   @@index([sourceType])
   @@index([createdAt])
+}
+
+// 일일 매물 추천 발송 로그 — 로테이션(쿨다운)·변화 추적용
+model SentRecommendation {
+  id           String   @id @default(cuid())
+  complexKey   String // "{lawdCd}|{dong}|{aptName}" 단지 식별
+  name         String
+  gu           String
+  dong         String
+  medianManwon Int // 발송 시점 실거래 중간값(만원) — 다음 발송 시 하락 감지 기준
+  score        Int // 발송 시점 종합 점수
+  scenario     String // "현행" | "완화"
+  rank         Int // 그날 추천 순위
+  reasons      Json     @default("[]")
+  sentDate     String // "YYYY-MM-DD" (KST) — 날짜 단위 쿨다운 조회
+  sentAt       DateTime @default(now())
+
+  @@index([complexKey, sentDate])
+  @@index([sentDate])
 }

@@ -1,0 +1,15 @@
+{
+  "_comment": "네이버 매물 전수 스윕 설정. dongs 하드코딩 대신 검증된 법정동코드 맵(dongMapFile)에서 targetGus의 모든 동을 자동 로드 — 대림동 코드 오류(1156013600≠1156013300) 같은 조용한 0-누락 방지. budgetCeiling=스윕 가격 상한(만원). minHousehold=150(예산 내 구축 중소단지 포착). 상한·범위 변경 시 이 값 갱신 후 재실행.",
+  "budgetCeilingManwon": 92000,
+  "minHousehold": 150,
+  "minExclusiveAreaM2": 50,
+  "perComplexDelayMs": 9000,
+  "enumDelayMs": 3500,
+  "longPauseEvery": 20,
+  "longPauseMs": 25000,
+  "dongMapFile": "config/seoul-legal-dongs.json",
+  "targetGus": [
+    "관악구", "동작구", "영등포구", "금천구", "구로구", "강서구", "양천구",
+    "노원구", "도봉구", "중랑구", "강북구", "성북구", "은평구"
+  ]
+}

@@ -26,16 +26,59 @@ export interface PolicyParams {
   };
   landPermitZone: { active: boolean; moveInMonths: number; residenceYears: number };
   easedScenario: { ltv: number; stressAddPct: number };
+  creditLine?: { dsrTermYears: number; dsrRatePct: number };
+}
+
+export interface ExistingDebt {
+  creditLoan?: number; // 신용대출 잔액
+  creditLineLimit?: number; // 마이너스통장 한도 (미사용이어도 DSR 산정)
+  creditLineUsed?: number | null; // 마통 사용액 (순자산 차감용)
+}
+
+export interface Cashflow {
+  monthlyIncomeNet?: number;
+  monthlyExpense?: number;
+  monthlyFixedCosts?: number; // 고정비 총액(보험·통신·관리비 등, 전세대출이자 제외) — 프로필 설정용 스칼라(항목별은 fixedCosts)
+  monthlyPension?: number;
+  monthlyISA?: number;
+  monthlyStock?: number;
+  monthlyHomeSaving?: number;
+  targetPurchaseMonths?: number;
+  stockHoldings?: number;
+  fixedCosts?: Record<string, number>;
 }
 
 export interface ReaderFinances {
   annualIncome: number;
   usableCapital: number;
   capitalBreakdown?: Record<string, number>;
+  contingencySupport?: { 가족지원?: number; note?: string };
   jeonseDeposit?: number;
+  jeonseDepositSelf?: number; // 현 전세 본인 부담 보증금(원) — versus 모델용
+  jeonseLoanInterestMonthly?: number; // 현 전세대출이자(원/월) — 매수 시 소멸
+  existingLoanMonthly?: number; // 기존 대출(신용 등) 월 상환액(원/월) — DSR 한도·보유부담에 차감. 마통 해지 전제와 별개의 실상환 부채
+  firstTimeBuyer?: boolean; // 생애최초 여부(기본 true) — 프로필 설정용
+  work?: { label: string; lat: number; lng: number }; // 출근지(통근 점수 기준)
+  purpose?: 'invest' | 'live'; // 투자우선 | 실거주우선
   jeonseExpiry?: string;
   jeonseInsurance?: boolean;
   subscriptionAccountTotal?: number;
+  cashflow?: Cashflow;
+  existingDebt?: ExistingDebt;
+  creditRating?: string;
+}
+
+/** 재무 플랜 자문 콘텐츠(config/finance-plan.json · gitignored). 정부지원·절세·운용 가이드. */
+export interface FinancePlan {
+  asOf?: string;
+  govSupport?: Array<{ name: string; status: '가능' | '조건부' | '배제'; detail: string; source?: string }>;
+  taxSaving?: Array<{ name: string; detail: string; action?: string; source?: string }>;
+  management?: string[];
+  calendar?: Array<{ when: string; action: string }>;
+}
+
+export function loadFinancePlan(): FinancePlan | null {
+  return readJson<FinancePlan>('config/finance-plan.json');
 }
 
 function readJson<T>(relPath: string): T | null {
@@ -77,6 +120,15 @@ function monthlyPaymentPerWon(ratePct: number, termYears: number): number {
   return (m * Math.pow(1 + m, n)) / (Math.pow(1 + m, n) - 1);
 }
 
+/** 기존 신용성 부채(마통·신용대출)의 월 DSR 부담 — 마통은 한도 전액을 5년 원금균등+이자로 산정(미사용도 포함). 전세대출은 DSR 제외. */
+export function existingDebtMonthly(fin: ReaderFinances, params: PolicyParams): number {
+  const ed = fin.existingDebt;
+  if (!ed) return 0;
+  const cl = params.creditLine ?? { dsrTermYears: 5, dsrRatePct: 6.0 };
+  const inst = (amt: number) => amt / (cl.dsrTermYears * 12) + (amt * (cl.dsrRatePct / 100)) / 12; // 원금균등 + 이자
+  return inst(ed.creditLineLimit ?? 0) + inst(ed.creditLoan ?? 0);
+}
+
 function policyLoanCap(price: number, caps: PolicyParams['loanCapByPrice']): number {
   for (const tier of caps) {
     if (tier.maxPrice === null || price <= tier.maxPrice) return tier.cap;
@@ -92,7 +144,7 @@ function solveScenario(
   fin: ReaderFinances,
 ): BudgetScenario {
   const stressRate = params.dsr.assumedBaseRatePct + stressAddPct;
-  const monthlyCap = (fin.annualIncome * params.dsr.ratio) / 12;
+  const monthlyCap = Math.max(0, (fin.annualIncome * params.dsr.ratio) / 12 - existingDebtMonthly(fin, params));
   const dsrLoanCap = Math.floor(monthlyCap / monthlyPaymentPerWon(stressRate, params.dsr.termYears));
 
   // LTV가 구속일 때의 매수가: P = capital / (1 - ltv)
@@ -112,7 +164,7 @@ export function computeBudget(params: PolicyParams, fin: ReaderFinances): Budget
   return [
     solveScenario('현행 · 일반', params.ltv.regulatedBase, params.dsr.stressAddPctRegulated, params, fin),
     solveScenario(
-      '현행 · 생애최초 우대(+10%p)',
+      `현행 · 생애최초(LTV ${Math.round((params.ltv.regulatedBase + params.ltv.firstTimeBonus) * 100)}%)`,
       params.ltv.regulatedBase + params.ltv.firstTimeBonus,
       params.dsr.stressAddPctRegulated,
       params,
@@ -120,6 +172,42 @@ export function computeBudget(params: PolicyParams, fin: ReaderFinances): Budget
     ),
     solveScenario('완화 가정 (LTV 70%·스트레스 2단계)', params.easedScenario.ltv, params.easedScenario.stressAddPct, params, fin),
   ];
+}
+
+// ─── 2년 자기자본 적립 궤적 ─────────────────────────────────────────────────────
+
+export interface AccumulationProjection {
+  months: number;
+  monthlySave: number;
+  accumulated: number;
+  currentCapital: number;
+  projectedCapital: number;
+  familySupport?: number;
+}
+
+/**
+ * 매수펀드 월적립(cashflow.monthlyHomeSaving)으로 N개월 뒤 자기자본을 투영.
+ * projectedCapital = 현 자기자본(usableCapital, 전세보증금 회수 포함) + 월적립×개월. 투자수익은 보수적으로 미반영.
+ */
+export function computeAccumulation(fin: ReaderFinances, monthsOverride?: number): AccumulationProjection | null {
+  const cf = fin.cashflow;
+  if (!cf?.monthlyHomeSaving) return null;
+  const months = monthsOverride ?? cf.targetPurchaseMonths ?? 24;
+  const monthlySave = cf.monthlyHomeSaving;
+  const accumulated = monthlySave * months;
+  return {
+    months,
+    monthlySave,
+    accumulated,
+    currentCapital: fin.usableCapital,
+    projectedCapital: fin.usableCapital + accumulated,
+    familySupport: fin.contingencySupport?.가족지원,
+  };
+}
+
+/** 투영 자기자본으로 미래 예산 시나리오 재계산(예산 엔진 재사용). */
+export function computeFutureBudget(params: PolicyParams, fin: ReaderFinances, projectedCapital: number): BudgetScenario[] {
+  return computeBudget(params, { ...fin, usableCapital: projectedCapital });
 }
 
 // ─── Trigger detection ────────────────────────────────────────────────────────

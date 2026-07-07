@@ -26,3 +26,17 @@ backup/
 
 # 개인화 프로필 (재무 정보 포함 — 절대 커밋 금지)
 config/reader-profile.json
+config/finance-plan.json
+
+# 프로필(지인 재무정보 — 절대 커밋 금지)
+config/profiles/
+
+# 개인 예산 파생·일일 생성 산출물 (repo PUBLIC — 재무 파생 수치 커밋 금지)
+config/investment-strategy.json
+config/recommendations.json
+config/market-context.json
+config/listings-analysis.json
+config/matching-analysis.json
+config/kakao-context.json
+docs/goals/
+output/

@@ -17,10 +17,25 @@ import { sendTelegram } from '../src/lib/telegram';
 
 const prisma = new PrismaClient();
 
+// 예산 사정권: 서울 13구 + 경기 남부 3(관악산 남측 통근권·2026-07-04 확장). LAWD 코드는 법정동코드 앞 5자리.
 const DISTRICTS: Array<{ lawdCd: string; name: string }> = [
-  { lawdCd: '11590', name: '동작구' },
   { lawdCd: '11620', name: '관악구' },
+  { lawdCd: '11590', name: '동작구' },
   { lawdCd: '11560', name: '영등포구' },
+  { lawdCd: '11545', name: '금천구' },
+  { lawdCd: '11530', name: '구로구' },
+  { lawdCd: '11500', name: '강서구' },
+  { lawdCd: '11470', name: '양천구' },
+  { lawdCd: '11350', name: '노원구' },
+  { lawdCd: '11320', name: '도봉구' },
+  { lawdCd: '11260', name: '중랑구' },
+  { lawdCd: '11305', name: '강북구' },
+  { lawdCd: '11290', name: '성북구' },
+  { lawdCd: '11380', name: '은평구' },
+  // 경기 남부(통근권 확장) — 만안구=비규제(갭투자 트랙), 동안구·의왕=토허(2년 실거주)
+  { lawdCd: '41171', name: '안양시 만안구' },
+  { lawdCd: '41173', name: '안양시 동안구' },
+  { lawdCd: '41430', name: '의왕시' },
 ];
 
 function recentMonths(n: number): string[] {
