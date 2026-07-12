@@ -102,7 +102,8 @@ function loadConfig(): SweepConfig {
  */
 async function enumerateDong(page: Page, code: string, minHousehold: number): Promise<ComplexInfo[]> {
   const si = code.slice(0, 2) + '00000000'; // 시도 코드 파생(서울 11·경기 41) — 1-B-iii에서 하드코딩 제거
-  const gun = code.slice(0, 4) + '000000';
+  // 구·군 코드는 앞 5자리(11XXX/41XXX). 4자리 절단 시 5번째 자리가 0이 아닌 광진(11215)·강북(11305)·금천(11545)이 잘못된 gun으로 조용히 0단지가 됨.
+  const gun = code.slice(0, 5) + '00000';
   const captured: string[] = [];
   const pattern = '**/front-api/v1/complex/region**';
   const handler = async (route: import('playwright').Route) => {
@@ -239,6 +240,12 @@ async function main() {
     await sleep(jitter(cfg.enumDelayMs));
   }
   console.log(`[sweep] 열거 요약 — ${dongList.length}개 동 중 0단지 ${zeroDongs}개 / page0 상한 근접 ${cappedDongs}개`);
+  // 구 단위 전멸 감지 — 잘못된 지역코드·차단은 개별 동 0이 아니라 구 전체 0으로 나타남(광진·강북·금천 gun 절단 버그의 관측 신호)
+  const targetGuSet = new Set(dongList.map((d) => d.gu));
+  const foundGuSet = new Set(candidates.map((c) => c.gu));
+  for (const gu of targetGuSet) {
+    if (!foundGuSet.has(gu)) console.error(`[sweep] ⚠ ${gu}: 전 동 0단지 — 지역코드 오류/차단 의심, 확인 필요`);
+  }
   // 중복 제거(동 경계 단지)
   const uniq = new Map<number, (typeof candidates)[0]>();
   for (const c of candidates) if (!uniq.has(c.complexNumber)) uniq.set(c.complexNumber, c);

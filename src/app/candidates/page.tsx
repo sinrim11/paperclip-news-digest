@@ -68,7 +68,7 @@ export default async function CandidatesPage({
         </div>
         <details className="mt-1 text-xs text-gray-500">
           <summary className="cursor-pointer select-none hover:text-gray-700">자세히</summary>
-          <p className="mt-1 leading-relaxed">300세대 이상 · 동작·관악·영등포 · 예산 내 매매 매물 보유 단지만 수집해 표시합니다.</p>
+          <p className="mt-1 leading-relaxed">150세대 이상 · 전용 50㎡+ · 서울 25구 + 남양주(일·수 분할 수집) · 예산 내 매매 매물 보유 단지만 수집해 표시합니다.</p>
         </details>
       </header>
 

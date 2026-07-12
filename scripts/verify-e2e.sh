@@ -68,6 +68,20 @@ echo "── [8/10] 네이버 스윕 요일 그룹 (1-B-ii/iii)"
 SUN=$(npx tsx scripts/naver-sweep.ts --plan --group=sun 2>/dev/null | head -1 | grep -o '[0-9]*개 동' | head -1)
 WED=$(npx tsx scripts/naver-sweep.ts --plan --group=wed 2>/dev/null | head -1 | grep -o '[0-9]*개 동' | head -1)
 [ -n "$SUN" ] && [ -n "$WED" ] && ok "그룹 해석 OK — sun ${SUN} · wed ${WED}(남양주 포함)" || bad "스윕 그룹 해석 실패"
+# DB 실커버리지 — 그룹에 등재된 구가 후보 테이블에 실제로 존재하는지 (gun 절단류 침묵 0-누락 감지)
+COVER=$(python3 - <<'PY' 2>/dev/null
+import json, subprocess
+cfg = json.load(open('config/naver-sweep.json'))
+expected = sorted({g for k in ('sun', 'wed') for g in cfg['groups'][k]})
+out = subprocess.run(['psql', '-h', 'localhost', '-p', '5432', '-d', 'news_digest', '-Atc',
+                      'SELECT DISTINCT gu FROM "ComplexCandidate";'], capture_output=True, text=True).stdout
+have = set(out.split())
+exempt = {'용산구', '성동구', '송파구'}  # 스윕 정상, 전량 예산 초과로 저장 0건 (2026-07-08 로그 검증)
+missing = [g for g in expected if g not in have and g not in exempt]
+print('OK ' + str(len(have)) + '개 구/시' if not missing else 'MISS ' + ','.join(missing))
+PY
+)
+echo "$COVER" | grep -q '^OK' && ok "후보 커버리지 OK — ${COVER#OK }" || bad "후보 0건 구 발견(코드/수집 확인): ${COVER#MISS }"
 
 echo "── [9/10] 일일 추천 엔진 (스트레치+·규제 라벨·호재, 1-A/2-A/2-B)"
 RECO=$(npx tsx scripts/daily-recommend.ts --dry 2>/dev/null)

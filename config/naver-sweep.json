@@ -1,5 +1,5 @@
 {
-  "_comment": "네이버 매물 전수 스윕 설정. dongs 하드코딩 대신 검증된 법정동코드 맵(dongMapFile)에서 자동 로드 — 대림동 코드 오류(1156013600≠1156013300) 같은 조용한 0-누락 방지. budgetCeiling=스윕 가격 상한(만원). minHousehold=150(예산 내 구축 중소단지 포착). 1-B-ii: 25구 확대는 groups로 요일 분할(일=기존 13구, 수=신규 12구) — 수집량 증가를 스케줄로 흡수, 딜레이 단축 금지(가드레일 6). naver-sweep.sh가 요일로 그룹 자동 선택, --group=sun|wed 수동 지정 가능. targetGus는 그룹 미지정 시 fallback(back-compat).",
+  "_comment": "네이버 매물 전수 스윕 설정. dongs 하드코딩 대신 검증된 법정동코드 맵(dongMapFile)에서 자동 로드 — 대림동 코드 오류(1156013600≠1156013300) 같은 조용한 0-누락 방지. budgetCeiling=스윕 가격 상한(만원). minHousehold=150(예산 내 구축 중소단지 포착). 1-B-ii: 25구 확대는 groups로 요일 분할(일=기존 13구, 수=신규 12구) — 수집량 증가를 스케줄로 흡수, 딜레이 단축 금지(가드레일 6). naver-sweep.sh가 요일로 그룹 자동 선택, --group=sun|wed 수동 지정 가능. targetGus는 그룹 미지정 시 fallback(back-compat). backfill 그룹=gun 4자리 절단 버그로 0-누락됐던 광진·강북·금천 + 스윕 이력 없는 남양주 일회성 보충용(수동: naver-sweep.sh backfill).",
   "budgetCeilingManwon": 92000,
   "minHousehold": 150,
   "minExclusiveAreaM2": 50,
@@ -18,7 +18,8 @@
       "종로구", "중구", "용산구", "성동구", "광진구", "동대문구",
       "서대문구", "마포구", "서초구", "강남구", "송파구", "강동구",
       "남양주시"
-    ]
+    ],
+    "backfill": ["광진구", "강북구", "금천구", "남양주시"]
   },
   "targetGus": [
     "관악구", "동작구", "영등포구", "금천구", "구로구", "강서구", "양천구",
