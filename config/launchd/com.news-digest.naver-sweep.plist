@@ -9,19 +9,13 @@
     <string>/Users/sklee01/news-digest/scripts/naver-sweep.sh</string>
   </array>
   <key>WorkingDirectory</key><string>/Users/sklee01/news-digest</string>
-  <!-- 1-B-ii 요일 분할: 일 03:00 = 기존 13구(sun) / 수 03:00 = 신규 12구(wed). 그룹은 naver-sweep.sh가 요일로 판별 -->
+  <!-- G2-4 주 4회: 일·목 03:00 = sun 그룹 / 수·토 03:00 = wed 그룹(경기 포함) — 지역당 3~4일 간격 -->
   <key>StartCalendarInterval</key>
   <array>
-    <dict>
-      <key>Weekday</key><integer>0</integer>
-      <key>Hour</key><integer>3</integer>
-      <key>Minute</key><integer>0</integer>
-    </dict>
-    <dict>
-      <key>Weekday</key><integer>3</integer>
-      <key>Hour</key><integer>3</integer>
-      <key>Minute</key><integer>0</integer>
-    </dict>
+    <dict><key>Weekday</key><integer>0</integer><key>Hour</key><integer>3</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>3</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>3</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>6</integer><key>Hour</key><integer>3</integer><key>Minute</key><integer>0</integer></dict>
   </array>
   <key>StandardOutPath</key><string>/Users/sklee01/news-digest/output/naver_sweep.log</string>
   <key>StandardErrorPath</key><string>/Users/sklee01/news-digest/output/naver_sweep.log</string>

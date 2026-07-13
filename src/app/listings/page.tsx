@@ -76,6 +76,51 @@ const eok = (m: number) => (m / 10000).toFixed(2).replace(/\.?0+$/, '') + '억';
 const LIMIT = 80;
 const areaBand = (a: number | null) => (a == null ? '?' : a < 40 ? '~40㎡' : a < 60 ? '50㎡대' : a < 75 ? '60~74㎡' : a < 90 ? '84㎡급' : '90㎡+');
 
+/** 경기 지역 판별 — 필터 UI 서울/경기 그룹화(G2-1) */
+const isGyeonggi = (gu: string) => gu.endsWith('시') || gu.includes(' ');
+
+/** 금액대 밴드(G2-2) — price 만원 기준 [min, max) */
+const PRICE_BANDS: Array<{ key: string; label: string; min: number; max: number | null }> = [
+  { key: 'b5', label: '~5억', min: 0, max: 50000 },
+  { key: 'b56', label: '5~6억', min: 50000, max: 60000 },
+  { key: 'b67', label: '6~7억', min: 60000, max: 70000 },
+  { key: 'b78', label: '7~8억', min: 70000, max: 80000 },
+  { key: 'b8p', label: '8억+', min: 80000, max: null },
+];
+
+/** 페르소나 프리셋(G2-5) — 기존 계산 필드의 결정적 필터+정렬 재조합(신규 수집 0, 판단은 사람) */
+const LISTING_PERSONAS: Record<string, { label: string; desc: string; filter?: (r: Row) => boolean; sort: (a: Row, b: Row) => number }> = {
+  commute: {
+    label: '🚇 출퇴근 우선',
+    desc: '통근 총 소요시간 오름차순(카카오 실경로/근사) — 통근 계산 불가 매물 제외',
+    filter: (r) => r.cm != null,
+    sort: (a, b) => (a.cm!.totalMin - b.cm!.totalMin) || b.a.totalScore - a.a.totalScore,
+  },
+  invest: {
+    label: '📈 투자수익 우선',
+    desc: '기본 시나리오 연 ROE 내림차순 · 동률 시 전세가율(임대전환 용이) 순',
+    sort: (a, b) => (b.a.base.roeAnnualPct - a.a.base.roeAnnualPct) || b.jeonseRatioPct - a.jeonseRatioPct,
+  },
+  newbuild: {
+    label: '🏗️ 신축 우선',
+    desc: '10년 이내 준신축만 · 연식 오름차순 — 감가방어·임대선호',
+    filter: (r) => r.elapsedYear != null && r.elapsedYear <= 10,
+    sort: (a, b) => ((a.elapsedYear ?? 99) - (b.elapsedYear ?? 99)) || b.a.totalScore - a.a.totalScore,
+  },
+  environ: {
+    label: '🌳 주거환경 우선',
+    desc: '상권·역세권 실측 점수 내림차순 · 동률 시 대단지 순 — 실측 없는 매물 제외',
+    filter: (r) => r.am != null,
+    sort: (a, b) => (b.am!.score - a.am!.score) || b.household - a.household,
+  },
+  value: {
+    label: '💎 가성비',
+    desc: '전용 ㎡당 가격 오름차순 — 종합점수 45+ · 실거래 3건+ 검증분만(싼 이유가 있는 매물 배제 아님, 리스크는 카드에서 확인)',
+    filter: (r) => r.area != null && r.a.totalScore >= 45 && r.tradeCount >= 3,
+    sort: (a, b) => a.price / (a.area ?? 1) - b.price / (b.area ?? 1),
+  },
+};
+
 function scoreColor(s: number) {
   return s >= 70 ? 'text-emerald-600' : s >= 50 ? 'text-blue-600' : s >= 35 ? 'text-amber-600' : 'text-red-500';
 }
@@ -88,7 +133,7 @@ function ScoreBar({ score }: { score: number }) {
   );
 }
 
-export default async function ListingsPage({ searchParams }: { searchParams?: Promise<{ gu?: string; sort?: string; area?: string; max?: string; feasible?: string }> }) {
+export default async function ListingsPage({ searchParams }: { searchParams?: Promise<{ gu?: string; sort?: string; area?: string; max?: string; feasible?: string; band?: string; persona?: string }> }) {
   const sp = (await searchParams) ?? {};
   const cookieStore = await cookies();
   const ctx = resolveContext(cookieStore.get(PROFILE_COOKIE)?.value);
@@ -136,13 +181,22 @@ export default async function ListingsPage({ searchParams }: { searchParams?: Pr
   if (sp.max) { const m = Number(sp.max) * 10000; rows = rows.filter((r) => r.price <= m); }
   if (sp.feasible === 'today') rows = rows.filter((r) => r.a.feasibleToday);
   else if (sp.feasible === '2yr') rows = rows.filter((r) => r.a.feasible2yr);
+  // 금액대 밴드(G2-2)
+  const band = PRICE_BANDS.find((b) => b.key === sp.band);
+  if (band) rows = rows.filter((r) => r.price >= band.min && (band.max == null || r.price < band.max));
+  // 페르소나 프리셋(G2-5) — 활성 시 전용 필터+정렬이 sort 파라미터를 대체
+  const persona = sp.persona && LISTING_PERSONAS[sp.persona] ? LISTING_PERSONAS[sp.persona] : null;
+  if (persona?.filter) rows = rows.filter(persona.filter);
   const sort = sp.sort ?? 'score';
-  rows = [...rows].sort((a, b) =>
-    sort === 'price' ? a.price - b.price
-      : sort === 'roe' ? b.a.base.roeAnnualPct - a.a.base.roeAnnualPct
-        : sort === 'jeonse' ? b.jeonseRatioPct - a.jeonseRatioPct
-          : sort === 'commute' ? (a.cm?.totalMin ?? 999) - (b.cm?.totalMin ?? 999)
-            : b.a.totalScore - a.a.totalScore,
+  rows = [...rows].sort(
+    persona
+      ? persona.sort
+      : (a, b) =>
+        sort === 'price' ? a.price - b.price
+          : sort === 'roe' ? b.a.base.roeAnnualPct - a.a.base.roeAnnualPct
+            : sort === 'jeonse' ? b.jeonseRatioPct - a.jeonseRatioPct
+              : sort === 'commute' ? (a.cm?.totalMin ?? 999) - (b.cm?.totalMin ?? 999)
+                : b.a.totalScore - a.a.totalScore,
   );
 
   // ── 단지 그룹핑(네이버식 대표매물 — 단지당 카드 1장): 정렬 1위가 대표, 나머지는 펼침에서 ──
@@ -188,23 +242,42 @@ export default async function ListingsPage({ searchParams }: { searchParams?: Pr
       {/* 필터 */}
       <div className="mb-4 space-y-2">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-[11px] font-semibold text-gray-400">지역</span>
+          <span className="mr-1 text-[11px] font-semibold text-gray-400">서울</span>
           {chip('전체', { gu: '' }, !sp.gu)}
-          {gus.map((g) => chip(g, { gu: g }, sp.gu === g))}
+          {gus.filter((g) => !isGyeonggi(g)).map((g) => chip(g, { gu: g }, sp.gu === g))}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-[11px] font-semibold text-gray-400">면적</span>
+          <span className="mr-1 text-[11px] font-semibold text-gray-400">경기</span>
+          {gus.filter(isGyeonggi).length === 0
+            ? <span className="text-[11px] text-gray-400">수집 대기(다음 스윕 후 표시)</span>
+            : gus.filter(isGyeonggi).map((g) => chip(g, { gu: g }, sp.gu === g))}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-[11px] font-semibold text-gray-400">금액대</span>
+          {PRICE_BANDS.map((b) => chip(b.label, { band: sp.band === b.key ? '' : b.key }, sp.band === b.key))}
+          <span className="ml-2 mr-1 text-[11px] font-semibold text-gray-400">면적</span>
           {['50㎡대', '60~74㎡', '84㎡급', '90㎡+'].map((a) => chip(a, { area: sp.area === a ? '' : a }, sp.area === a))}
-          <span className="ml-2 mr-1 text-[11px] font-semibold text-gray-400">예산</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-[11px] font-semibold text-gray-400">페르소나</span>
+          {Object.entries(LISTING_PERSONAS).map(([k, p]) => chip(p.label, { persona: sp.persona === k ? '' : k }, sp.persona === k))}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-[11px] font-semibold text-gray-400">예산</span>
           {chip('오늘 가능', { feasible: sp.feasible === 'today' ? '' : 'today' }, sp.feasible === 'today')}
           {chip('2년후 가능', { feasible: sp.feasible === '2yr' ? '' : '2yr' }, sp.feasible === '2yr')}
-          <span className="ml-2 mr-1 text-[11px] font-semibold text-gray-400">정렬</span>
-          {chip('종합점수', { sort: 'score' }, sort === 'score')}
-          {chip('ROE', { sort: 'roe' }, sort === 'roe')}
-          {chip('가격', { sort: 'price' }, sort === 'price')}
-          {chip('전세가율', { sort: 'jeonse' }, sort === 'jeonse')}
-          {chip('통근시간', { sort: 'commute' }, sort === 'commute')}
+          <span className="ml-2 mr-1 text-[11px] font-semibold text-gray-400">정렬{persona ? '(페르소나 우선)' : ''}</span>
+          {chip('종합점수', { sort: 'score' }, !persona && sort === 'score')}
+          {chip('ROE', { sort: 'roe' }, !persona && sort === 'roe')}
+          {chip('가격', { sort: 'price' }, !persona && sort === 'price')}
+          {chip('전세가율', { sort: 'jeonse' }, !persona && sort === 'jeonse')}
+          {chip('통근시간', { sort: 'commute' }, !persona && sort === 'commute')}
         </div>
+        {persona && (
+          <p className="rounded-md bg-indigo-50 px-3 py-2 text-[13px] leading-relaxed text-indigo-900">
+            {persona.label} — {persona.desc}. <span className="text-indigo-400">정렬 규칙은 표시된 원천 수치로 검증 가능하며 판단을 대신하지 않습니다.</span>
+          </p>
+        )}
       </div>
 
       <div className="mb-3 space-y-1 text-[13px] leading-relaxed text-gray-600">

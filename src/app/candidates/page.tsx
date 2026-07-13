@@ -14,10 +14,24 @@ interface Listing {
   name: string | null;
 }
 
+/** 금액대 밴드(G2-2) — 최저 호가(만원) 기준 [min, max) */
+const PRICE_BANDS: Array<{ key: string; label: string; min: number; max: number | null }> = [
+  { key: 'b5', label: '~5억', min: 0, max: 50000 },
+  { key: 'b56', label: '5~6억', min: 50000, max: 60000 },
+  { key: 'b67', label: '6~7억', min: 60000, max: 70000 },
+  { key: 'b78', label: '7~8억', min: 70000, max: 80000 },
+  { key: 'b8p', label: '8억+', min: 80000, max: null },
+];
+const inBand = (min: number | null, b: { min: number; max: number | null }) =>
+  min != null && min >= b.min && (b.max == null || min < b.max);
+
+/** 경기 지역 판별 — 필터 UI 서울/경기 그룹화(G2-1) */
+const isGyeonggi = (gu: string) => gu.endsWith('시') || gu.includes(' ');
+
 export default async function CandidatesPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ gu?: string; sort?: string }>;
+  searchParams?: Promise<{ gu?: string; sort?: string; band?: string }>;
 }) {
   const sp = (await searchParams) ?? {};
   const guFilter = sp.gu;
@@ -29,11 +43,14 @@ export default async function CandidatesPage({
   const nowBudget = scenarios.length > 1 ? scenarios[1].maxPrice : null;
   const easedBudget = scenarios.length > 2 ? scenarios[2].maxPrice : null;
 
-  const all = await prisma.complexCandidate
-    .findMany({ where: guFilter ? { gu: guFilter } : undefined })
-    .catch(() => []);
+  // 전체를 항상 로드 — 구 칩·밴드 카운트가 필터와 무관하게 전 지역을 보여야 함(G2-1 버그 수정)
+  const all = await prisma.complexCandidate.findMany().catch(() => []);
 
-  const sorted = [...all].sort((a, b) => {
+  const band = PRICE_BANDS.find((b) => b.key === sp.band);
+  let filtered = guFilter ? all.filter((c) => c.gu === guFilter) : all;
+  if (band) filtered = filtered.filter((c) => inBand(c.minDealPrice, band));
+
+  const sorted = [...filtered].sort((a, b) => {
     if (sort === 'household') return b.household - a.household;
     if (sort === 'year') return (a.elapsedYear ?? 999) - (b.elapsedYear ?? 999);
     return (a.minDealPrice ?? 9e9) - (b.minDealPrice ?? 9e9);
@@ -42,6 +59,15 @@ export default async function CandidatesPage({
   const gus = [...new Set(all.map((c) => c.gu))].sort();
   const sweptAt = all.length ? all.reduce((max, c) => (c.sweptAt > max ? c.sweptAt : max), all[0].sweptAt) : null;
   const ceiling = all.length ? all[0].budgetCeiling : null;
+  // 밴드별 카운트(현재 구 필터 반영) — 금액대 분포 한눈에
+  const bandBase = guFilter ? all.filter((c) => c.gu === guFilter) : all;
+  const qs = (extra: Record<string, string>) => {
+    const q = new URLSearchParams();
+    const merged = { gu: guFilter ?? '', sort: sp.sort ?? '', band: sp.band ?? '', ...extra };
+    for (const [k, v] of Object.entries(merged)) if (v) q.set(k, v);
+    const s = q.toString();
+    return s ? `/candidates?${s}` : '/candidates';
+  };
 
   const fitClass = (min: number | null): string => {
     if (min === null || !nowBudget || !easedBudget) return 'bg-gray-50 text-gray-500';
@@ -68,23 +94,43 @@ export default async function CandidatesPage({
         </div>
         <details className="mt-1 text-xs text-gray-500">
           <summary className="cursor-pointer select-none hover:text-gray-700">자세히</summary>
-          <p className="mt-1 leading-relaxed">150세대 이상 · 전용 50㎡+ · 서울 25구 + 남양주(일·수 분할 수집) · 예산 내 매매 매물 보유 단지만 수집해 표시합니다.</p>
+          <p className="mt-1 leading-relaxed">150세대 이상 · 전용 50㎡+ · 서울 25구 + 경기(남양주·안양 만안/동안·의왕) · 주 4회 분할 수집(일·목=서울 서남/동북, 수·토=서울 나머지+경기 — 지역당 3~4일 간격) · 예산 내 매매 매물 보유 단지만 표시합니다.</p>
         </details>
       </header>
 
-      {/* 필터 */}
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-gray-500">구:</span>
-        <Link href="/candidates" className={`rounded px-2 py-1 ${!guFilter ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>전체 ({all.length})</Link>
-        {gus.map((g) => (
-          <Link key={g} href={`/candidates?gu=${encodeURIComponent(g)}`} className={`rounded px-2 py-1 ${guFilter === g ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>
-            {g} ({all.filter((c) => c.gu === g).length})
-          </Link>
-        ))}
-        <span className="ml-3 text-gray-500">정렬:</span>
-        {[['price', '최저가'], ['household', '세대수'], ['year', '신축순']].map(([k, label]) => (
-          <Link key={k} href={`/candidates?${guFilter ? `gu=${encodeURIComponent(guFilter)}&` : ''}sort=${k}`} className={`rounded px-2 py-1 ${sort === k ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}>{label}</Link>
-        ))}
+      {/* 필터 — 지역(서울/경기 그룹, G2-1) · 금액대(G2-2) · 정렬 */}
+      <div className="space-y-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-gray-500">서울:</span>
+          <Link href={qs({ gu: '' })} className={`rounded px-2 py-1 ${!guFilter ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>전체 ({all.length})</Link>
+          {gus.filter((g) => !isGyeonggi(g)).map((g) => (
+            <Link key={g} href={qs({ gu: g })} className={`rounded px-2 py-1 ${guFilter === g ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>
+              {g} ({all.filter((c) => c.gu === g).length})
+            </Link>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-gray-500">경기:</span>
+          {gus.filter(isGyeonggi).length === 0
+            ? <span className="text-xs text-gray-400">수집 대기(다음 스윕 후 표시)</span>
+            : gus.filter(isGyeonggi).map((g) => (
+              <Link key={g} href={qs({ gu: g })} className={`rounded px-2 py-1 ${guFilter === g ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>
+                {g} ({all.filter((c) => c.gu === g).length})
+              </Link>
+            ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-gray-500">금액대:</span>
+          {PRICE_BANDS.map((b) => (
+            <Link key={b.key} href={qs({ band: sp.band === b.key ? '' : b.key })} className={`rounded px-2 py-1 tabular-nums ${sp.band === b.key ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700'}`}>
+              {b.label} ({bandBase.filter((c) => inBand(c.minDealPrice, b)).length})
+            </Link>
+          ))}
+          <span className="ml-3 text-gray-500">정렬:</span>
+          {[['price', '최저가'], ['household', '세대수'], ['year', '신축순']].map(([k, label]) => (
+            <Link key={k} href={qs({ sort: k })} className={`rounded px-2 py-1 ${sort === k ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}>{label}</Link>
+          ))}
+        </div>
       </div>
 
       {sorted.length === 0 ? (

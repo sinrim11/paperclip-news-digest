@@ -8,11 +8,12 @@ set -a
 [ -f .env ] && source .env
 [ -f .env.local ] && source .env.local
 set +a
-# 요일 분할 그룹(1-B-ii): 일=기존 13구(sun), 수=신규 12구(wed). 수동 실행 시 인자로 지정 가능: naver-sweep.sh wed
+# 요일 분할 그룹(G2-4): sun=일·목, wed=수·토 — 각 그룹 주 2회 → 지역당 3~4일 간격 재수집.
+# 수동 실행 시 인자로 지정 가능: naver-sweep.sh wed | gyeonggi-new | backfill
 GROUP="${1:-}"
 if [ -z "$GROUP" ]; then
   case "$(date +%u)" in
-    3) GROUP="wed" ;;
+    3|6) GROUP="wed" ;;
     *) GROUP="sun" ;;
   esac
 fi
@@ -24,4 +25,6 @@ echo "--- 신규 단지 용적률 백필(재건축 사업성 지표) ---" | tee 
 npx tsx scripts/backfill-far.ts 2>&1 | tee -a "$LOG"
 echo "--- 카카오 실데이터 증분 수집(역·상권·자차경로) ---" | tee -a "$LOG"
 npx tsx scripts/refresh-kakao-context.ts 2>&1 | tee -a "$LOG"
+echo "--- 전체매물 분석 재생성(gen-listings — /listings 즉시 반영, G2-1) ---" | tee -a "$LOG"
+npx tsx scripts/gen-listings.ts 2>&1 | tee -a "$LOG"
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') naver-sweep 종료 ===" | tee -a "$LOG"
