@@ -21,22 +21,31 @@ const W = 1080, H = 1350;
 const today = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
 
 /**
- * 시리즈(3-A): --series=price6(기본)|price8|briefing
- *  - price6/price8: 금액대별 큐레이션(공개 가격대 컷 6억/8억 — 요일 로테이션은 gen-cardnews.sh)
+ * 시리즈(3-A·G2-3): --series=price6(기본)|price8|price9|briefing
+ *  - 금액대 큐레이션은 겹침 없는 창(window)으로 분리: 6억 이하 / 6~8억 / 8~9억
+ *    → 시리즈 간 동일 단지 중복 원천 차단(마케팅용 다양성). 요일 로테이션은 gen-cardnews.sh.
+ *  - 추가로 최근 COOLDOWN_DAYS일 내 어떤 시리즈든 등장한 단지는 제외(반복 노출 방지, G2-3).
  *  - briefing: 호재·정책 브리핑(momentum-factors 확정/진행 + 정책 카드, 전 항목 출처 표기)
- *  - 10억 시리즈는 보류 — 스윕 상한(9.2억) 상향 선행 필요(Phase 0 판정)
+ *  - 10억+ 시리즈는 보류 — 스윕 상한(9.2억) 상향 선행 필요(Phase 0 판정)
  */
-type Series = 'price6' | 'price8' | 'briefing';
+type Series = 'price6' | 'price8' | 'price9' | 'briefing';
 const series: Series = (process.argv.find((a) => a.startsWith('--series='))?.slice('--series='.length) as Series) ?? 'price6';
-if (!['price6', 'price8', 'briefing'].includes(series)) throw new Error(`알 수 없는 시리즈: ${series}`);
-const DIR_SUFFIX: Record<Series, string> = { price6: '', price8: '-p8', briefing: '-brief' };
+if (!['price6', 'price8', 'price9', 'briefing'].includes(series)) throw new Error(`알 수 없는 시리즈: ${series}`);
+const DIR_SUFFIX: Record<Series, string> = { price6: '', price8: '-p8', price9: '-p9', briefing: '-brief' };
 const setDir = today + DIR_SUFFIX[series];
 const OUT_DIR = join(process.cwd(), 'output', 'cardnews', setDir);
 
-/** 공개 프레임 — 개인 예산이 아닌 카드 명시용 가격대 컷 */
-const PRICE_CAP = series === 'price8' ? 80000 : 60000; // 만원
-const CAP_LABEL = series === 'price8' ? '8억 이하' : '6억 이하';
+/** 공개 프레임 — 개인 예산이 아닌 카드 명시용 가격대 창 [min, max) (만원) */
+const PRICE_WINDOW: Record<Exclude<Series, 'briefing'>, { min: number; max: number; label: string }> = {
+  price6: { min: 0, max: 60000, label: '6억 이하' },
+  price8: { min: 60000, max: 80000, label: '6~8억' },
+  price9: { min: 80000, max: 92000, label: '8~9억' },
+};
+const WINDOW = series === 'briefing' ? PRICE_WINDOW.price6 : PRICE_WINDOW[series];
+const CAP_LABEL = WINDOW.label;
 const MIN_HOUSEHOLD = 300;
+/** 반복 노출 방지 쿨다운 — 최근 N일 내 카드뉴스(전 시리즈)에 등장한 단지 제외 */
+const COOLDOWN_DAYS = 14;
 
 /* ── 공유용 객관 지표·레이더 지수 ── */
 interface SharePick {
@@ -80,7 +89,7 @@ function coverHtml(scanned: number, passed: number, total: number, guCount: numb
     ${brandBar(1, total)}
     <div style="margin-top:150px">
       <div style="font-size:38px;font-weight:700;color:#60A5FA;letter-spacing:0.06em">DATA RADAR</div>
-      <div style="font-size:96px;font-weight:800;line-height:1.18;margin-top:26px">서울 <span style="color:#60A5FA">${CAP_LABEL}</span><br/>아파트 레이더 TOP 5</div>
+      <div style="font-size:96px;font-weight:800;line-height:1.18;margin-top:26px">수도권 <span style="color:#60A5FA">${CAP_LABEL}</span><br/>아파트 레이더 TOP 5</div>
       <div style="font-size:34px;color:#CBD5E1;margin-top:42px;line-height:1.65">수집권 ${guCount}개 구·시 · 300세대+ <b style="color:#fff">${scanned.toLocaleString()}곳 전수 스캔</b> → 통과 ${passed.toLocaleString()}곳<br/>실거래 갭 · 거래량 · 전세가율 · 연식/용적률, <b style="color:#fff">공개 데이터 지표</b>로만 채점</div>
     </div>
     <div style="margin-top:auto;display:flex;align-items:center;justify-content:space-between">
@@ -239,7 +248,7 @@ function outroHtml(page: number, total: number): string {
   </div>`;
 }
 
-interface SetOut { pages: string[]; names: string[]; picks: string[]; caption: string }
+interface SetOut { pages: string[]; names: string[]; picks: string[]; pickNos: string[]; caption: string }
 
 /** 시리즈 2 — 호재·정책 브리핑: momentum-factors 확정/진행 상위 4건 + 정책 + 아웃트로 */
 function buildBriefingSet(): SetOut {
@@ -264,7 +273,7 @@ ${capLines}
 ⚠️ 정보 공유이며 투자 자문이 아닙니다. 매수 결정 전 반드시 현장 확인·전문가 상담을 거치세요.
 
 #부동산 #교통호재 #GTX #재개발 #부동산공부 #내집마련`;
-  return { pages, names, picks: factors.map((f) => f.title), caption };
+  return { pages, names, picks: factors.map((f) => f.title), pickNos: [], caption };
 }
 
 /** 시리즈 1 — 금액대별 큐레이션(6억/8억): 기존 레이더 TOP5 파이프라인 */
@@ -281,10 +290,26 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
   const jStats = new Map<string, number>();
   { const by = new Map<string, number[]>(); for (const r of rents) { (by.get(r.aptName) ?? by.set(r.aptName, []).get(r.aptName)!).push(r.deposit); } for (const [n, a] of by) if (a.length >= 2) jStats.set(n, med(a)); }
 
-  // 공유용 컷: 가격대(CAP_LABEL) · 300세대+ · 매매 매물 3건+
+  // 공유용 컷: 가격대 창(CAP_LABEL) · 300세대+ · 매매 매물 3건+
   const guCount = new Set(candidates.map((c) => c.gu)).size;
   const scanned = candidates.filter((c) => c.household >= MIN_HOUSEHOLD);
-  const pool = scanned.filter((c) => c.minDealPrice != null && c.minDealPrice <= PRICE_CAP && c.dealArticles >= 3);
+  let pool = scanned.filter((c) => c.minDealPrice != null && c.minDealPrice >= WINDOW.min && c.minDealPrice < WINDOW.max && c.dealArticles >= 3);
+
+  // 반복 노출 방지(G2-3): 최근 COOLDOWN_DAYS일 내 등장 단지 제외 — 구세트는 pickNos 부재 시 이름으로 대체 매칭
+  const cutoff = new Date(Date.now() - COOLDOWN_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const featured = new Set<string>();
+  const featuredNames = new Set<string>();
+  try {
+    const idx = JSON.parse(readFileSync(join(process.cwd(), 'output', 'cardnews', 'index.json'), 'utf-8')) as Array<{ date: string; dir?: string; picks: string[]; pickNos?: string[] }>;
+    for (const s of idx) {
+      if (s.date < cutoff || (s.dir ?? s.date) === setDir) continue; // 오늘 같은 세트 재생성은 자기 자신을 제외하지 않음
+      for (const no of s.pickNos ?? []) featured.add(no);
+      if (!s.pickNos) for (const p of s.picks) featuredNames.add(p.replace(/\(\d+\)$/, ''));
+    }
+  } catch { /* 첫 생성 */ }
+  const fresh = pool.filter((c) => !featured.has(c.complexNo) && !featuredNames.has(c.name));
+  if (fresh.length >= 5) pool = fresh;
+  else console.log(`  ⚠ 쿨다운 제외 후 ${fresh.length}곳뿐 — 다양성 완화(전체 풀 사용, 최근 등장 단지 재등장 허용)`);
   const picks: SharePick[] = pool.map((c) => {
     const t = tStats.get(c.name) ?? null;
     const j = jStats.get(c.name) ?? null;
@@ -305,7 +330,15 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
   // 같은 동 도배 방지: 동별 최대 2곳
   const top: SharePick[] = [];
   const perDong: Record<string, number> = {};
-  for (const p of picks) { const k = `${p.gu}|${p.dong}`; if ((perDong[k] ?? 0) >= 2) continue; perDong[k] = (perDong[k] ?? 0) + 1; top.push(p); if (top.length >= 5) break; }
+  const perGu: Record<string, number> = {}; // 구·시별 최대 2 — 한 지역 도배 방지(마케팅 다양성, G2-3)
+  for (const p of picks) {
+    const k = `${p.gu}|${p.dong}`;
+    if ((perDong[k] ?? 0) >= 2 || (perGu[p.gu] ?? 0) >= 2) continue;
+    perDong[k] = (perDong[k] ?? 0) + 1;
+    perGu[p.gu] = (perGu[p.gu] ?? 0) + 1;
+    top.push(p);
+    if (top.length >= 5) break;
+  }
 
   const total = 9;
   const pages: string[] = [coverHtml(scanned.length, pool.length, total, guCount)];
@@ -318,7 +351,7 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
   // ── 인스타 캡션 — 카드와 동일 데이터·수치 중심 ──
   const capLines = top.map((p, i) =>
     `${i + 1}. ${p.name} (${p.gu} ${p.dong}) — 호가 ${eok(p.minPrice)}${p.tradeMedian ? ` · 실거래 ${eok(p.tradeMedian)}(${p.tradeCount}건, 갭 ${p.gapPct! >= 0 ? '+' : ''}${p.gapPct}%)` : ''}${p.jeonseRatioPct ? ` · 전세가율 ${p.jeonseRatioPct}%` : ''} · 지수 ${p.score}`).join('\n');
-  const caption = `🏠 서울 ${CAP_LABEL} 아파트 레이더 TOP 5 (${today.replaceAll('-', '.')})
+  const caption = `🏠 수도권 ${CAP_LABEL} 아파트 레이더 TOP 5 (${today.replaceAll('-', '.')})
 
 수집권 ${guCount}개 구·시의 300세대 이상 ${scanned.length.toLocaleString()}개 단지를 전수 스캔해 공개 데이터 지표(실거래 갭 40 · 유동성 30 · 연식/용적률 15 · 전세가율 15)로만 채점했습니다. 특정인의 예산·취향 기준이 아니며, 가격대 컷(${CAP_LABEL}) 밖 단지는 포함되지 않습니다.
 
@@ -330,7 +363,7 @@ ${capLines}
 
 #부동산 #아파트 #내집마련 #서울아파트 #${CAP_LABEL.replace(' ', '')} #실거래가 #부동산데이터 #재테크 #부동산공부 #무주택자`;
 
-  return { pages, names, picks: top.map((p) => `${p.name}(${p.score})`), caption };
+  return { pages, names, picks: top.map((p) => `${p.name}(${p.score})`), pickNos: top.map((p) => p.complexNo), caption };
 }
 
 (async () => {
@@ -352,10 +385,10 @@ ${capLines}
   await browser.close();
 
   const indexPath = join(process.cwd(), 'output', 'cardnews', 'index.json');
-  let idx: Array<{ date: string; series?: string; dir?: string; files: string[]; picks: string[]; caption?: string }> = [];
+  let idx: Array<{ date: string; series?: string; dir?: string; files: string[]; picks: string[]; pickNos?: string[]; caption?: string }> = [];
   try { idx = JSON.parse(readFileSync(indexPath, 'utf-8')); } catch { /* 첫 생성 */ }
   idx = idx.filter((s) => (s.dir ?? s.date) !== setDir);
-  idx.unshift({ date: today, series, dir: setDir, files, picks: set.picks, caption: set.caption });
+  idx.unshift({ date: today, series, dir: setDir, files, picks: set.picks, pickNos: set.pickNos, caption: set.caption });
   writeFileSync(indexPath, JSON.stringify(idx.slice(0, 30), null, 2));
   console.log(`카드뉴스 생성 완료 → output/cardnews/${setDir}/ (${files.length}장, 시리즈 ${series}) · ${set.picks.join(', ')}`);
   await prisma.$disconnect();

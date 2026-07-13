@@ -1,7 +1,8 @@
 #!/bin/zsh
-# 카드뉴스 자동 생성 (launchd: com.news-digest.cardnews, 매일 09:00) — 3-A 시리즈 로테이션
-#   화·목·토 = 8억 큐레이션 / 그 외 = 6억 큐레이션 / 월요일엔 호재·정책 브리핑 추가 생성
-#   수동: scripts/gen-cardnews.sh [price6|price8|briefing]
+# 카드뉴스 자동 생성 (launchd: com.news-digest.cardnews, 매일 09:00) — 3-A·G2-3 시리즈 로테이션
+#   화·토 = 6~8억 / 목 = 8~9억 / 그 외 = 6억 이하 / 월요일엔 호재·정책 브리핑 추가 생성
+#   금액대 창은 겹침 없음 + 최근 14일 등장 단지 쿨다운(gen-cardnews.ts) → 반복 노출 방지
+#   수동: scripts/gen-cardnews.sh [price6|price8|price9|briefing]
 set -uo pipefail
 cd /Users/sklee01/news-digest
 export PATH="/opt/homebrew/bin:$PATH"
@@ -15,7 +16,8 @@ SERIES="${1:-}"
 DOW="$(date +%u)" # 1=월 … 7=일
 if [ -z "$SERIES" ]; then
   case "$DOW" in
-    2|4|6) SERIES="price8" ;;
+    2|6) SERIES="price8" ;;
+    4) SERIES="price9" ;;
     *) SERIES="price6" ;;
   esac
 fi

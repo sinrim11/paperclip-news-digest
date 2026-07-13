@@ -10,7 +10,7 @@ export const metadata = { title: '카드뉴스 | 뉴스 다이제스트' };
 interface CardSet { date: string; series?: string; dir?: string; files: string[]; picks: string[]; caption?: string }
 
 const dirOf = (s: CardSet) => s.dir ?? s.date;
-const seriesLabel = (s?: string) => (s === 'price8' ? '8억 이하 큐레이션' : s === 'briefing' ? '호재·정책 브리핑' : '6억 이하 큐레이션');
+const seriesLabel = (s?: string) => (s === 'price8' ? '6~8억 큐레이션' : s === 'price9' ? '8~9억 큐레이션' : s === 'briefing' ? '호재·정책 브리핑' : '6억 이하 큐레이션');
 
 function loadIndex(): CardSet[] {
   try {
