@@ -10,6 +10,7 @@ import { CompareToggle, CompareBar } from '@/components/CompareControls';
 import { resolveContext, PROFILE_COOKIE } from '@/lib/profiles';
 import { analyzeWithVersus, listingsCompact } from '@/lib/invest-compact';
 import { computeCommute, computeAmenity, computeAmenityKakao, lineLabel, type KakaoCtx } from '@/lib/commute';
+import { LISTING_PERSONAS } from '@/lib/listing-personas';
 
 /** 카카오 실데이터 캐시 로더 — 커스텀 프로필 재계산용. 출근지가 캐시와 다르면 자차 실경로 무효화 */
 function loadKakaoCtx(workLat: number, workLng: number): Record<string, KakaoCtx> {
@@ -88,38 +89,7 @@ const PRICE_BANDS: Array<{ key: string; label: string; min: number; max: number 
   { key: 'b8p', label: '8억+', min: 80000, max: null },
 ];
 
-/** 페르소나 프리셋(G2-5) — 기존 계산 필드의 결정적 필터+정렬 재조합(신규 수집 0, 판단은 사람) */
-const LISTING_PERSONAS: Record<string, { label: string; desc: string; filter?: (r: Row) => boolean; sort: (a: Row, b: Row) => number }> = {
-  commute: {
-    label: '🚇 출퇴근 우선',
-    desc: '통근 총 소요시간 오름차순(카카오 실경로/근사) — 통근 계산 불가 매물 제외',
-    filter: (r) => r.cm != null,
-    sort: (a, b) => (a.cm!.totalMin - b.cm!.totalMin) || b.a.totalScore - a.a.totalScore,
-  },
-  invest: {
-    label: '📈 투자수익 우선',
-    desc: '기본 시나리오 연 ROE 내림차순 · 동률 시 전세가율(임대전환 용이) 순',
-    sort: (a, b) => (b.a.base.roeAnnualPct - a.a.base.roeAnnualPct) || b.jeonseRatioPct - a.jeonseRatioPct,
-  },
-  newbuild: {
-    label: '🏗️ 신축 우선',
-    desc: '10년 이내 준신축만 · 연식 오름차순 — 감가방어·임대선호',
-    filter: (r) => r.elapsedYear != null && r.elapsedYear <= 10,
-    sort: (a, b) => ((a.elapsedYear ?? 99) - (b.elapsedYear ?? 99)) || b.a.totalScore - a.a.totalScore,
-  },
-  environ: {
-    label: '🌳 주거환경 우선',
-    desc: '상권·역세권 실측 점수 내림차순 · 동률 시 대단지 순 — 실측 없는 매물 제외',
-    filter: (r) => r.am != null,
-    sort: (a, b) => (b.am!.score - a.am!.score) || b.household - a.household,
-  },
-  value: {
-    label: '💎 가성비',
-    desc: '전용 ㎡당 가격 오름차순 — 종합점수 45+ · 실거래 3건+ 검증분만(싼 이유가 있는 매물 배제 아님, 리스크는 카드에서 확인)',
-    filter: (r) => r.area != null && r.a.totalScore >= 45 && r.tradeCount >= 3,
-    sort: (a, b) => a.price / (a.area ?? 1) - b.price / (b.area ?? 1),
-  },
-};
+// 페르소나 프리셋(G2-5) — src/lib/listing-personas.ts 공유(사전 생성 gen-persona-recos와 동일 규칙)
 
 function scoreColor(s: number) {
   return s >= 70 ? 'text-emerald-600' : s >= 50 ? 'text-blue-600' : s >= 35 ? 'text-amber-600' : 'text-red-500';

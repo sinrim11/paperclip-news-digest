@@ -40,3 +40,4 @@ config/matching-analysis.json
 config/kakao-context.json
 docs/goals/
 output/
+config/persona-recos.json

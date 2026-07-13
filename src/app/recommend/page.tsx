@@ -41,6 +41,26 @@ function loadStretchPlus(): { asOf: string; list: StretchReco[] } | null {
   }
 }
 
+/** 페르소나별 사전 생성 추천(G3) — gen-persona-recos 산출물. 없으면 섹션 미노출 */
+interface PersonaRecoItem {
+  complexNo: string; name: string; gu: string; dong: string;
+  price: number; area: number | null; elapsedYear: number | null; household: number;
+  totalScore: number; metric: string; tradeCount: number; jeonseRatioPct: number;
+}
+interface PersonaRecoSet { key: string; label: string; desc: string; items: PersonaRecoItem[] }
+
+function loadPersonaRecos(): { asOf: string; personas: PersonaRecoSet[] } | null {
+  try {
+    const raw = JSON.parse(readFileSync(join(process.cwd(), 'config', 'persona-recos.json'), 'utf-8')) as {
+      asOf?: string; personas?: PersonaRecoSet[];
+    };
+    if (!raw.personas?.some((p) => p.items.length)) return null;
+    return { asOf: raw.asOf ?? '', personas: raw.personas };
+  } catch {
+    return null;
+  }
+}
+
 export const dynamic = 'force-dynamic';
 export const metadata = { title: '추천 매물 | 뉴스 다이제스트' };
 
@@ -64,6 +84,7 @@ export default async function RecommendPage() {
   const nowBudget = scenarios.length > 1 ? scenarios[1].maxPrice : null;
   const easedBudget = scenarios.length > 2 ? scenarios[2].maxPrice : null;
   const stretch = loadStretchPlus();
+  const personaRecos = loadPersonaRecos();
 
   const [candidates, trades] = await Promise.all([
     prisma.complexCandidate.findMany().catch(() => []),
@@ -187,6 +208,41 @@ export default async function RecommendPage() {
             );
           })}
         </ol>
+      )}
+
+      {personaRecos && (
+        <section className="rounded-lg border border-purple-200 bg-purple-50/30 p-4">
+          <h2 className="text-lg font-bold text-gray-900">
+            🎭 페르소나별 추천 <span className="text-sm font-normal text-gray-500">{personaRecos.asOf} · 매일 자동 생성</span>
+          </h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-gray-600">
+            같은 데이터를 5가지 관점의 <b>결정적 규칙</b>으로 다시 정렬한 사전 추천입니다(LLM 아님). 각 항목의 핵심 수치가
+            정렬 근거이며, 판단을 대신하지 않습니다.
+          </p>
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {personaRecos.personas.map((p) => (
+              <div key={p.key} className="rounded-lg border bg-white p-3.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <h3 className="text-[15px] font-bold text-gray-900">{p.label}</h3>
+                  <Link href={`/listings?persona=${p.key}`} className="shrink-0 text-xs text-blue-600 hover:underline">전체 →</Link>
+                </div>
+                <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-gray-400">{p.desc}</p>
+                <ol className="mt-2 space-y-1.5">
+                  {p.items.map((it, i) => (
+                    <li key={it.complexNo} className="flex items-baseline gap-2 text-[13px]">
+                      <span className="font-mono font-bold text-gray-400">{i + 1}</span>
+                      <span className="min-w-0 flex-1">
+                        <Link href={`/complex/${it.complexNo}`} className="font-semibold text-gray-900 hover:underline">{it.name}</Link>
+                        <span className="text-gray-500"> · {it.gu}</span>
+                        <span className="block text-xs text-gray-500">{formatKRW(it.price * 10_000)}{it.area ? ` · ${Math.round(it.area)}㎡` : ''} · <b className="text-purple-700">{it.metric}</b></span>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {stretch && (

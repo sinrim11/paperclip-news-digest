@@ -27,4 +27,6 @@ echo "--- 카카오 실데이터 증분 수집(역·상권·자차경로) ---" |
 npx tsx scripts/refresh-kakao-context.ts 2>&1 | tee -a "$LOG"
 echo "--- 전체매물 분석 재생성(gen-listings — /listings 즉시 반영, G2-1) ---" | tee -a "$LOG"
 npx tsx scripts/gen-listings.ts 2>&1 | tee -a "$LOG"
+echo "--- 페르소나별 사전 추천 재생성(gen-persona-recos — /recommend, G3) ---" | tee -a "$LOG"
+npx tsx scripts/gen-persona-recos.ts 2>&1 | tee -a "$LOG"
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') naver-sweep 종료 ===" | tee -a "$LOG"

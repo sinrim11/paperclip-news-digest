@@ -11,8 +11,10 @@ set -a
 [ -f .env.local ] && source .env.local
 set +a
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') daily-matching 시작 ===" | tee -a "$LOG"
-echo "[1/2] gen-listings (전체매물 투자분석+10년vs)" | tee -a "$LOG"
+echo "[1/3] gen-listings (전체매물 투자분석+10년vs)" | tee -a "$LOG"
 npx tsx scripts/gen-listings.ts 2>&1 | tee -a "$LOG"
-echo "[2/2] gen-matching (추적 3단지 호가·급매)" | tee -a "$LOG"
+echo "[2/3] gen-persona-recos (페르소나별 사전 추천 — /recommend, G3)" | tee -a "$LOG"
+npx tsx scripts/gen-persona-recos.ts 2>&1 | tee -a "$LOG"
+echo "[3/3] gen-matching (추적 3단지 호가·급매)" | tee -a "$LOG"
 npx tsx scripts/gen-matching.ts 2>&1 | tee -a "$LOG"
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') daily-matching 종료 ===" | tee -a "$LOG"
