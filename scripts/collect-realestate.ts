@@ -118,6 +118,17 @@ async function main() {
   }
   console.log(`[collect] 매물 스냅샷: ${snaps}건`);
 
+  // ── 4. 자율 작업 보고(2026-08-05 지시) — 수집 건수를 매일 텔레그램으로 투명하게 보고 ──
+  const kstTime = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(11, 16);
+  await sendTelegram(
+    [
+      `🤖 자동수집 보고 — 부동산 (${kstTime} KST)`,
+      `· 국토부 실거래: 매매 +${newTrades}건 · 전월세 +${newRents}건 (서울 25구+경기 4곳, 당월+전월)`,
+      `· 청약홈 공고: 신규 ${freshCount}건${freshCount > 0 ? ' (상세 별도 발송됨)' : ''}`,
+      `· 네이버 관심단지 매물 스냅샷: ${snaps}개 단지`,
+    ].join('\n'),
+  );
+
   console.log(`[collect] ${ts()} done`);
 }
 

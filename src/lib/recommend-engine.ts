@@ -40,6 +40,7 @@ export interface DailyReco {
   score: number;
   isNew: boolean; // 처음 추천 or 변화 재등장
   signalNote?: string; // 재등장 사유
+  signalLowManwon?: number; // 재등장 트리거가 된 신저가(만원) — 발송 로그에 기록해 같은 저가로 반복 재등장 방지
   // 갭투자 트랙(비규제 지역 전용)
   jeonseManwon?: number; // 전세 중간값
   gapManwon?: number; // 갭 = 매매 − 전세
@@ -233,17 +234,23 @@ export async function buildDailyRecommendations(
   const cooldownSince = kstDateStr(new Date(now.getTime() - rules.rotation.cooldownDays * 86_400_000));
   const recentSent = await prisma.sentRecommendation.findMany({
     where: { sentDate: { gte: kstDateStr(new Date(now.getTime() - maxCooldownDays * 86_400_000)) } },
-    select: { complexKey: true, medianManwon: true, sentDate: true, scenario: true },
+    select: { complexKey: true, medianManwon: true, sentDate: true, scenario: true, signalLowManwon: true },
     orderBy: { sentDate: 'desc' },
   });
-  const lastSentByKey = new Map<string, { medianManwon: number; sentDate: string }>();
+  const lastSentByKey = new Map<string, { medianManwon: number; sentDate: string; signalLowManwon: number | null }>();
   const lastSentStretch = new Map<string, { medianManwon: number; sentDate: string }>();
+  // 쿨다운 내 이미 알린 신저가의 최솟값 — "같은 저가 거래"가 window 내내 매일 재등장을 트리거하는 것을 차단
+  const notifiedLowByKey = new Map<string, number>();
   const spCooldownSince = kstDateStr(new Date(now.getTime() - spCooldownDays * 86_400_000));
   for (const s of recentSent) {
     if (s.scenario === '스트레치+') {
       if (s.sentDate >= spCooldownSince && !lastSentStretch.has(s.complexKey)) lastSentStretch.set(s.complexKey, s);
-    } else if (s.sentDate >= cooldownSince && !lastSentByKey.has(s.complexKey)) {
-      lastSentByKey.set(s.complexKey, s);
+    } else if (s.sentDate >= cooldownSince) {
+      if (!lastSentByKey.has(s.complexKey)) lastSentByKey.set(s.complexKey, s);
+      if (s.signalLowManwon != null) {
+        const prev = notifiedLowByKey.get(s.complexKey);
+        if (prev == null || s.signalLowManwon < prev) notifiedLowByKey.set(s.complexKey, s.signalLowManwon);
+      }
     }
   }
 
@@ -253,7 +260,11 @@ export async function buildDailyRecommendations(
   const skippedUnverifiedGu = new Set<string>();
   // 하방 경고 플래그(2-B) — excludeThreshold개 이상이면 제외+로그, 1개는 유의점
   const dsCfg: DownsideConfig = { ...DEFAULT_DOWNSIDE, ...(rules.downsideFlags ?? {}) };
-  const excluded: Array<{ name: string; gu: string; dong: string; flags: string[] }> = [];
+  // 트랙(메인·스트레치+·갭)별 판정에서 같은 단지가 중복 기록되지 않도록 key 기준 dedup(2026-08-05)
+  const excludedByKey = new Map<string, { name: string; gu: string; dong: string; flags: string[] }>();
+  const recordExcluded = (key: string, e: { name: string; gu: string; dong: string; flags: string[] }) => {
+    if (!excludedByKey.has(key)) excludedByKey.set(key, e);
+  };
   const flagsOf = (a: ComplexAgg, jeonseRatioPct: number | null, jeonseSamples: number) =>
     downsideFlags(
       { tradeMs: a.recentTrades.map((t) => t.ms), lookbackDays: rules.filters.lookbackDays, nowMs: now.getTime(), jeonseRatioPct, jeonseSamples },
@@ -270,16 +281,26 @@ export async function buildDailyRecommendations(
     const med = median(a.prices);
     if (med > stretch) continue;
 
-    // 로테이션: 쿨다운 내면 스킵, 단 신저가(직전 발송 중간값 대비 하락) 발생 시 재등장
+    // 로테이션: 쿨다운 내면 스킵, 단 신저가(직전 발송 중간값 대비 하락) 발생 시 재등장.
+    // 이미 알린 신저가(notifiedLowByKey)보다 더 낮은 거래가 새로 나와야만 재등장 —
+    // 같은 저가 거래 1건이 window 내내 매일 재발송을 트리거하던 반복 버그 방지(2026-08-05).
     const last = lastSentByKey.get(a.key);
     let isNew = true;
     let signalNote: string | undefined;
+    let signalLowManwon: number | undefined;
     if (last) {
       isNew = false;
       const recentLow = Math.min(...a.recentTrades.filter((t) => now.getTime() - t.ms <= newSignalWindowMs).map((t) => t.price), Infinity);
       const dropPct = ((last.medianManwon - recentLow) / last.medianManwon) * 100;
-      if (rules.rotation.reentryOnNewSignal && recentLow !== Infinity && dropPct >= rules.newSignal.priceDropPct) {
+      const alreadyNotified = notifiedLowByKey.get(a.key);
+      if (
+        rules.rotation.reentryOnNewSignal &&
+        recentLow !== Infinity &&
+        dropPct >= rules.newSignal.priceDropPct &&
+        (alreadyNotified == null || recentLow < alreadyNotified)
+      ) {
         signalNote = `${last.sentDate} 이후 신저가 ${eok(recentLow)}(직전 중간 대비 ${dropPct.toFixed(1)}%↓)`;
+        signalLowManwon = recentLow;
       } else {
         continue; // 쿨다운 — 제외
       }
@@ -308,7 +329,7 @@ export async function buildDailyRecommendations(
     // 하방 경고 플래그(2-B) — 임계 이상이면 제외+사유 기록, 1개면 유의점으로 통과
     const dFlags = flagsOf(a, jeonseArr && jeonseArr.length >= rentMinSamples ? jeonseRatioPct : null, jeonseArr?.length ?? 0);
     if (dFlags.length >= dsCfg.excludeThreshold) {
-      excluded.push({ name: a.name, gu: a.gu, dong: a.dong, flags: dFlags.map((f) => f.label) });
+      recordExcluded(a.key, { name: a.name, gu: a.gu, dong: a.dong, flags: dFlags.map((f) => f.label) });
       continue;
     }
 
@@ -353,6 +374,7 @@ export async function buildDailyRecommendations(
       score,
       isNew,
       signalNote,
+      signalLowManwon,
       regulationLabel: reg.label,
       regulationSources: reg.sourceUrls,
     });
@@ -434,7 +456,7 @@ export async function buildDailyRecommendations(
       // 하방 경고 플래그(2-B) — 스트레치+에도 동일 적용
       const dFlags = flagsOf(a, jArr && jArr.length >= rentMinSamples ? jeonseRatioPct : null, jArr?.length ?? 0);
       if (dFlags.length >= dsCfg.excludeThreshold) {
-        excluded.push({ name: a.name, gu: a.gu, dong: a.dong, flags: dFlags.map((f) => f.label) });
+        recordExcluded(a.key, { name: a.name, gu: a.gu, dong: a.dong, flags: dFlags.map((f) => f.label) });
         continue;
       }
       const score = Math.round((tier * rules.weights.tierMultiplier + liq + fresh.score + heat + jeonsePts) * 10) / 10;
@@ -523,6 +545,7 @@ export async function buildDailyRecommendations(
       if (!nonRegGus.has(a.gu)) continue;
       if (a.prices.length < gapCfg.minTrades) continue;
       if (pickedKeys.has(a.key)) continue; // 메인 추천과 중복 제외
+      if (lastSentByKey.has(a.key)) continue; // 쿨다운(2026-08-05 추가) — 갭 트랙도 14일 로테이션 적용, 같은 단지 매일 반복 방지
       a.prices.sort((x, y) => x - y);
       const med = median(a.prices);
       if (med > stretch) continue;
@@ -537,7 +560,7 @@ export async function buildDailyRecommendations(
       // 하방 경고 플래그(2-B) — 갭 트랙에도 동일 적용(전세가율 필터로 weak-jeonse는 사실상 미발동, 거래 급감 감지용)
       const gFlags = flagsOf(a, ratioPct, jArr.length);
       if (gFlags.length >= dsCfg.excludeThreshold) {
-        excluded.push({ name: a.name, gu: a.gu, dong: a.dong, flags: gFlags.map((f) => f.label) });
+        recordExcluded(a.key, { name: a.name, gu: a.gu, dong: a.dong, flags: gFlags.map((f) => f.label) });
         continue;
       }
       const coverable = gap <= usableManwon;
@@ -598,6 +621,7 @@ export async function buildDailyRecommendations(
     });
   }
 
+  const excluded = [...excludedByKey.values()];
   const gateNote = skippedUnverifiedGu.size
     ? ` · ⛔ 규제 미검증 지역 제외: ${[...skippedUnverifiedGu].join(', ')}(config/region-regulation.json 검증 후 편입)`
     : '';

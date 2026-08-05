@@ -38,6 +38,9 @@ config/market-context.json
 config/listings-analysis.json
 config/matching-analysis.json
 config/kakao-context.json
+config/policy-check-log.json
+config/backup/
+config/proposals/
 docs/goals/
 output/
 config/persona-recos.json

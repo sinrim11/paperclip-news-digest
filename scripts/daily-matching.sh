@@ -18,3 +18,11 @@ npx tsx scripts/gen-persona-recos.ts 2>&1 | tee -a "$LOG"
 echo "[3/3] gen-matching (추적 3단지 호가·급매)" | tee -a "$LOG"
 npx tsx scripts/gen-matching.ts 2>&1 | tee -a "$LOG"
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') daily-matching 종료 ===" | tee -a "$LOG"
+
+# 자율 작업 보고(2026-08-05 지시) — 매칭·매물분석 재생성 결과를 텔레그램으로 보고
+L_LISTINGS=$(grep 'listings-analysis.json 생성' "$LOG" | tail -1)
+L_MATCHING=$(grep 'matching-analysis.json 생성' "$LOG" | tail -1)
+npx tsx scripts/notify-telegram.ts "🤖 자동분석 보고 — 매수매칭 재생성 (08:45)
+· ${L_LISTINGS:-매물 분석 결과 확인 불가(로그 참조)}
+· ${L_MATCHING:-매칭 분석 결과 확인 불가(로그 참조)}
+· 대시보드: /listings · /matching 갱신 완료" >> "$LOG" 2>&1 || true

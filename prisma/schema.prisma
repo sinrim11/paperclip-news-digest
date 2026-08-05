@@ -400,6 +400,7 @@ model SentRecommendation {
   gu           String
   dong         String
   medianManwon Int // 발송 시점 실거래 중간값(만원) — 다음 발송 시 하락 감지 기준
+  signalLowManwon Int? // 신저가 재등장으로 발송된 경우 그때 알린 최저가(만원) — 같은 저가로 매일 재발동 방지
   score        Int // 발송 시점 종합 점수
   scenario     String // "현행" | "완화"
   rank         Int // 그날 추천 순위

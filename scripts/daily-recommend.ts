@@ -57,6 +57,7 @@ async function main() {
           gu: r.gu,
           dong: r.dong,
           medianManwon: r.medianManwon,
+          signalLowManwon: r.signalLowManwon ?? null,
           score: r.score,
           scenario: r.scenario,
           rank: r.rank,

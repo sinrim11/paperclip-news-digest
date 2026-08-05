@@ -30,3 +30,8 @@ npx tsx scripts/gen-listings.ts 2>&1 | tee -a "$LOG"
 echo "--- 페르소나별 사전 추천 재생성(gen-persona-recos — /recommend, G3) ---" | tee -a "$LOG"
 npx tsx scripts/gen-persona-recos.ts 2>&1 | tee -a "$LOG"
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') naver-sweep 종료 ===" | tee -a "$LOG"
+
+# 자율 작업 보고(2026-08-05 지시) — 새벽 매물 스윕 결과를 텔레그램으로 보고
+L_SWEEP=$(grep -E '\[sweep\]|스냅샷|listings-analysis.json 생성' "$LOG" | tail -3 | sed 's/^/· /')
+npx tsx scripts/notify-telegram.ts "🤖 자동스윕 보고 — 네이버 매물 전수 스윕 (03:00, 그룹 $GROUP)
+${L_SWEEP:-· 결과 요약 확인 불가(로그 참조)}" >> "$LOG" 2>&1 || true
