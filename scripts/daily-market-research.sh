@@ -45,7 +45,15 @@ sources는 3~6개, 반드시 각 항목에 실제 접속 가능한 기사 URL(ur
 EOF
 
 echo "[$(ts)] 시장리서치 시작" >> "$LOG"
-if echo "$PROMPT" | claude -p --model sonnet --allowedTools "WebSearch WebFetch" > "$TMP" 2>>"$LOG" && [ -s "$TMP" ]; then
+# claude -p 일시 실패 재시도(2026-08-11) — 1회 재시도, 60초 간격
+MC_OK=false
+for attempt in 1 2; do
+  if echo "$PROMPT" | claude -p --model sonnet --allowedTools "WebSearch WebFetch" > "$TMP" 2>>"$LOG" && [ -s "$TMP" ]; then
+    MC_OK=true; break
+  fi
+  [ "$attempt" = "1" ] && { echo "[$(ts)] claude -p 1차 실패 — 60초 후 재시도" >> "$LOG"; sleep 60; }
+done
+if $MC_OK; then
   # 코드펜스 제거 후 JSON 추출·검증
   node -e '
     const fs=require("fs");

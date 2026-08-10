@@ -69,7 +69,15 @@ old는 반드시 현재 파일의 값과 정확히 일치해야 한다. 변경�
 EOF
 
 echo "[$(ts)] 정책 레이더 시작" >> "$LOG"
-if echo "$PROMPT" | claude -p --model sonnet --allowedTools "WebSearch WebFetch" > "$TMP" 2>>"$LOG" && [ -s "$TMP" ]; then
+# claude -p 일시 실패 재시도(2026-08-11 — 8/7·8/8 즉시 실패 이력) — 1회 재시도, 60초 간격
+RADAR_OK=false
+for attempt in 1 2; do
+  if echo "$PROMPT" | claude -p --model sonnet --allowedTools "WebSearch WebFetch" > "$TMP" 2>>"$LOG" && [ -s "$TMP" ]; then
+    RADAR_OK=true; break
+  fi
+  [ "$attempt" = "1" ] && { echo "[$(ts)] claude -p 1차 실패 — 60초 후 재시도" >> "$LOG"; sleep 60; }
+done
+if $RADAR_OK; then
   MSG=$(node scripts/apply-policy-patches.mjs "$TMP" 2>>"$LOG")
   echo "[$(ts)] 정책 레이더 완료" >> "$LOG"
   echo "$MSG" >> "$LOG"

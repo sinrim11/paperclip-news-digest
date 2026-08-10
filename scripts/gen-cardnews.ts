@@ -11,7 +11,7 @@
  * 출력: output/cardnews/<YYYY-MM-DD>/*.png + index.json(caption 포함, /cardnews 소비)
  * 실행: npx tsx scripts/gen-cardnews.ts
  */
-import { mkdirSync, writeFileSync, readFileSync } from 'fs';
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { PrismaClient } from '@prisma/client';
 import { radarScore } from '../src/lib/radar-score';
@@ -550,7 +550,17 @@ ${ctxSrcLines ? `\n📰 정책·시장 참고(${ctx?.asOf ?? today} 리서치):\
   try { idx = JSON.parse(readFileSync(indexPath, 'utf-8')); } catch { /* 첫 생성 */ }
   idx = idx.filter((s) => (s.dir ?? s.date) !== setDir);
   idx.unshift({ date: today, series, dir: setDir, files, picks: set.picks, pickNos: set.pickNos, caption: set.caption });
-  writeFileSync(indexPath, JSON.stringify(idx.slice(0, 30), null, 2));
+  const kept = idx.slice(0, 30);
+  writeFileSync(indexPath, JSON.stringify(kept, null, 2));
+
+  // 디스크 프루닝(2026-08-11) — index에서 밀려난 옛 세트 디렉토리 삭제(무한 누적 방지, ~2MB/세트)
+  const keepDirs = new Set(kept.map((s) => s.dir ?? s.date));
+  for (const d of readdirSync(join(process.cwd(), 'output', 'cardnews'), { withFileTypes: true })) {
+    if (d.isDirectory() && /^\d{4}-\d{2}-\d{2}/.test(d.name) && !keepDirs.has(d.name)) {
+      rmSync(join(process.cwd(), 'output', 'cardnews', d.name), { recursive: true, force: true });
+      console.log(`  🗑 옛 세트 삭제: ${d.name}`);
+    }
+  }
   console.log(`카드뉴스 생성 완료 → output/cardnews/${setDir}/ (${files.length}장, 시리즈 ${series}) · ${set.picks.join(', ')}`);
   await prisma.$disconnect();
 })();

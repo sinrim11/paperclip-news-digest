@@ -4,6 +4,10 @@ set -uo pipefail
 cd /Users/sklee01/news-digest
 export PATH="/opt/homebrew/bin:$PATH"
 LOG="output/naver_sweep.log"
+# 로그 로테이션(2026-08-11) — 5MB 초과 시 최근 1MB만 유지(무한 누적 방지)
+if [ -f "$LOG" ] && [ "$(wc -c < "$LOG" | tr -d ' ')" -gt 5000000 ]; then
+  tail -c 1000000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+fi
 set -a
 [ -f .env ] && source .env
 [ -f .env.local ] && source .env.local
