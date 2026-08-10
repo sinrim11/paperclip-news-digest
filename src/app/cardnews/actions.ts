@@ -2,14 +2,11 @@
 
 /** /cardnews 서버 액션 — 카드뉴스 생성(스크립트 실행) · 텔레그램 캐러셀 전송(sendMediaGroup) */
 import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { publishCardnewsCarousel, retryPendingPublish } from '@/lib/instagram';
-
-const exec = promisify(execFile);
 
 /** 텔레그램 API 호출 재시도 — IPv6 라우트 부재 환경의 간헐 ETIMEDOUT 흡수(2026-08-10, telegram.ts와 동일 사유) */
 async function fetchRetry(url: string, init: RequestInit, attempts = 3): Promise<Response> {
@@ -54,14 +51,25 @@ export async function publishCardnewsToInstagram(formData: FormData) {
   }
 }
 
+/**
+ * 카드뉴스 생성 — 백그라운드 실행(2026-08-10).
+ * 이전엔 완료까지 동기 대기(1~2분)했는데 ① 버튼이 죽은 듯 보이고 ② Cloudflare 터널의
+ * 요청 100초 제한에 걸려 결과가 유실됐다. 이제 즉시 "시작됨"을 응답하고,
+ * 완료/실패는 텔레그램으로 알린 뒤 페이지 새로고침으로 새 세트를 확인한다.
+ */
 export async function generateCardnews() {
-  try {
-    await exec('npx', ['tsx', 'scripts/gen-cardnews.ts'], { cwd: process.cwd(), timeout: 180_000 });
-  } catch (e) {
-    redirect('/cardnews?error=' + encodeURIComponent(`생성 실패: ${e instanceof Error ? e.message.slice(0, 120) : e}`));
-  }
+  const chain =
+    'npx tsx scripts/gen-cardnews.ts >> output/cardnews_gen.log 2>&1' +
+    ' && npx tsx scripts/notify-telegram.ts "🖼️ 카드뉴스 생성 완료 — /cardnews 새로고침하면 새 세트가 보입니다"' +
+    ' || npx tsx scripts/notify-telegram.ts "⚠️ 카드뉴스 생성 실패 — output/cardnews_gen.log 확인 필요"';
+  execFile('/bin/zsh', ['-c', chain], { cwd: process.cwd(), timeout: 300_000 }, (err) => {
+    if (err) console.error('[cardnews] 백그라운드 생성 오류:', err.message.slice(0, 200));
+  });
   revalidatePath('/cardnews');
-  redirect('/cardnews?ok=' + encodeURIComponent('카드뉴스 생성 완료'));
+  redirect(
+    '/cardnews?ok=' +
+      encodeURIComponent('생성을 시작했습니다 (약 1~2분 소요) — 완료되면 텔레그램으로 알려드립니다. 이후 이 페이지를 새로고침하세요.'),
+  );
 }
 
 /** 텔레그램으로 캐러셀 전송 — sendMediaGroup(최대 10장, 인스타 업로드용 원본 수신) */
