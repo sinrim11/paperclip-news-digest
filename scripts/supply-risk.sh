@@ -27,9 +27,12 @@ TMP="output/supply-risk-${TODAY}.json"
 
 read -r -d '' PROMPT <<EOF || true
 너는 한국 부동산 공급 분석가다. 웹서치로 오늘(${TODAY}) 기준 아래 지역의
-① 최신 미분양 주택 수(국토교통부 월간 통계 기준 — 보도·통계누리 인용)와 전월 대비 추이
-② 향후 12개월 아파트 입주(예정) 물량
-을 조사하라. 대상 지역: 남양주시, 안양시, 의왕시. (서울 자치구는 미분양이 미미해 제외)
+① 최신 미분양 주택 수와 전월 대비 추이 ② 향후 12개월 아파트 입주(예정) 물량을 조사하라.
+대상 지역: 남양주시, 안양시, 의왕시. (서울 자치구는 미분양이 미미해 제외)
+
+시군별 수치가 공개되는 곳(우선 확인): 경기부동산포털(gris.gg.go.kr)의 미분양주택 현황,
+국토교통 통계누리(stat.molit.go.kr), 경기도청 보도자료, "경기 시군별 미분양"·"남양주 미분양"·
+"남양주 입주물량 2026 2027" 류의 지역 언론 보도. 아파트투유·부동산R114·직방 입주물량 집계 보도도 허용.
 
 다음 JSON 스키마로만 응답하라(설명·마크다운·코드펜스 없이 순수 JSON 하나만):
 {
@@ -37,17 +40,19 @@ read -r -d '' PROMPT <<EOF || true
   "regions": [
     {
       "region": "남양주시",
-      "unsold": {"count": 숫자, "trend": "증가|감소|보합", "asOfMonth": "YYYY-MM"},
-      "supply12m": {"units": 숫자, "note": "주요 입주 단지·시기 요약"},
+      "unsold": {"count": 숫자|null, "trend": "증가|감소|보합|미상", "asOfMonth": "YYYY-MM"|null},
+      "supply12m": {"units": 숫자|null, "note": "주요 입주 단지·시기 요약(확인된 것만)"},
       "riskLevel": "low|mid|high",
-      "note": "판정 근거 한 줄",
+      "note": "판정 근거 한 줄 — 미확인 항목은 '미확인'으로 명시",
       "sourceUrls": ["실제 기사/통계 URL"]
     }
   ],
   "sources": [{"title": "출처 '제목' (날짜)", "url": "URL"}]
 }
-riskLevel 판정: 미분양이 증가 추세이고 12개월 입주물량이 최근 연간 거래량 대비 부담스러운 수준이면 high,
-둘 중 하나만 해당하면 mid, 둘 다 아니면 low. 수치를 확인할 수 없으면 그 지역은 결과에서 제외하라(추정 금지).
+규칙: 세 지역 모두 결과에 포함하라. 미분양·입주물량 중 하나라도 수치로 확인되면 그 수치를 쓰고,
+확인 안 된 항목만 null로 두라(수치 지어내기 절대 금지 — null이 낫다). 둘 다 null이면 riskLevel은 "low"가
+아니라 확인된 정성 근거(미분양관리지역 지정 여부 등)로 보수적으로 판정하고 note에 한계를 명시하라.
+riskLevel 판정: 미분양 증가 추세 + 입주물량 부담이면 high, 둘 중 하나면 mid, 둘 다 아니면 low.
 각 지역 sourceUrls는 실제 접속 가능한 URL 1개 이상 필수.
 EOF
 
@@ -78,12 +83,15 @@ if $SR_OK; then
   ' "$TMP" 2>>"$LOG") && {
     echo "[$(ts)] supply-risk.json 갱신 완료" >> "$LOG"
     npx tsx scripts/notify-telegram.ts "$MSG" >> "$LOG" 2>&1 || true
+    rm -f "$TMP"
   } || {
-    echo "[$(ts)] JSON 검증 실패 — 기존 데이터 유지" >> "$LOG"
+    # 원본 보존 — 스키마 불일치 원인 추적용(2026-08-11)
+    mv "$TMP" "output/supply-risk-failed-${TODAY}.json" 2>/dev/null || true
+    echo "[$(ts)] JSON 검증 실패 — 기존 데이터 유지 (원본: output/supply-risk-failed-${TODAY}.json)" >> "$LOG"
     npx tsx scripts/notify-telegram.ts "⚠️ 공급 리스크 점검(${TODAY}) — 결과 검증 실패, 기존 데이터 유지" >> "$LOG" 2>&1 || true
   }
 else
   echo "[$(ts)] claude -p 실패 — 기존 데이터 유지" >> "$LOG"
   npx tsx scripts/notify-telegram.ts "⚠️ 공급 리스크 점검(${TODAY}) — 리서치 실패, 기존 데이터 유지" >> "$LOG" 2>&1 || true
+  rm -f "$TMP"
 fi
-rm -f "$TMP"
