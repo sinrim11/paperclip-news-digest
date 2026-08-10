@@ -55,12 +55,22 @@ export default async function CardnewsPage({ searchParams }: { searchParams?: Pr
         </div>
       )}
 
+      {/* 가격대별 생성(2026-08-10) — 시리즈 선택 후 백그라운드 생성 */}
+      <div className="mb-3">
+        <div className="mb-1.5 text-xs font-semibold text-gray-500">오늘 데이터로 새로 생성 — 가격대 선택 (약 1~2분 · 완료 시 텔레그램 알림)</div>
+        <div className="flex flex-wrap items-center gap-2">
+          {([['price6', '6억 이하'], ['price8', '6~8억'], ['price9', '8~9억'], ['briefing', '호재·정책 브리핑']] as const).map(([key, label]) => (
+            <form key={key} action={generateCardnews}>
+              <input type="hidden" name="series" value={key} />
+              <PendingButton pendingLabel="시작 중…" className="rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700">
+                {key === 'briefing' ? '🚧 ' : '🏷️ '}{label}
+              </PendingButton>
+            </form>
+          ))}
+        </div>
+      </div>
+
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <form action={generateCardnews}>
-          <PendingButton pendingLabel="생성 시작 중…" className="rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white hover:bg-gray-700">
-            오늘 데이터로 새로 생성 (약 1~2분 · 완료 시 텔레그램 알림)
-          </PendingButton>
-        </form>
         {latest && (
           <form action={sendCardnewsToTelegram}>
             <input type="hidden" name="date" value={dirOf(latest)} />
@@ -127,6 +137,10 @@ export default async function CardnewsPage({ searchParams }: { searchParams?: Pr
               <li key={dirOf(s)} className="flex flex-wrap items-center gap-2">
                 <b>{s.date}</b><span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500">{seriesLabel(s.series)}</span><span className="text-xs text-gray-400">{s.files.length}장 · {s.picks.slice(0, 3).join('·')}</span>
                 <a href={`/api/cardnews/${dirOf(s)}/${s.files[0]}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">표지 보기 ↗</a>
+                <form action={sendCardnewsToTelegram} className="inline">
+                  <input type="hidden" name="date" value={dirOf(s)} />
+                  <PendingButton pendingLabel="전송 중…" className="text-xs font-medium text-blue-600 hover:underline">📨 텔레그램 전송</PendingButton>
+                </form>
               </li>
             ))}
           </ul>

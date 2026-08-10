@@ -14,7 +14,7 @@
 import { mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { PrismaClient } from '@prisma/client';
-import { radarScore, RADAR_PART_META } from '../src/lib/radar-score';
+import { radarScore } from '../src/lib/radar-score';
 import { allFactors, momentumAsOf, recoFactorsFor, type MomentumFactor } from '../src/lib/momentum';
 import { LAWD_GU } from '../src/lib/tiers';
 
@@ -67,6 +67,20 @@ interface SharePick {
   facts: string[]; // 수치 기반 객관 서술
   listings: Array<{ price: number; exclusiveArea: number | null; floor: string | null }>;
   factor?: { certainty: string; title: string; expected: string; srcDomain: string } | null; // 지역 호재(확정·진행만, momentum-factors — 정부·공식 발표 근거)
+  topPct?: number; // 같은 가격대 통과 단지 중 상위 % (1~100) — 절대점수보다 직관적인 비교 맥락
+  poolSize?: number; // 백분위 모수(통과 단지 수)
+}
+
+/**
+ * 지표별 등급(2026-08-10 직관화) — "N/40점" 같은 가중치 점수는 체계를 모르면 해석 불가.
+ * 매수자의 4가지 실제 질문(싸게 나왔나·팔리나·건물 가치·전세 수요)에 등급+근거 수치로 답한다.
+ */
+function gradeOf(part: number, max: number): { label: string; color: string; bg: string } {
+  const r = part / max;
+  if (r >= 0.9) return { label: '매우 좋음', color: '#15803D', bg: '#F0FDF4' };
+  if (r >= 0.65) return { label: '좋음', color: '#0F766E', bg: '#F0FDFA' };
+  if (r >= 0.4) return { label: '보통', color: '#B45309', bg: '#FFFBEB' };
+  return { label: '약함', color: '#DC2626', bg: '#FEF2F2' };
 }
 
 /** 정책 동향·전망 카드 데이터 — 일일 시장리서치(market-context.json, 출처 URL 동반). 개인 예산(budgetReality)은 공유 콘텐츠라 미사용. */
@@ -121,17 +135,43 @@ function coverHtml(scanned: number, passed: number, total: number, guCount: numb
   </div>`;
 }
 
-function scoreBarHtml(parts: SharePick['parts'], score: number): string {
-  const segs = RADAR_PART_META.map((m) => {
-    const v = parts[m.key as keyof SharePick['parts']];
-    const fill = (v / m.max) * 100;
-    return `<div style="width:${m.max}%;height:100%;background:#E2E8F0;position:relative;border-right:3px solid #fff"><div style="position:absolute;left:0;top:0;bottom:0;width:${fill}%;background:${m.color}"></div></div>`;
+/** 4대 질문 평결 그리드(2026-08-10) — 지표별 등급 + 근거 수치 한 줄. 점수 막대의 직관성 문제 해결. */
+function verdictGridHtml(p: SharePick): string {
+  const tiles: Array<{ icon: string; q: string; part: number; max: number; evidence: string }> = [
+    {
+      icon: '💰', q: '싸게 나왔나', part: p.parts.gap, max: 40,
+      evidence: p.gapPct == null ? '120일 실거래 표본 없음'
+        : p.gapPct <= 0 ? `호가가 실거래보다 <b>${Math.abs(p.gapPct).toFixed(1)}% 낮음</b> — 급매 가능성`
+        : `호가가 실거래보다 <b>${p.gapPct.toFixed(1)}% 높음</b>${p.gapPct > 10 ? ' — 거품 주의' : ''}`,
+    },
+    {
+      icon: '🔄', q: '팔고 싶을 때 팔리나', part: p.parts.liq, max: 30,
+      evidence: `<b>${p.household.toLocaleString()}세대</b> · 매물 <b>${p.dealArticles}건</b> · 120일 거래 ${p.tradeCount}건`,
+    },
+    {
+      icon: '🏗️', q: '건물 가치는', part: p.parts.fresh, max: 15,
+      evidence: p.elapsedYear == null ? '연식 정보 없음'
+        : p.elapsedYear >= 30 ? `<b>${p.elapsedYear}년차</b>${p.far != null ? ` · 용적률 ${Math.round(p.far)}%${p.far <= 180 ? ' — 재건축 사업성 양호' : ' — 재건축 기대 제한적'}` : ' — 재건축 연한'}`
+        : p.elapsedYear <= 10 ? `<b>준신축 ${p.elapsedYear}년차</b> — 감가 방어·임대 선호`
+        : `<b>${p.elapsedYear}년차</b>${p.far != null ? ` · 용적률 ${Math.round(p.far)}%` : ''}`,
+    },
+    {
+      icon: '🔑', q: '전세가 받쳐주나', part: p.parts.jeonse, max: 15,
+      evidence: p.jeonseRatioPct == null ? '전세 표본 부족(2건 미만)'
+        : `전세가율 <b>${p.jeonseRatioPct}%</b>${p.jeonseRatioPct >= 70 ? ' — 실거주 수요 탄탄' : p.jeonseRatioPct < 55 ? ' — 하락 방어력 낮음' : ''}`,
+    },
+  ];
+  const cells = tiles.map((t) => {
+    const g = gradeOf(t.part, t.max);
+    return `<div style="flex:1 1 42%;background:${g.bg};border-radius:18px;padding:24px 28px;min-width:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span style="font-size:26px;font-weight:700;color:#475569">${t.icon} ${t.q}</span>
+        <span style="font-size:26px;font-weight:800;color:${g.color};white-space:nowrap">${g.label}</span>
+      </div>
+      <div style="font-size:25px;color:#334155;margin-top:10px;line-height:1.45">${t.evidence}</div>
+    </div>`;
   }).join('');
-  const labels = RADAR_PART_META.map((m) => `<span style="white-space:nowrap"><span style="display:inline-block;width:15px;height:15px;border-radius:4px;background:${m.color};margin-right:7px;vertical-align:-1px"></span>${m.label} <b class="num">${parts[m.key as keyof SharePick['parts']]}</b><span style="color:#CBD5E1">/${m.max}</span></span>`).join('');
-  return `
-    <div style="display:flex;align-items:baseline;gap:14px"><span style="font-size:26px;font-weight:700;color:#94A3B8">레이더 지수</span><span class="num" style="font-size:28px;font-weight:800;color:#0F172A">${score}<span style="color:#94A3B8;font-weight:600">/100</span></span><span style="font-size:22px;color:#CBD5E1">— 공개 데이터 4지표</span></div>
-    <div style="display:flex;height:22px;border-radius:8px;overflow:hidden;margin-top:12px">${segs}</div>
-    <div style="display:flex;flex-wrap:wrap;gap:10px 22px;font-size:22px;color:#64748B;margin-top:12px">${labels}</div>`;
+  return `<div style="display:flex;flex-wrap:wrap;gap:18px">${cells}</div>`;
 }
 
 /** TOP5 한눈 비교표(2026-08-10) — "어느 단지를 볼지" 선택을 위한 정량 비교 한 장 */
@@ -180,13 +220,13 @@ function compareHtml(top: SharePick[], page: number, total: number): string {
 
 function itemHtml(p: SharePick, rank: number, page: number, total: number): string {
   const gapColor = p.gapPct == null ? '#94A3B8' : p.gapPct <= 2 ? '#16A34A' : p.gapPct > 10 ? '#DC2626' : '#B45309';
-  const facts = p.facts.slice(0, 2).map((x) => `<div style="display:flex;gap:14px;font-size:30px;line-height:1.45;color:#334155"><span style="color:#16A34A;font-weight:800">✓</span><span>${x}</span></div>`).join('');
   const chips = p.listings.slice(0, 3).map((l) => `<span class="chip num" style="background:#F1F5F9;color:#334155;font-size:25px;font-weight:600">${eok(l.price)}${l.exclusiveArea ? ` · ${Math.round(l.exclusiveArea)}㎡` : ''}${l.floor ? ` · ${l.floor}` : ''}</span>`).join(' ');
   return `<style>${baseCss}</style><div class="card">
     ${brandBar(page, total)}
     <div style="margin-top:56px;display:flex;align-items:center;gap:22px">
       <div class="num" style="font-size:50px;font-weight:800;color:#CBD5E1">${rank}</div>
       <span class="chip num" style="background:#0F172A;color:#fff;font-size:30px">레이더 ${p.score}점</span>
+      ${p.topPct != null ? `<span class="num" style="font-size:27px;font-weight:700;color:#2563EB">${CAP_LABEL} ${p.poolSize?.toLocaleString()}곳 중 상위 ${p.topPct}%</span>` : ''}
     </div>
     <div style="font-size:76px;font-weight:800;letter-spacing:-0.02em;margin-top:20px;line-height:1.15">${p.name}</div>
     <div style="font-size:31px;color:#64748B;margin-top:14px">${p.gu} ${p.dong} · ${p.household.toLocaleString()}세대${p.elapsedYear != null ? ` · ${p.elapsedYear}년차` : ''}${p.far != null ? ` · 용적률 <b style="color:${p.far <= 180 ? '#16A34A' : '#64748B'}">${Math.round(p.far)}%</b>` : ''}${p.pyeongManwon != null ? ` · 평단 <b class="num" style="color:#0F172A">${p.pyeongManwon.toLocaleString()}만</b>` : ''}</div>
@@ -205,14 +245,7 @@ function itemHtml(p: SharePick, rank: number, page: number, total: number): stri
       </div>
     </div>
 
-    <div style="display:flex;gap:18px;margin-top:36px">
-      <div class="stat" style="flex:1"><div class="k">전세 중간 · 전세가율</div><div class="v num" style="color:#7C3AED">${p.jeonseMedian ? `${eok(p.jeonseMedian)} · ${p.jeonseRatioPct}%` : '표본 없음'}</div><div class="s">전세 수요·방어력</div></div>
-      <div class="stat" style="flex:1"><div class="k">120일 매매 거래</div><div class="v num">${p.tradeCount}건</div><div class="s">환금성의 실체</div></div>
-      <div class="stat" style="flex:1"><div class="k">매매 매물</div><div class="v num">${p.dealArticles}건</div><div class="s">선택지·협상 여지</div></div>
-    </div>
-
-    <div style="margin-top:32px;padding:28px 32px;background:#F8FAFC;border-radius:20px">${scoreBarHtml(p.parts, p.score)}</div>
-    <div style="margin-top:28px;display:flex;flex-direction:column;gap:12px">${facts}</div>
+    <div style="margin-top:40px">${verdictGridHtml(p)}</div>
     ${p.factor
       ? `<div style="margin-top:20px;display:flex;gap:14px;align-items:flex-start;padding:22px 26px;background:#FFFBEB;border:2px solid #FDE68A;border-radius:16px">
            <span style="font-size:26px">🚧</span>
@@ -276,6 +309,7 @@ function methodHtml(page: number, total: number, scanned: number, guCount: numbe
     <div style="font-size:66px;font-weight:800;margin-top:60px;line-height:1.25">레이더 지수,<br/>이렇게 계산했어요 <span style="color:#60A5FA">(100점)</span></div>
     <div style="font-size:29px;color:#CBD5E1;margin-top:26px;line-height:1.6">대상: <b style="color:#fff">수집권 ${guCount}개 구·시 · ${CAP_LABEL} · 300세대+</b> ${scanned.toLocaleString()}곳 통과<br/>모든 지표가 <b style="color:#fff">공개 데이터</b> — 특정인의 예산·통근 기준이 아닙니다 · 가격대 컷 밖 단지는 미포함</div>
     <div style="margin-top:24px">${rowHtml}</div>
+    <div style="margin-top:30px;font-size:26px;color:#CBD5E1;line-height:1.6">카드 표기: 지표별 등급은 배점 대비 획득률 — <b style="color:#4ADE80">매우 좋음</b> ≥90% · <b style="color:#2DD4BF">좋음</b> ≥65% · <b style="color:#FBBF24">보통</b> ≥40% · <b style="color:#F87171">약함</b> &lt;40%. '상위 N%'는 같은 가격대 통과 단지 중 종합점수 순위.</div>
     <div class="foot" style="color:#64748B">감(感)이 아니라 규칙 — 매일 같은 기준 자동 채점 · 국토부 실거래가(공공) × 네이버부동산 호가</div>
   </div>`;
 }
@@ -447,15 +481,18 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
     return { ...base, ...s, factor };
   });
   picks.sort((a, b) => b.score - a.score || (a.gapPct ?? 99) - (b.gapPct ?? 99));
-  // 같은 동 도배 방지: 동별 최대 2곳
+  // 같은 동 도배 방지: 동별 최대 2곳. 백분위(상위 N%)는 통과 풀 전체 대비 순위 — 절대점수보다 직관적.
   const top: SharePick[] = [];
   const perDong: Record<string, number> = {};
   const perGu: Record<string, number> = {}; // 구·시별 최대 2 — 한 지역 도배 방지(마케팅 다양성, G2-3)
-  for (const p of picks) {
+  for (let i = 0; i < picks.length; i++) {
+    const p = picks[i];
     const k = `${p.gu}|${p.dong}`;
     if ((perDong[k] ?? 0) >= 2 || (perGu[p.gu] ?? 0) >= 2) continue;
     perDong[k] = (perDong[k] ?? 0) + 1;
     perGu[p.gu] = (perGu[p.gu] ?? 0) + 1;
+    p.topPct = Math.max(1, Math.ceil(((i + 1) / picks.length) * 100));
+    p.poolSize = picks.length;
     top.push(p);
     if (top.length >= 5) break;
   }
