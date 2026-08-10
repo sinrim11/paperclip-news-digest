@@ -16,6 +16,11 @@ import { join } from 'path';
 import { PrismaClient } from '@prisma/client';
 import { radarScore, RADAR_PART_META } from '../src/lib/radar-score';
 import { allFactors, momentumAsOf, type MomentumFactor } from '../src/lib/momentum';
+import { LAWD_GU } from '../src/lib/tiers';
+
+/** 실거래·전세 조인은 지역(lawdCd) 스코프 필수 — 단지명만으로 조인하면 타 지역 동명 단지(현대6차 등)가 섞인다(2026-08-10 교정). */
+const GU_TO_LAWD: Record<string, string> = Object.fromEntries(Object.entries(LAWD_GU).map(([cd, gu]) => [gu, cd]));
+const normName = (s: string) => s.replace(/\s|아파트/g, '');
 
 const W = 1080, H = 1350;
 const today = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
@@ -56,6 +61,8 @@ interface SharePick {
   tradeMedian: number | null; tradeCount: number;
   jeonseMedian: number | null; jeonseRatioPct: number | null;
   gapPct: number | null; // (호가-실거래)/실거래
+  pyeongManwon: number | null; // 실거래 평단가(만원/3.3㎡) 중간값 — 지역·평형 간 가격 비교 축
+  trendPct: number | null; // 120일 전반 vs 후반 실거래 중간값 변화율 — 가격 방향
   score: number; parts: { gap: number; liq: number; fresh: number; jeonse: number };
   facts: string[]; // 수치 기반 객관 서술
   listings: Array<{ price: number; exclusiveArea: number | null; floor: string | null }>;
@@ -112,6 +119,50 @@ function scoreBarHtml(parts: SharePick['parts'], score: number): string {
     <div style="display:flex;flex-wrap:wrap;gap:10px 22px;font-size:22px;color:#64748B;margin-top:12px">${labels}</div>`;
 }
 
+/** TOP5 한눈 비교표(2026-08-10) — "어느 단지를 볼지" 선택을 위한 정량 비교 한 장 */
+function compareHtml(top: SharePick[], page: number, total: number): string {
+  const trendCell = (t: number | null) =>
+    t == null ? '<span style="color:#CBD5E1">—</span>'
+    : `<span class="num" style="color:${t <= -1 ? '#16A34A' : t >= 1 ? '#DC2626' : '#64748B'};font-weight:800">${t > 0 ? '▲' : t < 0 ? '▼' : ''}${Math.abs(t).toFixed(1)}%</span>`;
+  const gapCell = (g: number | null) =>
+    g == null ? '<span style="color:#CBD5E1">—</span>'
+    : `<span class="num" style="color:${g <= 2 ? '#16A34A' : g > 10 ? '#DC2626' : '#B45309'};font-weight:700">${g >= 0 ? '+' : ''}${g.toFixed(1)}%</span>`;
+  const rows = top.map((p, i) => `
+    <div style="display:flex;align-items:center;gap:0;border-bottom:2px solid #E2E8F0;padding:24px 0">
+      <div style="width:296px;padding-right:16px">
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <span class="num" style="font-size:30px;font-weight:800;color:#CBD5E1">${i + 1}</span>
+          <span style="font-size:29px;font-weight:800;letter-spacing:-0.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</span>
+        </div>
+        <div style="font-size:22px;color:#94A3B8;margin-top:4px">${p.gu} ${p.dong}${p.elapsedYear != null ? ` · ${p.elapsedYear}년차` : ''}</div>
+      </div>
+      <div class="num" style="width:140px;font-size:33px;font-weight:800;color:#2563EB">${eok(p.minPrice)}</div>
+      <div style="width:186px">
+        <div class="num" style="font-size:29px;font-weight:700">${p.tradeMedian ? eok(p.tradeMedian) : '—'}</div>
+        <div style="font-size:21px;margin-top:2px">${gapCell(p.gapPct)}<span style="color:#CBD5E1"> · ${p.tradeCount}건</span></div>
+      </div>
+      <div class="num" style="width:132px;font-size:27px;font-weight:700;color:#334155">${p.pyeongManwon ? p.pyeongManwon.toLocaleString() + '만' : '—'}</div>
+      <div style="width:104px;font-size:27px">${p.jeonseRatioPct != null ? `<span class="num" style="font-weight:700;color:#7C3AED">${p.jeonseRatioPct}%</span>` : '<span style="color:#CBD5E1">—</span>'}</div>
+      <div style="width:70px;font-size:26px">${trendCell(p.trendPct)}</div>
+    </div>`).join('');
+  const th = (w: number, label: string) => `<div style="width:${w}px;font-size:22px;font-weight:700;color:#94A3B8">${label}</div>`;
+  return `<style>${baseCss}</style><div class="card">
+    ${brandBar(page, total)}
+    <div style="font-size:58px;font-weight:800;margin-top:46px">TOP 5 한눈 비교</div>
+    <div style="font-size:26px;color:#64748B;margin-top:12px;line-height:1.5">숫자로 먼저 고르세요 — 상세 근거는 다음 장부터 한 단지씩</div>
+    <div style="display:flex;margin-top:36px;border-bottom:3px solid #0F172A;padding-bottom:14px">
+      ${th(296, '단지')}${th(140, '최저 호가')}${th(186, '실거래 중간·갭')}${th(132, '평단가')}${th(104, '전세율')}${th(70, '추이')}
+    </div>
+    ${rows}
+    <div style="margin-top:34px;display:flex;flex-direction:column;gap:10px;font-size:24px;color:#475569;line-height:1.5">
+      <div>· <b style="color:#16A34A">갭 마이너스</b> = 호가가 최근 실거래보다 낮음 → 급매 가능성(층·향·동 확인 필수)</div>
+      <div>· <b>평단가</b> = 실거래 3.3㎡당 중간값 — 지역·평형이 달라도 비교 가능한 축</div>
+      <div>· <b>추이</b> = 120일 전반 vs 후반 실거래 중간값 변화(<span style="color:#16A34A">▼하락</span>·<span style="color:#DC2626">▲상승</span>, 표본 3건+ 시에만)</div>
+    </div>
+    <div class="foot">국토교통부 실거래가 × 네이버부동산 호가 · ${CAP_LABEL} · 300세대+ — 투자 자문 아님</div>
+  </div>`;
+}
+
 function itemHtml(p: SharePick, rank: number, page: number, total: number): string {
   const gapColor = p.gapPct == null ? '#94A3B8' : p.gapPct <= 2 ? '#16A34A' : p.gapPct > 10 ? '#DC2626' : '#B45309';
   const facts = p.facts.slice(0, 2).map((x) => `<div style="display:flex;gap:14px;font-size:30px;line-height:1.45;color:#334155"><span style="color:#16A34A;font-weight:800">✓</span><span>${x}</span></div>`).join('');
@@ -123,7 +174,7 @@ function itemHtml(p: SharePick, rank: number, page: number, total: number): stri
       <span class="chip num" style="background:#0F172A;color:#fff;font-size:30px">레이더 ${p.score}점</span>
     </div>
     <div style="font-size:76px;font-weight:800;letter-spacing:-0.02em;margin-top:20px;line-height:1.15">${p.name}</div>
-    <div style="font-size:31px;color:#64748B;margin-top:14px">${p.gu} ${p.dong} · ${p.household.toLocaleString()}세대${p.elapsedYear != null ? ` · ${p.elapsedYear}년차` : ''}${p.far != null ? ` · 용적률 <b style="color:${p.far <= 180 ? '#16A34A' : '#64748B'}">${Math.round(p.far)}%</b>` : ''}</div>
+    <div style="font-size:31px;color:#64748B;margin-top:14px">${p.gu} ${p.dong} · ${p.household.toLocaleString()}세대${p.elapsedYear != null ? ` · ${p.elapsedYear}년차` : ''}${p.far != null ? ` · 용적률 <b style="color:${p.far <= 180 ? '#16A34A' : '#64748B'}">${Math.round(p.far)}%</b>` : ''}${p.pyeongManwon != null ? ` · 평단 <b class="num" style="color:#0F172A">${p.pyeongManwon.toLocaleString()}만</b>` : ''}</div>
 
     <div style="display:flex;gap:36px;margin-top:44px;align-items:flex-end">
       <div style="flex:1">
@@ -134,7 +185,7 @@ function itemHtml(p: SharePick, rank: number, page: number, total: number): stri
         ${p.tradeMedian
           ? `<div style="font-size:27px;color:#94A3B8;font-weight:700">실거래 중간 <span style="color:#CBD5E1">(120일·${p.tradeCount}건)</span></div>
              <div class="num" style="font-size:60px;font-weight:800;color:#0F172A;line-height:1.15;margin-top:6px">${eok(p.tradeMedian)}</div>
-             <div class="num" style="font-size:25px;font-weight:700;margin-top:6px;color:${gapColor}">호가 ${p.gapPct! >= 0 ? '+' : ''}${p.gapPct!.toFixed(1)}%</div>`
+             <div style="font-size:25px;font-weight:700;margin-top:6px"><span class="num" style="color:${gapColor}">호가 ${p.gapPct! >= 0 ? '+' : ''}${p.gapPct!.toFixed(1)}%</span>${p.trendPct != null ? ` <span style="color:#CBD5E1">·</span> <span class="num" style="color:${p.trendPct <= -1 ? '#16A34A' : p.trendPct >= 1 ? '#DC2626' : '#64748B'}">추이 ${p.trendPct > 0 ? '▲' : p.trendPct < 0 ? '▼' : ''}${Math.abs(p.trendPct).toFixed(1)}%</span>` : ''}</div>`
           : `<div style="font-size:27px;color:#94A3B8;font-weight:700">실거래</div><div style="font-size:36px;color:#CBD5E1;font-weight:700;margin-top:12px">120일 표본 없음</div>`}
       </div>
     </div>
@@ -148,7 +199,7 @@ function itemHtml(p: SharePick, rank: number, page: number, total: number): stri
     <div style="margin-top:32px;padding:28px 32px;background:#F8FAFC;border-radius:20px">${scoreBarHtml(p.parts, p.score)}</div>
     <div style="margin-top:28px;display:flex;flex-direction:column;gap:12px">${facts}</div>
     <div style="margin-top:24px;display:flex;flex-wrap:wrap;gap:12px">${chips}</div>
-    <div class="foot">서울 ${CAP_LABEL} · 300세대+ 전수 스캔 — 국토부 실거래 × 네이버 호가 · 투자 자문 아님 · 현장 확인 필수</div>
+    <div class="foot">수도권 ${CAP_LABEL} · 300세대+ 전수 스캔 — 국토부 실거래 × 네이버 호가 · 투자 자문 아님 · 현장 확인 필수</div>
   </div>`;
 }
 
@@ -281,14 +332,28 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
   const since = new Date(Date.now() - 120 * 86_400_000);
   const [candidates, trades, rents] = await Promise.all([
     prisma.complexCandidate.findMany(),
-    prisma.aptTrade.findMany({ where: { dealDate: { gte: since } }, select: { aptName: true, dealAmount: true } }),
-    prisma.aptRent.findMany({ where: { dealDate: { gte: since }, monthlyRent: 0 }, select: { aptName: true, deposit: true } }),
+    prisma.aptTrade.findMany({ where: { dealDate: { gte: since } }, select: { lawdCd: true, aptName: true, dealAmount: true, excluUseAr: true, dealDate: true } }),
+    prisma.aptRent.findMany({ where: { dealDate: { gte: since }, monthlyRent: 0 }, select: { lawdCd: true, aptName: true, deposit: true } }),
   ]);
   const med = (a: number[]) => { a.sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; };
-  const tStats = new Map<string, { median: number; count: number }>();
-  { const by = new Map<string, number[]>(); for (const t of trades) { (by.get(t.aptName) ?? by.set(t.aptName, []).get(t.aptName)!).push(t.dealAmount); } for (const [n, a] of by) tStats.set(n, { median: med(a), count: a.length }); }
+  // 정량 강화(2026-08-10): 평단가(만원/3.3㎡)·120일 전후반 추이 — "매물 선택" 판단축 추가
+  const midMs = Date.now() - 60 * 86_400_000;
+  const tKey = (lawdCd: string, name: string) => `${lawdCd}|${normName(name)}`;
+  const tStats = new Map<string, { median: number; count: number; pyeong: number | null; trendPct: number | null }>();
+  {
+    const by = new Map<string, Array<{ amt: number; ar: number | null; ms: number }>>();
+    for (const t of trades) { const k = tKey(t.lawdCd, t.aptName); (by.get(k) ?? by.set(k, []).get(k)!).push({ amt: t.dealAmount, ar: t.excluUseAr ?? null, ms: t.dealDate.getTime() }); }
+    for (const [n, arr] of by) {
+      const amounts = arr.map((x) => x.amt);
+      const pyArr = arr.filter((x) => x.ar && x.ar > 0).map((x) => x.amt / (x.ar! / 3.3058));
+      const older = arr.filter((x) => x.ms < midMs).map((x) => x.amt);
+      const recent = arr.filter((x) => x.ms >= midMs).map((x) => x.amt);
+      const trendPct = older.length >= 3 && recent.length >= 3 ? +(((med(recent) - med(older)) / med(older)) * 100).toFixed(1) : null;
+      tStats.set(n, { median: med(amounts), count: arr.length, pyeong: pyArr.length ? Math.round(med(pyArr)) : null, trendPct });
+    }
+  }
   const jStats = new Map<string, number>();
-  { const by = new Map<string, number[]>(); for (const r of rents) { (by.get(r.aptName) ?? by.set(r.aptName, []).get(r.aptName)!).push(r.deposit); } for (const [n, a] of by) if (a.length >= 2) jStats.set(n, med(a)); }
+  { const by = new Map<string, number[]>(); for (const r of rents) { const k = tKey(r.lawdCd, r.aptName); (by.get(k) ?? by.set(k, []).get(k)!).push(r.deposit); } for (const [n, a] of by) if (a.length >= 2) jStats.set(n, med(a)); }
 
   // 공유용 컷: 가격대 창(CAP_LABEL) · 300세대+ · 매매 매물 3건+
   const guCount = new Set(candidates.map((c) => c.gu)).size;
@@ -311,8 +376,9 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
   if (fresh.length >= 5) pool = fresh;
   else console.log(`  ⚠ 쿨다운 제외 후 ${fresh.length}곳뿐 — 다양성 완화(전체 풀 사용, 최근 등장 단지 재등장 허용)`);
   const picks: SharePick[] = pool.map((c) => {
-    const t = tStats.get(c.name) ?? null;
-    const j = jStats.get(c.name) ?? null;
+    const lawd = GU_TO_LAWD[c.gu];
+    const t = (lawd ? tStats.get(tKey(lawd, c.name)) : null) ?? null;
+    const j = (lawd ? jStats.get(tKey(lawd, c.name)) : null) ?? null;
     const jr = j && t ? Math.round((j / t.median) * 100) : null;
     const gapPct = t && c.minDealPrice ? +(((c.minDealPrice - t.median) / t.median) * 100).toFixed(1) : null;
     const base = {
@@ -320,6 +386,7 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
       household: c.household, elapsedYear: c.elapsedYear, far: c.far ?? null,
       minPrice: c.minDealPrice!, dealArticles: c.dealArticles,
       tradeMedian: t?.median ?? null, tradeCount: t?.count ?? 0,
+      pyeongManwon: t?.pyeong ?? null, trendPct: t?.trendPct ?? null,
       jeonseMedian: j, jeonseRatioPct: jr, gapPct,
       listings: ((c.listings as unknown as Array<{ price: number; exclusiveArea: number | null; floor: string | null }>) ?? []),
     };
@@ -340,17 +407,18 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
     if (top.length >= 5) break;
   }
 
+  // 2026-08-10 개편: 자기홍보성 아웃트로 제거 → TOP5 정량 비교표(2p)로 대체 — "선택"을 위한 정보 밀도 우선
   const total = 9;
   const pages: string[] = [coverHtml(scanned.length, pool.length, total, guCount)];
   const names: string[] = ['01-cover'];
-  top.forEach((p, i) => { pages.push(itemHtml(p, i + 1, i + 2, total)); names.push(`0${i + 2}-pick${i + 1}`); });
-  pages.push(methodHtml(7, total, pool.length, guCount)); names.push('07-method');
-  pages.push(policyHtml(8, total)); names.push('08-policy');
-  pages.push(outroHtml(9, total)); names.push('09-outro');
+  pages.push(compareHtml(top, 2, total)); names.push('02-compare');
+  top.forEach((p, i) => { pages.push(itemHtml(p, i + 1, i + 3, total)); names.push(`0${i + 3}-pick${i + 1}`); });
+  pages.push(methodHtml(8, total, pool.length, guCount)); names.push('08-method');
+  pages.push(policyHtml(9, total)); names.push('09-policy');
 
   // ── 인스타 캡션 — 카드와 동일 데이터·수치 중심 ──
   const capLines = top.map((p, i) =>
-    `${i + 1}. ${p.name} (${p.gu} ${p.dong}) — 호가 ${eok(p.minPrice)}${p.tradeMedian ? ` · 실거래 ${eok(p.tradeMedian)}(${p.tradeCount}건, 갭 ${p.gapPct! >= 0 ? '+' : ''}${p.gapPct}%)` : ''}${p.jeonseRatioPct ? ` · 전세가율 ${p.jeonseRatioPct}%` : ''} · 지수 ${p.score}`).join('\n');
+    `${i + 1}. ${p.name} (${p.gu} ${p.dong}) — 호가 ${eok(p.minPrice)}${p.tradeMedian ? ` · 실거래 ${eok(p.tradeMedian)}(${p.tradeCount}건, 갭 ${p.gapPct! >= 0 ? '+' : ''}${p.gapPct}%)` : ''}${p.pyeongManwon ? ` · 평단 ${p.pyeongManwon.toLocaleString()}만` : ''}${p.trendPct != null ? ` · 추이 ${p.trendPct > 0 ? '▲' : p.trendPct < 0 ? '▼' : ''}${Math.abs(p.trendPct)}%` : ''}${p.jeonseRatioPct ? ` · 전세가율 ${p.jeonseRatioPct}%` : ''} · 지수 ${p.score}`).join('\n');
   const caption = `🏠 수도권 ${CAP_LABEL} 아파트 레이더 TOP 5 (${today.replaceAll('-', '.')})
 
 수집권 ${guCount}개 구·시의 300세대 이상 ${scanned.length.toLocaleString()}개 단지를 전수 스캔해 공개 데이터 지표(실거래 갭 40 · 유동성 30 · 연식/용적률 15 · 전세가율 15)로만 채점했습니다. 특정인의 예산·취향 기준이 아니며, 가격대 컷(${CAP_LABEL}) 밖 단지는 포함되지 않습니다.

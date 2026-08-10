@@ -11,12 +11,15 @@ set -a
 [ -f .env.local ] && source .env.local
 set +a
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') daily-matching 시작 ===" | tee -a "$LOG"
-echo "[1/3] gen-listings (전체매물 투자분석+10년vs)" | tee -a "$LOG"
+echo "[1/4] gen-listings (전체매물 투자분석+10년vs)" | tee -a "$LOG"
 npx tsx scripts/gen-listings.ts 2>&1 | tee -a "$LOG"
-echo "[2/3] gen-persona-recos (페르소나별 사전 추천 — /recommend, G3)" | tee -a "$LOG"
+echo "[2/4] gen-persona-recos (페르소나별 사전 추천 — /recommend, G3)" | tee -a "$LOG"
 npx tsx scripts/gen-persona-recos.ts 2>&1 | tee -a "$LOG"
-echo "[3/3] gen-matching (추적 3단지 호가·급매)" | tee -a "$LOG"
+echo "[3/4] gen-matching (추적 3단지 호가·급매)" | tee -a "$LOG"
 npx tsx scripts/gen-matching.ts 2>&1 | tee -a "$LOG"
+echo "[4/4] gen-region-affordability (구별 예산 내 매수 가능 목록 — 2026-08-10)" | tee -a "$LOG"
+AFFORD_MSG=$(npx tsx scripts/gen-region-affordability.ts 2>>"$LOG")
+[ -n "$AFFORD_MSG" ] && npx tsx scripts/notify-telegram.ts "$AFFORD_MSG" >> "$LOG" 2>&1 || true
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') daily-matching 종료 ===" | tee -a "$LOG"
 
 # 자율 작업 보고(2026-08-05 지시) — 매칭·매물분석 재생성 결과를 텔레그램으로 보고

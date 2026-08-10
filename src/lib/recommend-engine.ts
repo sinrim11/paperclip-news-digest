@@ -63,7 +63,7 @@ interface Rules {
   weights: { tierMultiplier: number; liquidityCap: number; budgetFitComfortable: number; budgetFitStretch: number; freshnessMax: number; regionHeatMax: number; jeonseRatioMax?: number };
   freshnessByAge: Array<{ maxAge: number; score: number }>;
   jeonseRatioByPct?: Array<{ minPct: number; score: number }>;
-  diversity?: { maxPerGu: number };
+  diversity?: { maxPerGu: number; maxNonSeoulPerDay?: number };
   dailyLimit: number;
   downsideFlags?: Partial<DownsideConfig>;
   stretchPlus?: { enabled?: boolean; limit: number; ceilingManwon: number; maxPerGu?: number; cooldownDays?: number };
@@ -181,9 +181,16 @@ export async function buildDailyRecommendations(
   const nowYear = new Date(now.getTime() + 9 * 3_600_000).getUTCFullYear();
   const todayStr = kstDateStr(now);
 
+  // 부모님 찬스(2026-08-10) — reader-profile contingencySupport.가족지원(원)을 만원으로 환산.
+  // 스트레치+ 상한을 "본인 스트레치 + 부모님 지원"까지 동적 확장해 서울 상위 가격대까지 검토권 편입.
+  const parentSupportManwon = Math.round(
+    (loadJson<{ finances?: { contingencySupport?: { 가족지원?: number } } }>('config/reader-profile.json')?.finances?.contingencySupport?.가족지원 ?? 0) / 10_000,
+  );
+
   // 스트레치+ 트랙 상한 — 메인(stretch)보다 높으면 실거래 조회 상한을 함께 올린다
   const spCfg = rules.stretchPlus;
-  const spCeiling = spCfg?.enabled ? Math.max(stretch, spCfg.ceilingManwon) : stretch;
+  const spDynamicCeiling = spCfg?.enabled ? Math.max(spCfg.ceilingManwon, stretch + parentSupportManwon) : stretch;
+  const spCeiling = spCfg?.enabled ? Math.max(stretch, spDynamicCeiling) : stretch;
 
   // 1) 실거래 집계
   const since = new Date(now.getTime() - rules.filters.lookbackDays * 86_400_000);
@@ -380,15 +387,22 @@ export async function buildDailyRecommendations(
     });
   }
 
-  // 4) 다양성 캡(구별 최대 N) 적용하며 상위 선별
+  // 4) 다양성 캡(구별 최대 N + 비서울 합산 최대 N — 2026-08-10 남양주 편중 완화) 적용하며 상위 선별
   const facts = loadJson<ComplexFact[]>('config/complex-facts.json') ?? [];
+  const isSeoulKey = (complexKey: string) => complexKey.startsWith('11'); // lawdCd 11* = 서울
+  const maxNonSeoul = rules.diversity?.maxNonSeoulPerDay ?? 99;
   scored.sort((a, b) => b.score - a.score);
   const picked: DailyReco[] = [];
   const perGu: Record<string, number> = {};
+  let nonSeoulPicked = 0;
   const cap = rules.diversity?.maxPerGu ?? 99;
   for (const r of scored) {
     if (picked.length >= rules.dailyLimit) break;
     if ((perGu[r.gu] ?? 0) >= cap) continue;
+    if (!isSeoulKey(r.complexKey)) {
+      if (nonSeoulPicked >= maxNonSeoul) continue;
+      nonSeoulPicked++;
+    }
     perGu[r.gu] = (perGu[r.gu] ?? 0) + 1;
     picked.push(r);
   }
@@ -439,7 +453,7 @@ export async function buildDailyRecommendations(
       if (lastSentStretch.has(a.key)) continue; // 스트레치+ 자체 쿨다운
       a.prices.sort((x, y) => x - y);
       const med = median(a.prices);
-      if (med <= comfortable || med > spCfg.ceilingManwon) continue;
+      if (med <= comfortable || med > spDynamicCeiling) continue;
 
       const tier = tierOf(a.dong);
       const liq = liquidityScore(a.prices.length, rules.weights.liquidityCap);
@@ -473,6 +487,8 @@ export async function buildDailyRecommendations(
         `최근 ${a.prices.length}건 실거래(전용 ${minA}~${maxA}㎡) — 환금성 검증`,
       ];
       if (monthsToReach != null && monthsToReach <= 24) reasons.push(`월 매수펀드 적립 유지 시 약 ${monthsToReach}개월 뒤 자기자본 도달 — 2년 플랜 내 조달 가능`);
+      if (med > stretch && parentSupportManwon > 0)
+        reasons.push(`👨‍👩‍👦 부모님 찬스 구간 — 본인 상한(${eok(stretch)}) 초과분 ${eok(med - stretch)}은 가족 지원(최대 ${eok(parentSupportManwon)}) 전제 · 증여세/차용증 정리 필요`);
       if (tier >= 15) reasons.push(`투자 우선지역(${a.dong}) · 교통·개발호재`);
       if (fresh.label) reasons.push(fresh.label);
       if (jeonseRatioPct >= 65) reasons.push(`전세가율 ${jeonseRatioPct}% — 임대전환 유리`);
@@ -497,7 +513,7 @@ export async function buildDailyRecommendations(
         priceRangeText: `${eok(a.prices[0])}~${eok(a.prices[a.prices.length - 1])}`,
         tradeCount: a.prices.length,
         scenario: '스트레치+',
-        budgetLabel: `스트레치+ (≤${eok(spCfg.ceilingManwon)}) ➕`,
+        budgetLabel: med > stretch ? `부모님 찬스 (≤${eok(spDynamicCeiling)}) 👨‍👩‍👦` : `스트레치+ (≤${eok(spDynamicCeiling)}) ➕`,
         station: '역세권 정보 확인 필요',
         reasons,
         cautions,
@@ -513,9 +529,15 @@ export async function buildDailyRecommendations(
     spScored.sort((a, b) => b.score - a.score);
     const spPerGu: Record<string, number> = {};
     const spCap = spCfg.maxPerGu ?? 99;
+    let spNonSeoul = 0;
+    const spMaxNonSeoul = rules.diversity?.maxNonSeoulPerDay ?? 99;
     for (const r of spScored) {
       if (stretchPlus.length >= spCfg.limit) break;
       if ((spPerGu[r.gu] ?? 0) >= spCap) continue;
+      if (!r.complexKey.startsWith('11')) {
+        if (spNonSeoul >= spMaxNonSeoul) continue;
+        spNonSeoul++;
+      }
       spPerGu[r.gu] = (spPerGu[r.gu] ?? 0) + 1;
       const f = matchFact(facts, r.gu, r.dong, r.name);
       if (f) {

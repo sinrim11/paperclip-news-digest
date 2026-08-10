@@ -25,7 +25,8 @@
   ],
   "diversity": {
     "maxPerGu": 2,
-    "_note": "하루 추천에서 한 구 최대 N개 — 동네 편중 방지"
+    "maxNonSeoulPerDay": 2,
+    "_note": "하루 추천에서 한 구 최대 N개(동네 편중 방지) + 비서울(경기) 합산 최대 N개(2026-08-10 — 남양주 편중 완화, 서울 전역 우선). lawdCd 11* = 서울."
   },
   "budgetFallback": {
     "_note": "market-context.json 부재 시 사용. comfortable=오늘 자기자본권(약7억·마통해지 생초LTV70%), stretch=2년 적립 자기자본권(약7.8억). 가족지원은 사실상 불필요. budgetFitStretch를 1로 유지해 오늘 자기자본 내(≤7억)를 우선.",
@@ -50,7 +51,7 @@
     "weakJeonsePct": 55
   },
   "stretchPlus": {
-    "_note": "스트레치+ 트랙 — comfortable 초과 ~ 스윕 상한 구간을 메인 5건과 분리된 섹션으로 노출(점수·로테이션 오염 금지, 쿨다운도 트랙별 분리). 표기 필수: '+X 더 보태면' + 월 상환 증가분(investment-model 금리·기간 환산) + 조달 판정(월 적립 기준 N개월).",
+    "_note": "스트레치+ 트랙 — comfortable 초과 ~ 상한 구간을 메인 5건과 분리된 섹션으로 노출(점수·로테이션 오염 금지, 쿨다운도 트랙별 분리). 상한은 엔진이 동적 계산: max(ceilingManwon, stretch + 부모님찬스 3억) — 2026-08-10부터 reader-profile contingencySupport.가족지원 반영. ceilingManwon은 프로필 부재 시 폴백. 표기 필수: '+X 더 보태면' + 월 상환 증가분 + 조달 판정.",
     "enabled": true,
     "limit": 3,
     "ceilingManwon": 92000,

@@ -41,6 +41,8 @@ config/kakao-context.json
 config/policy-check-log.json
 config/backup/
 config/proposals/
+config/region-affordability.json
+docs/region-affordability-*.md
 docs/goals/
 output/
 config/persona-recos.json
