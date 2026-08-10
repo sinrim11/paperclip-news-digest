@@ -18,6 +18,7 @@ if [ -z "$SERIES" ]; then
   case "$DOW" in
     2|6) SERIES="price8" ;;
     4) SERIES="price9" ;;
+    5) SERIES="price12" ;; # 금 = 9~12억(부모님 찬스 구간, 2026-08-11 신설)
     *) SERIES="price6" ;;
   esac
 fi

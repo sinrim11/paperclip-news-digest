@@ -31,12 +31,13 @@ const today = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
  *    → 시리즈 간 동일 단지 중복 원천 차단(마케팅용 다양성). 요일 로테이션은 gen-cardnews.sh.
  *  - 추가로 최근 COOLDOWN_DAYS일 내 어떤 시리즈든 등장한 단지는 제외(반복 노출 방지, G2-3).
  *  - briefing: 호재·정책 브리핑(momentum-factors 확정/진행 + 정책 카드, 전 항목 출처 표기)
- *  - 10억+ 시리즈는 보류 — 스윕 상한(9.2억) 상향 선행 필요(Phase 0 판정)
+ *  - price12(9~12억, 부모님 찬스 구간): 2026-08-11 신설 — 스윕 상한 12억 상향과 세트.
+ *    그룹 로테이션상 전 지역 매물 반영까지 3~4일 소요(초기엔 풀이 작을 수 있음).
  */
-type Series = 'price6' | 'price8' | 'price9' | 'briefing';
+type Series = 'price6' | 'price8' | 'price9' | 'price12' | 'briefing';
 const series: Series = (process.argv.find((a) => a.startsWith('--series='))?.slice('--series='.length) as Series) ?? 'price6';
-if (!['price6', 'price8', 'price9', 'briefing'].includes(series)) throw new Error(`알 수 없는 시리즈: ${series}`);
-const DIR_SUFFIX: Record<Series, string> = { price6: '', price8: '-p8', price9: '-p9', briefing: '-brief' };
+if (!['price6', 'price8', 'price9', 'price12', 'briefing'].includes(series)) throw new Error(`알 수 없는 시리즈: ${series}`);
+const DIR_SUFFIX: Record<Series, string> = { price6: '', price8: '-p8', price9: '-p9', price12: '-p12', briefing: '-brief' };
 const setDir = today + DIR_SUFFIX[series];
 const OUT_DIR = join(process.cwd(), 'output', 'cardnews', setDir);
 
@@ -45,6 +46,7 @@ const PRICE_WINDOW: Record<Exclude<Series, 'briefing'>, { min: number; max: numb
   price6: { min: 0, max: 60000, label: '6억 이하' },
   price8: { min: 60000, max: 80000, label: '6~8억' },
   price9: { min: 80000, max: 92000, label: '8~9억' },
+  price12: { min: 92000, max: 120000, label: '9~12억' },
 };
 const WINDOW = series === 'briefing' ? PRICE_WINDOW.price6 : PRICE_WINDOW[series];
 const CAP_LABEL = WINDOW.label;
@@ -355,19 +357,50 @@ function briefCoverHtml(count: number, total: number): string {
   </div>`;
 }
 
+/** 호재 카드 v2(2026-08-11 시각화) — 개통 타임라인 + 영향 지역 칩: "언제·어디"가 한눈에 */
 function factorHtml(f: MomentumFactor, page: number, total: number): string {
   const badge = f.certainty === '확정' ? ['#16A34A', '확정 — 착공·개통일 확정'] : ['#F59E0B', '진행 — 승인·부분 착공'];
-  const regions = f.regions.map((r) => r.gu).join(' · ');
   const srcs = f.sourceUrls.map((s) => s.replace(/^https?:\/\//, '').split('/')[0]).join(' · ');
+  const nowYear = Number(today.slice(0, 4));
+  const targetYear = Number((f.expected.match(/20\d{2}/) ?? [])[0]) || null;
+  const yearsLeft = targetYear ? Math.max(0, targetYear - nowYear) : null;
+
+  // 개통 타임라인 — 지금(좌) → 목표 연도(우), 남은 기간을 큰 수치로
+  const timeline = targetYear
+    ? `<div style="margin-top:44px;background:#F8FAFC;border-radius:22px;padding:36px 40px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between">
+          <span style="font-size:27px;font-weight:700;color:#64748B">개통·완공까지</span>
+          <span class="num" style="font-size:56px;font-weight:800;color:#2563EB">${yearsLeft === 0 ? '올해' : `약 ${yearsLeft}년`}</span>
+        </div>
+        <div style="position:relative;height:14px;background:#E2E8F0;border-radius:7px;margin-top:24px">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:14px;background:#0F172A;border-radius:7px"></div>
+          <div style="position:absolute;right:0;top:-7px;width:28px;height:28px;background:#2563EB;border-radius:50%;border:5px solid #DBEAFE"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:25px;margin-top:14px">
+          <span style="color:#0F172A;font-weight:700">지금 (${nowYear})</span>
+          <span class="num" style="color:#2563EB;font-weight:800">${targetYear} — ${f.expected.replace(/20\d{2}\s*/, '')}</span>
+        </div>
+        ${f.certainty !== '확정' ? '<div style="font-size:23px;color:#B45309;margin-top:12px">⚠ 진행 단계 — 목표 시점은 지연될 수 있습니다</div>' : ''}
+      </div>`
+    : `<div class="num" style="font-size:40px;font-weight:800;color:#2563EB;margin-top:36px">${f.expected}</div>`;
+
+  const regionChips = f.regions
+    .map((r) => `<span class="chip" style="background:#EFF6FF;color:#1D4ED8;font-size:28px;font-weight:700">📍 ${r.gu}${r.dongs?.length ? ` ${r.dongs.slice(0, 3).join('·')}` : ''}</span>`)
+    .join(' ');
+
   return `<style>${baseCss}</style><div class="card">
     ${brandBar(page, total)}
-    <div style="margin-top:70px">
+    <div style="margin-top:60px;display:flex;gap:14px;align-items:center">
       <span class="chip" style="background:${badge[0]};color:#fff;font-size:28px">${badge[1]}</span>
+      ${f.type ? `<span class="chip" style="background:#F1F5F9;color:#475569;font-size:28px">${f.type}</span>` : ''}
     </div>
-    <div style="font-size:64px;font-weight:800;letter-spacing:-0.02em;margin-top:30px;line-height:1.25">${f.title}</div>
-    <div class="num" style="font-size:36px;font-weight:700;color:#2563EB;margin-top:24px">${f.expected}</div>
-    <div style="font-size:32px;color:#334155;margin-top:36px;line-height:1.65">${f.detail}</div>
-    <div class="stat" style="margin-top:40px"><div class="k">영향 지역</div><div style="font-size:34px;font-weight:700;margin-top:8px">${regions}</div></div>
+    <div style="font-size:60px;font-weight:800;letter-spacing:-0.02em;margin-top:28px;line-height:1.25">${f.title}</div>
+    ${timeline}
+    <div style="font-size:31px;color:#334155;margin-top:34px;line-height:1.6">${f.detail}</div>
+    <div style="margin-top:auto;padding-top:30px">
+      <div style="font-size:26px;font-weight:700;color:#94A3B8;margin-bottom:12px">수혜 지역</div>
+      <div style="display:flex;flex-wrap:wrap;gap:12px">${regionChips}</div>
+    </div>
     <div class="foot">📎 근거: ${srcs} · 확인 ${f.verifiedAt} — 개통 목표는 지연이 흔합니다 · 호재를 매수가에 선반영하지 마세요</div>
   </div>`;
 }

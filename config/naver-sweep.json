@@ -1,6 +1,7 @@
 {
   "_comment": "네이버 매물 전수 스윕 설정. 검증된 법정동코드 맵(dongMapFiles)에서 자동 로드. budgetCeiling=스윕 가격 상한(만원). minHousehold=150. G2-4: 각 그룹 주 2회(sun=일·목, wed=수·토) → 지역당 3~4일 간격 재수집 — 수집량 증가는 실행 요일 추가로만 흡수, 단지당 딜레이 단축 금지(가드레일 6). naver-sweep.sh가 요일로 그룹 자동 선택(일·목→sun, 수·토→wed), --group 수동 지정 가능. gyeonggi-new=안양·의왕 일회성 보충용(G2-1).",
-  "budgetCeilingManwon": 92000,
+  "budgetCeilingManwon": 120000,
+  "_budgetCeilingNote": "2026-08-11 92000→120000 상향 — 부모님 찬스(+3억) 구간(9~12억) 카드뉴스·검토 편입. 그룹 로테이션상 전 지역 반영까지 3~4일 소요.",
   "minHousehold": 150,
   "minExclusiveAreaM2": 50,
   "perComplexDelayMs": 9000,

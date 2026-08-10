@@ -149,7 +149,15 @@ function RegionCard({ region, filter, defaultOpen }: { region: Region; filter: B
                   <tr key={`${c.dong}|${c.name}|${i}`} className="odd:bg-white even:bg-gray-50/60">
                     <td className={`whitespace-nowrap px-3 py-2 text-xs font-medium ${BAND_META[c.band].color}`}>{BAND_META[c.band].short}</td>
                     <td className="px-3 py-2">
-                      <span className="font-medium">{c.name}</span>
+                      <a
+                        href={`https://m.land.naver.com/search/result/${encodeURIComponent(`${region.gu.replace(/^안양 /, '안양시 ')} ${c.name}`)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium hover:text-blue-600 hover:underline"
+                        title="네이버부동산에서 매물·시세 보기"
+                      >
+                        {c.name}<span aria-hidden className="ml-0.5 text-[10px] text-gray-300">↗</span>
+                      </a>
                       <span className="ml-1.5 text-xs text-gray-400">{c.dong}</span>
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums">{eok(c.medianManwon)}</td>

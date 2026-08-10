@@ -58,7 +58,7 @@ export async function publishCardnewsToInstagram(formData: FormData) {
  * 완료/실패는 텔레그램으로 알린 뒤 페이지 새로고침으로 새 세트를 확인한다.
  */
 const SERIES_LABEL: Record<string, string> = {
-  price6: '6억 이하', price8: '6~8억', price9: '8~9억', briefing: '호재·정책 브리핑',
+  price6: '6억 이하', price8: '6~8억', price9: '8~9억', price12: '9~12억 (부모님 찬스)', briefing: '호재·정책 브리핑',
 };
 
 export async function generateCardnews(formData: FormData) {

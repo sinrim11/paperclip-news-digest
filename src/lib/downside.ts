@@ -7,6 +7,9 @@
  * 공식 출처 확보 시 이 모듈에 증분 추가(보류 항목, 최종 보고 기재).
  */
 
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
 export interface DownsideFlag {
   key: string;
   label: string; // 신호명 + 원천 수치(evidence)
@@ -65,6 +68,41 @@ export function jeonseWeakFlag(jeonseRatioPct: number | null, jeonseSamples: num
   return {
     key: 'weak-jeonse',
     label: `전세가율 ${jeonseRatioPct}%(<${cfg.weakJeonsePct}%, 계약 ${jeonseSamples}건) — 실거주 수요 약함·하락 방어력 낮음`,
+  };
+}
+
+/* ── 공급 리스크(외부 지표, 2026-08-11) — 월간 supply-risk.sh가 생성한 config/supply-risk.json 소비 ── */
+
+interface SupplyRegion {
+  region: string;
+  unsold?: { count?: number; trend?: string; asOfMonth?: string };
+  supply12m?: { units?: number };
+  riskLevel?: string;
+  sourceUrls?: string[];
+}
+let _supplyCache: SupplyRegion[] | null | undefined;
+
+function loadSupplyRegions(): SupplyRegion[] | null {
+  if (_supplyCache !== undefined) return _supplyCache;
+  try {
+    const j = JSON.parse(readFileSync(join(process.cwd(), 'config', 'supply-risk.json'), 'utf-8')) as { regions?: SupplyRegion[] };
+    _supplyCache = j.regions ?? null;
+  } catch {
+    _supplyCache = null;
+  }
+  return _supplyCache;
+}
+
+/** 지역(구·시) 공급 리스크 플래그 — riskLevel=high일 때만 1플래그(미분양 증가+입주물량 부담, 출처 동반). */
+export function supplyRiskFlag(gu: string): DownsideFlag | null {
+  const regions = loadSupplyRegions();
+  if (!regions) return null;
+  const e = regions.find((r) => gu.startsWith(r.region.replace(/시$/, '')));
+  if (!e || e.riskLevel !== 'high') return null;
+  const src = e.sourceUrls?.[0]?.replace(/^https?:\/\//, '').split('/')[0] ?? '공식 통계';
+  return {
+    key: 'supply-risk',
+    label: `공급 리스크(${e.region}) — 미분양 ${e.unsold?.count ?? '?'}세대(${e.unsold?.trend ?? '?'}, ${e.unsold?.asOfMonth ?? ''}) · 12개월 입주 ${e.supply12m?.units?.toLocaleString() ?? '?'}세대 (${src})`,
   };
 }
 

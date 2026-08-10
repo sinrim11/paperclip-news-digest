@@ -13,6 +13,7 @@ import { PrismaClient } from '@prisma/client';
 import { buildDailyRecommendations } from '../src/lib/recommend-engine';
 import { sendTelegram } from '../src/lib/telegram';
 import { header, formatReco, emptyMessage, gapHeader, formatGapReco, stretchHeader, formatStretchReco } from '../src/lib/reco-format';
+import { hashKey, registerKeys } from '../src/lib/reco-feedback';
 
 const prisma = new PrismaClient();
 
@@ -23,14 +24,18 @@ async function main() {
   // 하방 플래그 제외 사유 로그(2-B) — launchd 로그 파일에 남아 사후 추적 가능
   for (const e of excluded) console.log(`[daily-reco] 🚩 제외: ${e.gu} ${e.dong} ${e.name} — ${e.flags.join(' / ')}`);
 
-  const messages = items.length ? [header(items.length, asOf), ...items.map(formatReco)] : [emptyMessage(asOf)];
+  // 피드백 루프(2026-08-11): 매물 메시지엔 [👍 관심 / 🚫 제외] 버튼 — feedback-bot이 수신·기록
+  type Out = { text: string; key?: string; name?: string };
+  const messages: Out[] = items.length
+    ? [{ text: header(items.length, asOf) }, ...items.map((r) => ({ text: formatReco(r), key: r.complexKey, name: r.name }))]
+    : [{ text: emptyMessage(asOf) }];
   // 스트레치+ 트랙(조금 더 보태면 사정권) — 메인 하단 별도 섹션
-  if (stretchPlus.length) messages.push(stretchHeader(stretchPlus.length, asOf), ...stretchPlus.map(formatStretchReco));
+  if (stretchPlus.length) messages.push({ text: stretchHeader(stretchPlus.length, asOf) }, ...stretchPlus.map((r) => ({ text: formatStretchReco(r), key: r.complexKey, name: r.name })));
   // 갭투자 트랙(비규제) — 별도 섹션으로 이어서 발송
-  if (gapTrack.length) messages.push(gapHeader(gapTrack.length, asOf), ...gapTrack.map(formatGapReco));
+  if (gapTrack.length) messages.push({ text: gapHeader(gapTrack.length, asOf) }, ...gapTrack.map((r) => ({ text: formatGapReco(r), key: r.complexKey, name: r.name })));
 
   if (dry) {
-    for (const m of messages) console.log('\n────────── MESSAGE ──────────\n' + m);
+    for (const m of messages) console.log('\n────────── MESSAGE ──────────\n' + m.text);
     console.log(`\n[dry] ${messages.length}개 메시지 (dry — 저장/발송/로그 없음)`);
     return;
   }
@@ -38,10 +43,17 @@ async function main() {
   // 산출물 저장(웹/검수용)
   writeFileSync(join(process.cwd(), 'config', 'recommendations.json'), JSON.stringify({ _comment: 'daily-recommend 자동 생성', asOf, items, stretchPlus, gapTrack, excluded }, null, 2));
 
-  // 발송
+  // 발송 — 매물 메시지엔 피드백 버튼 부착(콜백 해시는 keymap에 사전 등록)
+  registerKeys(messages.filter((m): m is Required<Out> => !!m.key).map((m) => ({ complexKey: m.key, name: m.name })));
   let sent = 0;
   for (const m of messages) {
-    if (await sendTelegram(m)) sent++;
+    const buttons = m.key
+      ? [[
+          { text: '👍 관심', callback_data: `fb|${hashKey(m.key)}|like` },
+          { text: '🚫 제외', callback_data: `fb|${hashKey(m.key)}|ban` },
+        ]]
+      : undefined;
+    if (await sendTelegram(m.text, buttons)) sent++;
     await new Promise((r) => setTimeout(r, 1500));
   }
   console.log(`[daily-reco] ${sent}/${messages.length} 메시지 전송`);
@@ -58,6 +70,7 @@ async function main() {
           dong: r.dong,
           medianManwon: r.medianManwon,
           signalLowManwon: r.signalLowManwon ?? null,
+          signalTag: r.signalTag ?? null,
           score: r.score,
           scenario: r.scenario,
           rank: r.rank,

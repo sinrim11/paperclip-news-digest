@@ -14,7 +14,7 @@ import { tierOf, LAWD_GU } from './tiers';
 import { monthlyPaymentPerWon } from './tracker';
 import { regulationOf, nonRegulatedGus } from './region-regulation';
 import { recoFactorsFor } from './momentum';
-import { downsideFlags, DEFAULT_DOWNSIDE, type DownsideConfig } from './downside';
+import { downsideFlags, supplyRiskFlag, DEFAULT_DOWNSIDE, type DownsideConfig } from './downside';
 
 export interface DailyReco {
   rank: number;
@@ -41,6 +41,7 @@ export interface DailyReco {
   isNew: boolean; // 처음 추천 or 변화 재등장
   signalNote?: string; // 재등장 사유
   signalLowManwon?: number; // 재등장 트리거가 된 신저가(만원) — 발송 로그에 기록해 같은 저가로 반복 재등장 방지
+  signalTag?: string; // 재등장 신호 멱등 태그 — "vol:<건수>" | "high:<만원>" (2026-08-11 신호 다양화)
   // 갭투자 트랙(비규제 지역 전용)
   jeonseManwon?: number; // 전세 중간값
   gapManwon?: number; // 갭 = 매매 − 전세
@@ -181,6 +182,16 @@ export async function buildDailyRecommendations(
   const nowYear = new Date(now.getTime() + 9 * 3_600_000).getUTCFullYear();
   const todayStr = kstDateStr(now);
 
+  // 사용자 피드백(2026-08-11, 텔레그램 버튼) — ban=전 트랙 제외, like=+5 가점
+  const fbStore = loadJson<{ feedback?: Record<string, { status?: string }> }>('config/reco-feedback.json');
+  const fbBan = new Set<string>();
+  const fbLike = new Set<string>();
+  for (const [k, v] of Object.entries(fbStore?.feedback ?? {})) {
+    if (v?.status === 'ban') fbBan.add(k);
+    else if (v?.status === 'like') fbLike.add(k);
+  }
+  let fbBannedSkipped = 0;
+
   // 부모님 찬스(2026-08-10) — reader-profile contingencySupport.가족지원(원)을 만원으로 환산.
   // 스트레치+ 상한을 "본인 스트레치 + 부모님 지원"까지 동적 확장해 서울 상위 가격대까지 검토권 편입.
   const parentSupportManwon = Math.round(
@@ -241,13 +252,15 @@ export async function buildDailyRecommendations(
   const cooldownSince = kstDateStr(new Date(now.getTime() - rules.rotation.cooldownDays * 86_400_000));
   const recentSent = await prisma.sentRecommendation.findMany({
     where: { sentDate: { gte: kstDateStr(new Date(now.getTime() - maxCooldownDays * 86_400_000)) } },
-    select: { complexKey: true, medianManwon: true, sentDate: true, scenario: true, signalLowManwon: true },
+    select: { complexKey: true, medianManwon: true, sentDate: true, scenario: true, signalLowManwon: true, signalTag: true },
     orderBy: { sentDate: 'desc' },
   });
   const lastSentByKey = new Map<string, { medianManwon: number; sentDate: string; signalLowManwon: number | null }>();
   const lastSentStretch = new Map<string, { medianManwon: number; sentDate: string }>();
-  // 쿨다운 내 이미 알린 신저가의 최솟값 — "같은 저가 거래"가 window 내내 매일 재등장을 트리거하는 것을 차단
+  // 쿨다운 내 이미 알린 신호 수준 — 같은 수준의 신호(같은 저가·같은 거래량·같은 신고가)로 매일 재발동하는 것을 차단
   const notifiedLowByKey = new Map<string, number>();
+  const notifiedVolByKey = new Map<string, number>(); // "vol:<건수>" 태그 최대값
+  const notifiedHighByKey = new Map<string, number>(); // "high:<만원>" 태그 최대값
   const spCooldownSince = kstDateStr(new Date(now.getTime() - spCooldownDays * 86_400_000));
   for (const s of recentSent) {
     if (s.scenario === '스트레치+') {
@@ -257,6 +270,13 @@ export async function buildDailyRecommendations(
       if (s.signalLowManwon != null) {
         const prev = notifiedLowByKey.get(s.complexKey);
         if (prev == null || s.signalLowManwon < prev) notifiedLowByKey.set(s.complexKey, s.signalLowManwon);
+      }
+      if (s.signalTag?.startsWith('vol:')) {
+        const v = Number(s.signalTag.slice(4));
+        if (Number.isFinite(v) && v > (notifiedVolByKey.get(s.complexKey) ?? 0)) notifiedVolByKey.set(s.complexKey, v);
+      } else if (s.signalTag?.startsWith('high:')) {
+        const v = Number(s.signalTag.slice(5));
+        if (Number.isFinite(v) && v > (notifiedHighByKey.get(s.complexKey) ?? 0)) notifiedHighByKey.set(s.complexKey, v);
       }
     }
   }
@@ -272,13 +292,18 @@ export async function buildDailyRecommendations(
   const recordExcluded = (key: string, e: { name: string; gu: string; dong: string; flags: string[] }) => {
     if (!excludedByKey.has(key)) excludedByKey.set(key, e);
   };
-  const flagsOf = (a: ComplexAgg, jeonseRatioPct: number | null, jeonseSamples: number) =>
-    downsideFlags(
+  const flagsOf = (a: ComplexAgg, jeonseRatioPct: number | null, jeonseSamples: number) => {
+    const flags = downsideFlags(
       { tradeMs: a.recentTrades.map((t) => t.ms), lookbackDays: rules.filters.lookbackDays, nowMs: now.getTime(), jeonseRatioPct, jeonseSamples },
       dsCfg,
     );
+    const supply = supplyRiskFlag(a.gu); // 외부 지표(미분양·입주물량, 월간) — high 지역만 1플래그
+    if (supply) flags.push(supply);
+    return flags;
+  };
   for (const a of aggs.values()) {
     if (a.prices.length < rules.filters.minTrades180d) continue;
+    if (fbBan.has(a.key)) { fbBannedSkipped++; continue; } // 사용자 제외 피드백
     const reg = regulationOf(a.gu);
     if (reg.status === 'unverified') {
       skippedUnverifiedGu.add(a.gu);
@@ -288,28 +313,50 @@ export async function buildDailyRecommendations(
     const med = median(a.prices);
     if (med > stretch) continue;
 
-    // 로테이션: 쿨다운 내면 스킵, 단 신저가(직전 발송 중간값 대비 하락) 발생 시 재등장.
-    // 이미 알린 신저가(notifiedLowByKey)보다 더 낮은 거래가 새로 나와야만 재등장 —
-    // 같은 저가 거래 1건이 window 내내 매일 재발송을 트리거하던 반복 버그 방지(2026-08-05).
+    // 로테이션: 쿨다운 내면 스킵, 단 새 신호 발생 시 재등장(2026-08-11 신호 3종으로 확장).
+    // 각 신호는 "이미 알린 수준"(notified* 맵)을 넘어설 때만 발동 — 같은 신호로 매일 재발송 방지.
+    //  ① 신저가: 직전 발송 중간 대비 -threshold% 저가 거래 (급매·바닥 신호)
+    //  ② 거래량 급증: 신고확정 집계(30일 지연 보정) 기준 직전 W일 대비 2배+ (매수세 유입)
+    //  ③ 신고가: 직전 발송 중간 대비 +threshold% 고가 거래 (상승 모멘텀)
     const last = lastSentByKey.get(a.key);
     let isNew = true;
     let signalNote: string | undefined;
     let signalLowManwon: number | undefined;
+    let signalTag: string | undefined;
     if (last) {
       isNew = false;
-      const recentLow = Math.min(...a.recentTrades.filter((t) => now.getTime() - t.ms <= newSignalWindowMs).map((t) => t.price), Infinity);
+      if (!rules.rotation.reentryOnNewSignal) continue;
+      const nowMs = now.getTime();
+      const wMs = newSignalWindowMs;
+      const wDays = rules.newSignal.recentTradeWindowDays;
+      // ① 신저가
+      const recentLow = Math.min(...a.recentTrades.filter((t) => nowMs - t.ms <= wMs).map((t) => t.price), Infinity);
       const dropPct = ((last.medianManwon - recentLow) / last.medianManwon) * 100;
-      const alreadyNotified = notifiedLowByKey.get(a.key);
-      if (
-        rules.rotation.reentryOnNewSignal &&
-        recentLow !== Infinity &&
-        dropPct >= rules.newSignal.priceDropPct &&
-        (alreadyNotified == null || recentLow < alreadyNotified)
-      ) {
-        signalNote = `${last.sentDate} 이후 신저가 ${eok(recentLow)}(직전 중간 대비 ${dropPct.toFixed(1)}%↓)`;
+      const alreadyLow = notifiedLowByKey.get(a.key);
+      // ② 거래량 급증 — 최근 30일은 신고 미완이라 확정 구간(30일 이전)끼리 비교
+      const lagMs = 30 * 86_400_000;
+      const recVol = a.recentTrades.filter((t) => t.ms > nowMs - lagMs - wMs && t.ms <= nowMs - lagMs).length;
+      const priorVol = a.recentTrades.filter((t) => t.ms > nowMs - lagMs - 2 * wMs && t.ms <= nowMs - lagMs - wMs).length;
+      const alreadyVol = notifiedVolByKey.get(a.key) ?? 0;
+      // ③ 신고가 — 단지 "자신의 이전 최고가"(window 밖 거래)를 실제로 넘어야 함.
+      //    발송 중간값과 비교하면 큰 평형 거래가 항상 '상승'으로 오탐(+71% 같은 허수)된다.
+      const olderTrades = a.recentTrades.filter((t) => nowMs - t.ms > wMs);
+      const prevMax = olderTrades.length >= 3 ? Math.max(...olderTrades.map((t) => t.price)) : Infinity;
+      const recentHigh = Math.max(...a.recentTrades.filter((t) => nowMs - t.ms <= wMs).map((t) => t.price), 0);
+      const risePct = prevMax !== Infinity ? ((recentHigh - prevMax) / prevMax) * 100 : 0;
+      const alreadyHigh = notifiedHighByKey.get(a.key) ?? 0;
+
+      if (recentLow !== Infinity && dropPct >= rules.newSignal.priceDropPct && (alreadyLow == null || recentLow < alreadyLow)) {
+        signalNote = `🔻 ${last.sentDate} 이후 신저가 ${eok(recentLow)}(직전 중간 대비 ${dropPct.toFixed(1)}%↓) — 급매 신호`;
         signalLowManwon = recentLow;
+      } else if (recVol >= 4 && recVol >= 2 * Math.max(1, priorVol) && recVol > alreadyVol) {
+        signalNote = `📈 거래량 급증 — 신고확정 기준 직전 ${wDays}일 ${priorVol}건 → 최근 ${wDays}일 ${recVol}건 (매수세 유입)`;
+        signalTag = `vol:${recVol}`;
+      } else if (prevMax !== Infinity && recentHigh > prevMax && risePct >= 1 && recentHigh > alreadyHigh) {
+        signalNote = `📈 ${rules.filters.lookbackDays}일 내 신고가 경신 ${eok(recentHigh)}(직전 최고 ${eok(prevMax)} 대비 +${risePct.toFixed(1)}%) — 상승 모멘텀·추격매수 주의`;
+        signalTag = `high:${recentHigh}`;
       } else {
-        continue; // 쿨다운 — 제외
+        continue; // 쿨다운 — 새 신호 없음
       }
     }
 
@@ -340,7 +387,8 @@ export async function buildDailyRecommendations(
       continue;
     }
 
-    const score = Math.round((tierPts + liq + budgetPts + fresh.score + heat + jeonsePts) * 10) / 10;
+    const fbPts = fbLike.has(a.key) ? 5 : 0; // 관심 피드백 가점
+    const score = Math.round((tierPts + liq + budgetPts + fresh.score + heat + jeonsePts + fbPts) * 10) / 10;
 
     const minA = a.areas.length ? Math.round(Math.min(...a.areas)) : 0;
     const maxA = a.areas.length ? Math.round(Math.max(...a.areas)) : 0;
@@ -354,7 +402,8 @@ export async function buildDailyRecommendations(
     if (fresh.label) reasons.push(fresh.label);
     if (jeonseRatioPct >= 65) reasons.push(`전세가율 ${jeonseRatioPct}% — 2년 실거주 후 임대전환 유리(전세수요 강·재투자 갭 작음)`);
     if ((regionHeat[a.gu] ?? 0) >= 4) reasons.push(`${a.gu} 2026 상반기 상승 모멘텀 상위 권역`);
-    if (signalNote) reasons.push(`🔻 ${signalNote}`);
+    if (fbPts) reasons.push('❤️ 관심 표시 단지 — 사용자 피드백 가점 +5');
+    if (signalNote) reasons.push(signalNote); // 아이콘은 신호 생성부에서 유형별(🔻급매·📈모멘텀) 부여
 
     const cautions: string[] = [];
     if (!inComfortable) cautions.push(`오늘 자기자본권(${eok(comfortable)}) 초과 — 2년 적립 또는 마통 해지로 도달`);
@@ -382,6 +431,7 @@ export async function buildDailyRecommendations(
       isNew,
       signalNote,
       signalLowManwon,
+      signalTag,
       regulationLabel: reg.label,
       regulationSources: reg.sourceUrls,
     });
@@ -444,6 +494,7 @@ export async function buildDailyRecommendations(
     const spScored: DailyReco[] = [];
     for (const a of aggsWide.values()) {
       if (a.prices.length < rules.filters.minTrades180d) continue;
+      if (fbBan.has(a.key)) { fbBannedSkipped++; continue; } // 사용자 제외 피드백
       const reg = regulationOf(a.gu);
       if (reg.status === 'unverified') {
         skippedUnverifiedGu.add(a.gu);
@@ -473,7 +524,7 @@ export async function buildDailyRecommendations(
         recordExcluded(a.key, { name: a.name, gu: a.gu, dong: a.dong, flags: dFlags.map((f) => f.label) });
         continue;
       }
-      const score = Math.round((tier * rules.weights.tierMultiplier + liq + fresh.score + heat + jeonsePts) * 10) / 10;
+      const score = Math.round((tier * rules.weights.tierMultiplier + liq + fresh.score + heat + jeonsePts + (fbLike.has(a.key) ? 5 : 0)) * 10) / 10;
 
       const overComfort = med - comfortable;
       const monthlyPayAdd = Math.round(overComfort * monthlyPaymentPerWon(loanRate, loanTerm));
@@ -566,6 +617,7 @@ export async function buildDailyRecommendations(
     for (const a of aggs.values()) {
       if (!nonRegGus.has(a.gu)) continue;
       if (a.prices.length < gapCfg.minTrades) continue;
+      if (fbBan.has(a.key)) { fbBannedSkipped++; continue; } // 사용자 제외 피드백
       if (pickedKeys.has(a.key)) continue; // 메인 추천과 중복 제외
       if (lastSentByKey.has(a.key)) continue; // 쿨다운(2026-08-05 추가) — 갭 트랙도 14일 로테이션 적용, 같은 단지 매일 반복 방지
       a.prices.sort((x, y) => x - y);
@@ -648,9 +700,10 @@ export async function buildDailyRecommendations(
     ? ` · ⛔ 규제 미검증 지역 제외: ${[...skippedUnverifiedGu].join(', ')}(config/region-regulation.json 검증 후 편입)`
     : '';
   const flagNote = excluded.length ? ` · 🚩 하방 플래그 제외 ${excluded.length}건` : '';
+  const fbNote = fbBannedSkipped ? ` · 🚫 사용자 제외 ${fbBannedSkipped}건` : '';
   const note = items.length
-    ? `${items.length}건 추천 (신규 ${items.filter((x) => x.isNew).length} · 재등장 ${items.filter((x) => !x.isNew).length})${stretchPlus.length ? ` · 스트레치+ ${stretchPlus.length}건` : ''}${gapTrack.length ? ` · 갭투자 트랙 ${gapTrack.length}건` : ''}${gateNote}${flagNote}`
-    : `오늘은 규칙을 통과한 신규 후보가 없습니다(최근 14일 추천분 쿨다운). 시장 변화 시 재등장합니다.${gateNote}${flagNote}`;
+    ? `${items.length}건 추천 (신규 ${items.filter((x) => x.isNew).length} · 재등장 ${items.filter((x) => !x.isNew).length})${stretchPlus.length ? ` · 스트레치+ ${stretchPlus.length}건` : ''}${gapTrack.length ? ` · 갭투자 트랙 ${gapTrack.length}건` : ''}${gateNote}${flagNote}${fbNote}`
+    : `오늘은 규칙을 통과한 신규 후보가 없습니다(최근 14일 추천분 쿨다운). 시장 변화 시 재등장합니다.${gateNote}${flagNote}${fbNote}`;
 
   return { asOf: todayStr, items, stretchPlus, gapTrack, excluded, note, scanned: aggs.size };
 }

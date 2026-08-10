@@ -11,7 +11,8 @@ export const metadata = { title: '카드뉴스 | 뉴스 다이제스트' };
 interface CardSet { date: string; series?: string; dir?: string; files: string[]; picks: string[]; caption?: string }
 
 const dirOf = (s: CardSet) => s.dir ?? s.date;
-const seriesLabel = (s?: string) => (s === 'price8' ? '6~8억 큐레이션' : s === 'price9' ? '8~9억 큐레이션' : s === 'briefing' ? '호재·정책 브리핑' : '6억 이하 큐레이션');
+const seriesLabel = (s?: string) =>
+  s === 'price8' ? '6~8억 큐레이션' : s === 'price9' ? '8~9억 큐레이션' : s === 'price12' ? '9~12억 큐레이션 (부모님 찬스)' : s === 'briefing' ? '호재·정책 브리핑' : '6억 이하 큐레이션';
 
 function loadIndex(): CardSet[] {
   try {
@@ -59,7 +60,7 @@ export default async function CardnewsPage({ searchParams }: { searchParams?: Pr
       <div className="mb-3">
         <div className="mb-1.5 text-xs font-semibold text-gray-500">오늘 데이터로 새로 생성 — 가격대 선택 (약 1~2분 · 완료 시 텔레그램 알림)</div>
         <div className="flex flex-wrap items-center gap-2">
-          {([['price6', '6억 이하'], ['price8', '6~8억'], ['price9', '8~9억'], ['briefing', '호재·정책 브리핑']] as const).map(([key, label]) => (
+          {([['price6', '6억 이하'], ['price8', '6~8억'], ['price9', '8~9억'], ['price12', '9~12억'], ['briefing', '호재·정책 브리핑']] as const).map(([key, label]) => (
             <form key={key} action={generateCardnews}>
               <input type="hidden" name="series" value={key} />
               <PendingButton pendingLabel="시작 중…" className="rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700">

@@ -46,3 +46,4 @@ docs/region-affordability-*.md
 docs/goals/
 output/
 config/persona-recos.json
+config/reco-feedback.json

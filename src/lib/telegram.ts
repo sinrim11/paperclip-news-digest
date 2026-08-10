@@ -41,10 +41,13 @@ function postJson(url: string, body: unknown, timeoutMs: number): Promise<{ stat
   });
 }
 
-export async function sendTelegram(text: string): Promise<boolean> {
+export interface InlineButton { text: string; callback_data: string }
+
+export async function sendTelegram(text: string, buttons?: InlineButton[][]): Promise<boolean> {
   if (!BOT_TOKEN || !CHAT_ID) return false;
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-  const body = { chat_id: CHAT_ID, text, disable_web_page_preview: true };
+  const body: Record<string, unknown> = { chat_id: CHAT_ID, text, disable_web_page_preview: true };
+  if (buttons?.length) body.reply_markup = { inline_keyboard: buttons }; // 추천 피드백 버튼(2026-08-11)
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const { status, json } = await postJson(url, body, 10_000);
