@@ -8,6 +8,8 @@
  *  - 근본 해결(사용자 조치)은 report/platform-v2-final-2026-07-08.md 하단: CRON_SECRET 실값 설정 +
  *    Cloudflare 라우트 축소(/api/cardnews/*) 또는 Access 부착. 해결 후엔 이 미들웨어를 제거해도 됨.
  *  - 원격에서 변경 작업이 정말 필요하면 .env에 ALLOW_TUNNEL_MUTATIONS=true (비권장 — Access 부착 후에만).
+ *  - 2026-08-10: 관리자 쿠키 게이트 추가 — /api/admin/login?token=<ADMIN_TOKEN> 을 한 번 열면
+ *    그 기기(쿠키 nd_admin)에 한해 터널 경유 변경 요청 허용. 익명 공개 접근은 계속 403.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
@@ -17,8 +19,10 @@ export function middleware(req: NextRequest) {
   if (SAFE_METHODS.has(req.method)) return NextResponse.next();
   if (process.env.ALLOW_TUNNEL_MUTATIONS === 'true') return NextResponse.next();
   if (req.headers.get('cf-ray') || req.headers.get('cf-connecting-ip')) {
+    const adminToken = process.env.ADMIN_TOKEN;
+    if (adminToken && req.cookies.get('nd_admin')?.value === adminToken) return NextResponse.next();
     return NextResponse.json(
-      { error: '외부(터널) 경유 변경 요청이 차단되었습니다 — 로컬(:3200)에서 실행하세요. (보안 완화 2026-07-08, src/middleware.ts)' },
+      { error: '외부(터널) 경유 변경 요청이 차단되었습니다 — /api/admin/login?token=… 으로 이 기기를 인증하거나 로컬(:3200)에서 실행하세요. (src/middleware.ts)' },
       { status: 403 },
     );
   }

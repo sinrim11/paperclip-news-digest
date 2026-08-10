@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
 import { Suspense } from 'react';
+import { BuildGuard } from '@/components/BuildGuard';
 import { NavLinks } from '@/components/NavLinks';
 import { SearchBar } from '@/components/SearchBar';
 import './globals.css';
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
         <main id="main-content" className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+        <BuildGuard />
       </body>
     </html>
   );
