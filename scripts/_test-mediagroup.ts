@@ -4,7 +4,7 @@ import { join } from 'path';
 async function main() {
   const token = process.env.TELEGRAM_BOT_TOKEN, chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) throw new Error('env 없음');
-  const date = '2026-08-10';
+  const date = process.argv[2] ?? '2026-08-10';
   const idx = JSON.parse(readFileSync(join(process.cwd(), 'output', 'cardnews', 'index.json'), 'utf-8'));
   const set = idx.find((s: { dir?: string; date: string }) => (s.dir ?? s.date) === date);
   if (!set) throw new Error('세트 없음');
