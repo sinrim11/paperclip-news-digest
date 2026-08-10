@@ -11,6 +11,20 @@ import { publishCardnewsCarousel, retryPendingPublish } from '@/lib/instagram';
 
 const exec = promisify(execFile);
 
+/** 텔레그램 API 호출 재시도 — IPv6 라우트 부재 환경의 간헐 ETIMEDOUT 흡수(2026-08-10, telegram.ts와 동일 사유) */
+async function fetchRetry(url: string, init: RequestInit, attempts = 3): Promise<Response> {
+  let lastErr: unknown;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      return await fetch(url, { ...init, signal: AbortSignal.timeout(30_000) });
+    } catch (e) {
+      lastErr = e;
+      if (i < attempts) await new Promise((r) => setTimeout(r, 1500 * i));
+    }
+  }
+  throw lastErr;
+}
+
 /** 게시 차단으로 보존된 컨테이너의 게시만 재시도 */
 export async function retryInstagramPublish() {
   try {
@@ -75,12 +89,12 @@ export async function sendCardnewsToTelegram(formData: FormData) {
       const buf = readFileSync(join(process.cwd(), 'output', 'cardnews', date, set.files[i]));
       form.set(`f${i}`, new Blob([new Uint8Array(buf)], { type: 'image/png' }), set.files[i]);
     }
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMediaGroup`, { method: 'POST', body: form });
+    const res = await fetchRetry(`https://api.telegram.org/bot${token}/sendMediaGroup`, { method: 'POST', body: form });
     const j = await res.json();
     if (!j.ok) throw new Error(j.description ?? 'telegram 오류');
     // 인스타 캡션도 텍스트로 함께 발송 — 폰에서 복사→붙여넣기 동선
     if (set.caption) {
-      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      await fetchRetry(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_id: chatId, text: `📝 인스타 본문(복사해서 사용)\n\n${set.caption}` }),

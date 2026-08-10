@@ -15,7 +15,7 @@ import { mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { PrismaClient } from '@prisma/client';
 import { radarScore, RADAR_PART_META } from '../src/lib/radar-score';
-import { allFactors, momentumAsOf, type MomentumFactor } from '../src/lib/momentum';
+import { allFactors, momentumAsOf, recoFactorsFor, type MomentumFactor } from '../src/lib/momentum';
 import { LAWD_GU } from '../src/lib/tiers';
 
 /** 실거래·전세 조인은 지역(lawdCd) 스코프 필수 — 단지명만으로 조인하면 타 지역 동명 단지(현대6차 등)가 섞인다(2026-08-10 교정). */
@@ -66,7 +66,22 @@ interface SharePick {
   score: number; parts: { gap: number; liq: number; fresh: number; jeonse: number };
   facts: string[]; // 수치 기반 객관 서술
   listings: Array<{ price: number; exclusiveArea: number | null; floor: string | null }>;
+  factor?: { certainty: string; title: string; expected: string; srcDomain: string } | null; // 지역 호재(확정·진행만, momentum-factors — 정부·공식 발표 근거)
 }
+
+/** 정책 동향·전망 카드 데이터 — 일일 시장리서치(market-context.json, 출처 URL 동반). 개인 예산(budgetReality)은 공유 콘텐츠라 미사용. */
+interface MarketCtx {
+  asOf?: string;
+  regime?: string;
+  rate?: { base?: number; direction?: string; note?: string };
+  policy?: { note?: string };
+  cautions?: string[];
+  sources?: Array<{ title: string; url: string }>;
+}
+function loadMarketCtx(): MarketCtx | null {
+  try { return JSON.parse(readFileSync(join(process.cwd(), 'config', 'market-context.json'), 'utf-8')) as MarketCtx; } catch { return null; }
+}
+const domainOf = (u: string) => u.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
 
 /* ── 스타일 ── */
 const baseCss = `
@@ -198,8 +213,43 @@ function itemHtml(p: SharePick, rank: number, page: number, total: number): stri
 
     <div style="margin-top:32px;padding:28px 32px;background:#F8FAFC;border-radius:20px">${scoreBarHtml(p.parts, p.score)}</div>
     <div style="margin-top:28px;display:flex;flex-direction:column;gap:12px">${facts}</div>
+    ${p.factor
+      ? `<div style="margin-top:20px;display:flex;gap:14px;align-items:flex-start;padding:22px 26px;background:#FFFBEB;border:2px solid #FDE68A;border-radius:16px">
+           <span style="font-size:26px">🚧</span>
+           <div style="font-size:26px;line-height:1.5;color:#78350F"><b>[${p.factor.certainty}]</b> ${p.factor.title} — ${p.factor.expected}
+             <span style="color:#B45309">· 근거: ${p.factor.srcDomain}</span></div>
+         </div>`
+      : ''}
     <div style="margin-top:24px;display:flex;flex-wrap:wrap;gap:12px">${chips}</div>
-    <div class="foot">수도권 ${CAP_LABEL} · 300세대+ 전수 스캔 — 국토부 실거래 × 네이버 호가 · 투자 자문 아님 · 현장 확인 필수</div>
+    <div class="foot">수도권 ${CAP_LABEL} · 300세대+ 전수 스캔 — 국토교통부 실거래가 공개시스템(rt.molit.go.kr) × 네이버부동산 호가 · ${today} 기준 · 투자 자문 아님 · 현장 확인 필수</div>
+  </div>`;
+}
+
+/** 정책 동향·전망 카드(2026-08-10) — 일일 리서치 결과를 출처와 함께: 금리·정책 방향·체크포인트 */
+function outlookHtml(ctx: MarketCtx, page: number, total: number): string {
+  const dirLabel = ctx.rate?.direction === 'up' ? ['인상 국면', '#DC2626'] : ctx.rate?.direction === 'down' ? ['인하 국면', '#16A34A'] : ['동결 국면', '#94A3B8'];
+  const cautions = (ctx.cautions ?? []).slice(0, 3).map((c) =>
+    `<div style="display:flex;gap:14px;font-size:27px;line-height:1.55;color:#CBD5E1"><span style="color:#F59E0B;font-weight:800">!</span><span>${c}</span></div>`).join('');
+  const srcs = (ctx.sources ?? []).slice(0, 4).map((s) =>
+    `<div style="font-size:23px;color:#94A3B8;line-height:1.5">· ${s.title} <span style="color:#64748B">(${domainOf(s.url)})</span></div>`).join('');
+  return `<style>${baseCss}</style><div class="card dark">
+    ${brandBar(page, total)}
+    <div style="font-size:64px;font-weight:800;margin-top:56px">정책 동향 · 전망</div>
+    <div style="font-size:28px;color:#94A3B8;margin-top:14px">일일 자동 리서치 · ${ctx.asOf ?? today} 기준 — 전 항목 출처 명시</div>
+    <div style="display:flex;gap:18px;margin-top:40px">
+      <div style="flex:1;background:#1E293B;border-radius:18px;padding:26px 30px">
+        <div style="font-size:25px;color:#94A3B8;font-weight:700">한은 기준금리</div>
+        <div class="num" style="font-size:52px;font-weight:800;margin-top:6px">${ctx.rate?.base != null ? ctx.rate.base + '%' : '—'} <span style="font-size:28px;color:${dirLabel[1]}">${dirLabel[0]}</span></div>
+      </div>
+    </div>
+    ${ctx.policy?.note ? `<div style="margin-top:26px;font-size:29px;line-height:1.6;color:#E2E8F0">${ctx.policy.note.slice(0, 190)}${ctx.policy.note.length > 190 ? '…' : ''}</div>` : ''}
+    <div style="margin-top:34px;font-size:27px;font-weight:800;color:#F59E0B">매수 전 체크포인트</div>
+    <div style="margin-top:16px;display:flex;flex-direction:column;gap:14px">${cautions}</div>
+    <div style="margin-top:auto;padding-top:28px;border-top:2px solid #1E293B">
+      <div style="font-size:24px;font-weight:700;color:#64748B;margin-bottom:10px">📎 출처</div>
+      ${srcs}
+    </div>
+    <div class="foot" style="color:#64748B">전망·해석은 인용 보도 기준이며 확정이 아닙니다 — 발표 시 수치가 바뀔 수 있습니다</div>
   </div>`;
 }
 
@@ -391,7 +441,10 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
       listings: ((c.listings as unknown as Array<{ price: number; exclusiveArea: number | null; floor: string | null }>) ?? []),
     };
     const s = radarScore({ household: base.household, elapsedYear: base.elapsedYear, far: base.far, dealArticles: base.dealArticles, gapPct: base.gapPct, jeonseRatioPct: base.jeonseRatioPct, tradeCount: base.tradeCount });
-    return { ...base, ...s };
+    // 지역 호재(확정·진행만) — 정부·공식 발표 근거 URL 동반(momentum-factors)
+    const mf = recoFactorsFor(c.gu, c.dong)[0];
+    const factor = mf ? { certainty: mf.certainty, title: mf.title, expected: mf.expected, srcDomain: mf.sourceUrls[0] ? domainOf(mf.sourceUrls[0]) : '공식 발표' } : null;
+    return { ...base, ...s, factor };
   });
   picks.sort((a, b) => b.score - a.score || (a.gapPct ?? 99) - (b.gapPct ?? 99));
   // 같은 동 도배 방지: 동별 최대 2곳
@@ -407,27 +460,30 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
     if (top.length >= 5) break;
   }
 
-  // 2026-08-10 개편: 자기홍보성 아웃트로 제거 → TOP5 정량 비교표(2p)로 대체 — "선택"을 위한 정보 밀도 우선
-  const total = 9;
+  // 2026-08-10 개편: 자기홍보성 아웃트로 제거 → TOP5 정량 비교표(2p) + 정책 동향·전망(10p, 출처 동반) — "선택"을 위한 정보 밀도 우선
+  const ctx = loadMarketCtx();
+  const total = ctx ? 10 : 9;
   const pages: string[] = [coverHtml(scanned.length, pool.length, total, guCount)];
   const names: string[] = ['01-cover'];
   pages.push(compareHtml(top, 2, total)); names.push('02-compare');
   top.forEach((p, i) => { pages.push(itemHtml(p, i + 1, i + 3, total)); names.push(`0${i + 3}-pick${i + 1}`); });
   pages.push(methodHtml(8, total, pool.length, guCount)); names.push('08-method');
   pages.push(policyHtml(9, total)); names.push('09-policy');
+  if (ctx) { pages.push(outlookHtml(ctx, 10, total)); names.push('10-outlook'); }
 
   // ── 인스타 캡션 — 카드와 동일 데이터·수치 중심 ──
   const capLines = top.map((p, i) =>
-    `${i + 1}. ${p.name} (${p.gu} ${p.dong}) — 호가 ${eok(p.minPrice)}${p.tradeMedian ? ` · 실거래 ${eok(p.tradeMedian)}(${p.tradeCount}건, 갭 ${p.gapPct! >= 0 ? '+' : ''}${p.gapPct}%)` : ''}${p.pyeongManwon ? ` · 평단 ${p.pyeongManwon.toLocaleString()}만` : ''}${p.trendPct != null ? ` · 추이 ${p.trendPct > 0 ? '▲' : p.trendPct < 0 ? '▼' : ''}${Math.abs(p.trendPct)}%` : ''}${p.jeonseRatioPct ? ` · 전세가율 ${p.jeonseRatioPct}%` : ''} · 지수 ${p.score}`).join('\n');
+    `${i + 1}. ${p.name} (${p.gu} ${p.dong}) — 호가 ${eok(p.minPrice)}${p.tradeMedian ? ` · 실거래 ${eok(p.tradeMedian)}(${p.tradeCount}건, 갭 ${p.gapPct! >= 0 ? '+' : ''}${p.gapPct}%)` : ''}${p.pyeongManwon ? ` · 평단 ${p.pyeongManwon.toLocaleString()}만` : ''}${p.trendPct != null ? ` · 추이 ${p.trendPct > 0 ? '▲' : p.trendPct < 0 ? '▼' : ''}${Math.abs(p.trendPct)}%` : ''}${p.jeonseRatioPct ? ` · 전세가율 ${p.jeonseRatioPct}%` : ''} · 지수 ${p.score}${p.factor ? `\n   🚧 [${p.factor.certainty}] ${p.factor.title} (근거: ${p.factor.srcDomain})` : ''}`).join('\n');
+  const ctxSrcLines = (ctx?.sources ?? []).slice(0, 3).map((s) => `· ${s.title} — ${s.url}`).join('\n');
   const caption = `🏠 수도권 ${CAP_LABEL} 아파트 레이더 TOP 5 (${today.replaceAll('-', '.')})
 
 수집권 ${guCount}개 구·시의 300세대 이상 ${scanned.length.toLocaleString()}개 단지를 전수 스캔해 공개 데이터 지표(실거래 갭 40 · 유동성 30 · 연식/용적률 15 · 전세가율 15)로만 채점했습니다. 특정인의 예산·취향 기준이 아니며, 가격대 컷(${CAP_LABEL}) 밖 단지는 포함되지 않습니다.
 
 ${capLines}
 
-📊 원천: 국토교통부 실거래가(공공) × 네이버부동산 호가 — 매일 같은 규칙으로 자동 채점.
-
-⚠️ 정보 공유이며 투자 자문이 아닙니다. 매수 전 반드시 현장 확인·전문가 상담을 거치세요.
+📊 원천: 국토교통부 실거래가 공개시스템(rt.molit.go.kr) × 네이버부동산 호가 — 매일 같은 규칙으로 자동 채점. 호재는 정부·공식 발표(착공·승인 단계만) 근거.
+${ctxSrcLines ? `\n📰 정책·시장 참고(${ctx?.asOf ?? today} 리서치):\n${ctxSrcLines}\n` : ''}
+⚠️ 정보 공유이며 투자 자문이 아닙니다. 전망은 인용 보도 기준으로 확정이 아니며, 매수 전 반드시 현장 확인·전문가 상담을 거치세요.
 
 #부동산 #아파트 #내집마련 #서울아파트 #${CAP_LABEL.replace(' ', '')} #실거래가 #부동산데이터 #재테크 #부동산공부 #무주택자`;
 

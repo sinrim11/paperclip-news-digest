@@ -9,6 +9,7 @@ const LINKS = [
   { href: '/weekly', label: '주간' },
   { href: '/strategy', label: '투자 전략' },
   { href: '/recommend', label: '추천 매물' },
+  { href: '/regions', label: '구별 예산맵' },
   { href: '/candidates', label: '매물 후보' },
   { href: '/listings', label: '전체 매물' },
   { href: '/matching', label: '매수 분석' },
