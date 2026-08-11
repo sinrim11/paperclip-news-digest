@@ -190,7 +190,7 @@ export async function buildDailyRecommendations(
     if (v?.status === 'ban') fbBan.add(k);
     else if (v?.status === 'like') fbLike.add(k);
   }
-  let fbBannedSkipped = 0;
+  const fbBannedKeys = new Set<string>();
 
   // 부모님 찬스(2026-08-10) — reader-profile contingencySupport.가족지원(원)을 만원으로 환산.
   // 스트레치+ 상한을 "본인 스트레치 + 부모님 지원"까지 동적 확장해 서울 상위 가격대까지 검토권 편입.
@@ -303,7 +303,7 @@ export async function buildDailyRecommendations(
   };
   for (const a of aggs.values()) {
     if (a.prices.length < rules.filters.minTrades180d) continue;
-    if (fbBan.has(a.key)) { fbBannedSkipped++; continue; } // 사용자 제외 피드백
+    if (fbBan.has(a.key)) { fbBannedKeys.add(a.key); continue; } // 사용자 제외 피드백
     const reg = regulationOf(a.gu);
     if (reg.status === 'unverified') {
       skippedUnverifiedGu.add(a.gu);
@@ -494,7 +494,7 @@ export async function buildDailyRecommendations(
     const spScored: DailyReco[] = [];
     for (const a of aggsWide.values()) {
       if (a.prices.length < rules.filters.minTrades180d) continue;
-      if (fbBan.has(a.key)) { fbBannedSkipped++; continue; } // 사용자 제외 피드백
+      if (fbBan.has(a.key)) { fbBannedKeys.add(a.key); continue; } // 사용자 제외 피드백
       const reg = regulationOf(a.gu);
       if (reg.status === 'unverified') {
         skippedUnverifiedGu.add(a.gu);
@@ -617,7 +617,7 @@ export async function buildDailyRecommendations(
     for (const a of aggs.values()) {
       if (!nonRegGus.has(a.gu)) continue;
       if (a.prices.length < gapCfg.minTrades) continue;
-      if (fbBan.has(a.key)) { fbBannedSkipped++; continue; } // 사용자 제외 피드백
+      if (fbBan.has(a.key)) { fbBannedKeys.add(a.key); continue; } // 사용자 제외 피드백
       if (pickedKeys.has(a.key)) continue; // 메인 추천과 중복 제외
       if (lastSentByKey.has(a.key)) continue; // 쿨다운(2026-08-05 추가) — 갭 트랙도 14일 로테이션 적용, 같은 단지 매일 반복 방지
       a.prices.sort((x, y) => x - y);
@@ -700,7 +700,7 @@ export async function buildDailyRecommendations(
     ? ` · ⛔ 규제 미검증 지역 제외: ${[...skippedUnverifiedGu].join(', ')}(config/region-regulation.json 검증 후 편입)`
     : '';
   const flagNote = excluded.length ? ` · 🚩 하방 플래그 제외 ${excluded.length}건` : '';
-  const fbNote = fbBannedSkipped ? ` · 🚫 사용자 제외 ${fbBannedSkipped}건` : '';
+  const fbNote = fbBannedKeys.size ? ` · 🚫 사용자 제외 ${fbBannedKeys.size}개 단지` : '';
   const note = items.length
     ? `${items.length}건 추천 (신규 ${items.filter((x) => x.isNew).length} · 재등장 ${items.filter((x) => !x.isNew).length})${stretchPlus.length ? ` · 스트레치+ ${stretchPlus.length}건` : ''}${gapTrack.length ? ` · 갭투자 트랙 ${gapTrack.length}건` : ''}${gateNote}${flagNote}${fbNote}`
     : `오늘은 규칙을 통과한 신규 후보가 없습니다(최근 14일 추천분 쿨다운). 시장 변화 시 재등장합니다.${gateNote}${flagNote}${fbNote}`;
