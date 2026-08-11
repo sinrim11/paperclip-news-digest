@@ -70,16 +70,11 @@ fi
 rm -f "$TMP"
 
 # 자율 작업 보고(2026-08-05 지시) — 오늘의 시장 컨텍스트 갱신 결과를 텔레그램으로 보고
+# 1~2줄 요약(2026-08-11 다이어트)
 MSG=$(node -e '
   const c = JSON.parse(require("fs").readFileSync("config/market-context.json","utf8"));
   const fresh = c.asOf === process.argv[1];
-  const lines = fresh
-    ? ["🤖 자동리서치 보고 — 시장 컨텍스트 갱신 (07:00)",
-       `· 국면: ${c.regime}`,
-       `· 기준금리: ${c.rate?.base}% (${c.rate?.direction === "up" ? "인상" : c.rate?.direction === "down" ? "인하" : "동결"} 방향)`,
-       `· 정책: ${(c.policy?.note ?? "").slice(0, 120)}`,
-       `· 예산 상한: 안전 ${(c.budgetReality?.comfortableCeilingManwon/10000).toFixed(1)}억 · 스트레치 ${(c.budgetReality?.stretchCeilingManwon/10000).toFixed(1)}억`,
-       `· 출처 ${c.sources?.length ?? 0}건 대조`]
-    : ["⚠️ 자동리서치 보고 — 오늘 시장 컨텍스트 갱신 실패, 기존(" + c.asOf + ") 유지. 로그 확인 필요"];
-  console.log(lines.join("\n"));
+  console.log(fresh
+    ? `🤖 07:00 시장리서치 — 기준금리 ${c.rate?.base}%(${c.rate?.direction === "up" ? "인상" : c.rate?.direction === "down" ? "인하" : "동결"}) · 예산 ${(c.budgetReality?.comfortableCeilingManwon/10000).toFixed(1)}~${(c.budgetReality?.stretchCeilingManwon/10000).toFixed(1)}억 · 출처 ${c.sources?.length ?? 0}건\n${(c.regime ?? "").slice(0, 80)}`
+    : "⚠️ 07:00 시장리서치 실패 — 기존(" + c.asOf + ") 유지");
 ' "$TODAY" 2>>"$LOG") && npx tsx scripts/notify-telegram.ts "$MSG" >> "$LOG" 2>&1 || true

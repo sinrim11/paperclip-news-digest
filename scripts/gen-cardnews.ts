@@ -17,6 +17,17 @@ import { PrismaClient } from '@prisma/client';
 import { radarScore } from '../src/lib/radar-score';
 import { allFactors, momentumAsOf, recoFactorsFor, type MomentumFactor } from '../src/lib/momentum';
 import { LAWD_GU } from '../src/lib/tiers';
+import { monthlyPaymentPerWon } from '../src/lib/tracker';
+
+/**
+ * 자금 계획(공개 프레임, 2026-08-11) — 첫 내집마련자의 1번 질문 "현금 얼마·월 얼마?"에 답한다.
+ * 특정 개인이 아닌 생애최초 무주택 일반 가정: LTV 70%·수도권 한도 6억·금리 4.5%·30년 원리금균등.
+ */
+const FUND = { ltv: 0.7, capManwon: 60000, ratePct: 4.5, termYears: 30 };
+function fundingOf(priceManwon: number): { loan: number; cash: number; monthly: number } {
+  const loan = Math.min(Math.floor(priceManwon * FUND.ltv), FUND.capManwon);
+  return { loan, cash: priceManwon - loan, monthly: Math.round(loan * monthlyPaymentPerWon(FUND.ratePct, FUND.termYears)) };
+}
 
 /** 실거래·전세 조인은 지역(lawdCd) 스코프 필수 — 단지명만으로 조인하면 타 지역 동명 단지(현대6차 등)가 섞인다(2026-08-10 교정). */
 const GU_TO_LAWD: Record<string, string> = Object.fromEntries(Object.entries(LAWD_GU).map(([cd, gu]) => [gu, cd]));
@@ -128,7 +139,7 @@ function coverHtml(scanned: number, passed: number, total: number, guCount: numb
     <div style="margin-top:150px">
       <div style="font-size:38px;font-weight:700;color:#60A5FA;letter-spacing:0.06em">DATA RADAR</div>
       <div style="font-size:96px;font-weight:800;line-height:1.18;margin-top:26px">수도권 <span style="color:#60A5FA">${CAP_LABEL}</span><br/>아파트 레이더 TOP 5</div>
-      <div style="font-size:34px;color:#CBD5E1;margin-top:42px;line-height:1.65">수집권 ${guCount}개 구·시 · 300세대+ <b style="color:#fff">${scanned.toLocaleString()}곳 전수 스캔</b> → 통과 ${passed.toLocaleString()}곳<br/>실거래 갭 · 거래량 · 전세가율 · 연식/용적률, <b style="color:#fff">공개 데이터 지표</b>로만 채점</div>
+      <div style="font-size:34px;color:#CBD5E1;margin-top:42px;line-height:1.65">${guCount}개 구·시 <b style="color:#fff">${scanned.toLocaleString()}곳 스캔</b> → ${passed.toLocaleString()}곳 통과, 공개 데이터로만 채점<br/><b style="color:#60A5FA">💳 필요 현금·월 상환까지 계산해뒀습니다</b></div>
     </div>
     <div style="margin-top:auto;display:flex;align-items:center;justify-content:space-between">
       <div style="font-size:27px;color:#64748B">국토교통부 실거래가 × 네이버부동산 호가 · 특정인 예산 기준 아님</div>
@@ -198,7 +209,7 @@ function compareHtml(top: SharePick[], page: number, total: number): string {
         <div class="num" style="font-size:29px;font-weight:700">${p.tradeMedian ? eok(p.tradeMedian) : '—'}</div>
         <div style="font-size:21px;margin-top:2px">${gapCell(p.gapPct)}<span style="color:#CBD5E1"> · ${p.tradeCount}건</span></div>
       </div>
-      <div class="num" style="width:132px;font-size:27px;font-weight:700;color:#334155">${p.pyeongManwon ? p.pyeongManwon.toLocaleString() + '만' : '—'}</div>
+      <div class="num" style="width:132px;font-size:27px;font-weight:700;color:#1D4ED8">${fundingOf(p.minPrice).monthly}만</div>
       <div style="width:104px;font-size:27px">${p.jeonseRatioPct != null ? `<span class="num" style="font-weight:700;color:#7C3AED">${p.jeonseRatioPct}%</span>` : '<span style="color:#CBD5E1">—</span>'}</div>
       <div style="width:70px;font-size:26px">${trendCell(p.trendPct)}</div>
     </div>`).join('');
@@ -208,13 +219,13 @@ function compareHtml(top: SharePick[], page: number, total: number): string {
     <div style="font-size:58px;font-weight:800;margin-top:46px">TOP 5 한눈 비교</div>
     <div style="font-size:26px;color:#64748B;margin-top:12px;line-height:1.5">숫자로 먼저 고르세요 — 상세 근거는 다음 장부터 한 단지씩</div>
     <div style="display:flex;margin-top:36px;border-bottom:3px solid #0F172A;padding-bottom:14px">
-      ${th(296, '단지')}${th(140, '최저 호가')}${th(186, '실거래 중간·갭')}${th(132, '평단가')}${th(104, '전세율')}${th(70, '추이')}
+      ${th(296, '단지')}${th(140, '최저 호가')}${th(186, '실거래 중간·갭')}${th(132, '월 상환*')}${th(104, '전세율')}${th(70, '추이')}
     </div>
     ${rows}
     <div style="margin-top:34px;display:flex;flex-direction:column;gap:10px;font-size:24px;color:#475569;line-height:1.5">
       <div>· <b style="color:#16A34A">갭 마이너스</b> = 호가가 최근 실거래보다 낮음 → 급매 가능성(층·향·동 확인 필수)</div>
-      <div>· <b>평단가</b> = 실거래 3.3㎡당 중간값 — 지역·평형이 달라도 비교 가능한 축</div>
-      <div>· <b>추이</b> = 120일 전반 vs 후반 실거래 중간값 변화(<span style="color:#16A34A">▼하락</span>·<span style="color:#DC2626">▲상승</span>, 표본 3건+ 시에만)</div>
+      <div>· <b style="color:#1D4ED8">월 상환*</b> = 생애최초 가정(LTV 70%·한도 6억·금리 4.5%·30년) — 소득·DSR 따라 달라짐</div>
+      <div>· <b>추이</b> = 120일 전반 vs 후반 실거래 중간값 변화(<span style="color:#16A34A">▼하락</span>·<span style="color:#DC2626">▲상승</span>)</div>
     </div>
     <div class="foot">국토교통부 실거래가 × 네이버부동산 호가 · ${CAP_LABEL} · 300세대+ — 투자 자문 아님</div>
   </div>`;
@@ -222,7 +233,6 @@ function compareHtml(top: SharePick[], page: number, total: number): string {
 
 function itemHtml(p: SharePick, rank: number, page: number, total: number): string {
   const gapColor = p.gapPct == null ? '#94A3B8' : p.gapPct <= 2 ? '#16A34A' : p.gapPct > 10 ? '#DC2626' : '#B45309';
-  const chips = p.listings.slice(0, 3).map((l) => `<span class="chip num" style="background:#F1F5F9;color:#334155;font-size:25px;font-weight:600">${eok(l.price)}${l.exclusiveArea ? ` · ${Math.round(l.exclusiveArea)}㎡` : ''}${l.floor ? ` · ${l.floor}` : ''}</span>`).join(' ');
   return `<style>${baseCss}</style><div class="card">
     ${brandBar(page, total)}
     <div style="margin-top:56px;display:flex;align-items:center;gap:22px">
@@ -231,7 +241,7 @@ function itemHtml(p: SharePick, rank: number, page: number, total: number): stri
       ${p.topPct != null ? `<span class="num" style="font-size:27px;font-weight:700;color:#2563EB">${CAP_LABEL} ${p.poolSize?.toLocaleString()}곳 중 상위 ${p.topPct}%</span>` : ''}
     </div>
     <div style="font-size:76px;font-weight:800;letter-spacing:-0.02em;margin-top:20px;line-height:1.15">${p.name}</div>
-    <div style="font-size:31px;color:#64748B;margin-top:14px">${p.gu} ${p.dong} · ${p.household.toLocaleString()}세대${p.elapsedYear != null ? ` · ${p.elapsedYear}년차` : ''}${p.far != null ? ` · 용적률 <b style="color:${p.far <= 180 ? '#16A34A' : '#64748B'}">${Math.round(p.far)}%</b>` : ''}${p.pyeongManwon != null ? ` · 평단 <b class="num" style="color:#0F172A">${p.pyeongManwon.toLocaleString()}만</b>` : ''}</div>
+    <div style="font-size:31px;color:#64748B;margin-top:14px">${p.gu} ${p.dong} · ${p.household.toLocaleString()}세대${p.elapsedYear != null ? ` · ${p.elapsedYear}년차` : ''}</div>
 
     <div style="display:flex;gap:36px;margin-top:44px;align-items:flex-end">
       <div style="flex:1">
@@ -247,15 +257,29 @@ function itemHtml(p: SharePick, rank: number, page: number, total: number): stri
       </div>
     </div>
 
-    <div style="margin-top:40px">${verdictGridHtml(p)}</div>
+    ${(() => {
+      // 💳 자금 계획 — 첫 구매자의 1번 질문. 최저 호가 기준, 생애최초 일반 가정(개인 수치 아님).
+      const f = fundingOf(p.minPrice);
+      return `<div style="margin-top:34px;background:#EFF6FF;border-radius:20px;padding:28px 34px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between">
+          <span style="font-size:27px;font-weight:800;color:#1D4ED8">💳 이 가격이면 (생애최초 가정)</span>
+          <span style="font-size:22px;color:#64748B">최저 호가 ${eok(p.minPrice)} 기준</span>
+        </div>
+        <div style="display:flex;gap:40px;margin-top:16px">
+          <div><div style="font-size:24px;color:#64748B;font-weight:700">필요 현금</div><div class="num" style="font-size:52px;font-weight:800;color:#0F172A">약 ${eok(f.cash)}</div></div>
+          <div><div style="font-size:24px;color:#64748B;font-weight:700">월 상환</div><div class="num" style="font-size:52px;font-weight:800;color:#1D4ED8">약 ${f.monthly}만원</div></div>
+          <div style="flex:1;align-self:flex-end;font-size:22px;color:#94A3B8;line-height:1.5;text-align:right">대출 ${eok(f.loan)} · LTV 70%·한도 6억<br/>금리 4.5%·30년 가정 · 부대비용 별도</div>
+        </div>
+      </div>`;
+    })()}
+    <div style="margin-top:26px">${verdictGridHtml(p)}</div>
     ${p.factor
-      ? `<div style="margin-top:20px;display:flex;gap:14px;align-items:flex-start;padding:22px 26px;background:#FFFBEB;border:2px solid #FDE68A;border-radius:16px">
+      ? `<div style="margin-top:20px;display:flex;gap:14px;align-items:flex-start;padding:20px 26px;background:#FFFBEB;border:2px solid #FDE68A;border-radius:16px">
            <span style="font-size:26px">🚧</span>
-           <div style="font-size:26px;line-height:1.5;color:#78350F"><b>[${p.factor.certainty}]</b> ${p.factor.title} — ${p.factor.expected}
-             <span style="color:#B45309">· 근거: ${p.factor.srcDomain}</span></div>
+           <div style="font-size:25px;line-height:1.5;color:#78350F"><b>[${p.factor.certainty}]</b> ${p.factor.title} — ${p.factor.expected}
+             <span style="color:#B45309">· ${p.factor.srcDomain}</span></div>
          </div>`
       : ''}
-    <div style="margin-top:24px;display:flex;flex-wrap:wrap;gap:12px">${chips}</div>
     <div class="foot">수도권 ${CAP_LABEL} · 300세대+ 전수 스캔 — 국토교통부 실거래가 공개시스템(rt.molit.go.kr) × 네이버부동산 호가 · ${today} 기준 · 투자 자문 아님 · 현장 확인 필수</div>
   </div>`;
 }
@@ -541,21 +565,25 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
   pages.push(policyHtml(9, total)); names.push('09-policy');
   if (ctx) { pages.push(outlookHtml(ctx, 10, total)); names.push('10-outlook'); }
 
-  // ── 인스타 캡션 — 카드와 동일 데이터·수치 중심 ──
-  const capLines = top.map((p, i) =>
-    `${i + 1}. ${p.name} (${p.gu} ${p.dong}) — 호가 ${eok(p.minPrice)}${p.tradeMedian ? ` · 실거래 ${eok(p.tradeMedian)}(${p.tradeCount}건, 갭 ${p.gapPct! >= 0 ? '+' : ''}${p.gapPct}%)` : ''}${p.pyeongManwon ? ` · 평단 ${p.pyeongManwon.toLocaleString()}만` : ''}${p.trendPct != null ? ` · 추이 ${p.trendPct > 0 ? '▲' : p.trendPct < 0 ? '▼' : ''}${Math.abs(p.trendPct)}%` : ''}${p.jeonseRatioPct ? ` · 전세가율 ${p.jeonseRatioPct}%` : ''} · 지수 ${p.score}${p.factor ? `\n   🚧 [${p.factor.certainty}] ${p.factor.title} (근거: ${p.factor.srcDomain})` : ''}`).join('\n');
-  const ctxSrcLines = (ctx?.sources ?? []).slice(0, 3).map((s) => `· ${s.title} — ${s.url}`).join('\n');
-  const caption = `🏠 수도권 ${CAP_LABEL} 아파트 레이더 TOP 5 (${today.replaceAll('-', '.')})
-
-수집권 ${guCount}개 구·시의 300세대 이상 ${scanned.length.toLocaleString()}개 단지를 전수 스캔해 공개 데이터 지표(실거래 갭 40 · 유동성 30 · 연식/용적률 15 · 전세가율 15)로만 채점했습니다. 특정인의 예산·취향 기준이 아니며, 가격대 컷(${CAP_LABEL}) 밖 단지는 포함되지 않습니다.
+  // ── 인스타 캡션 v2(2026-08-11) — 훅 1줄 + 단지당 1줄 + CTA. 근거·출처 상세는 카드에 ──
+  const hookOf = (p: SharePick): string => {
+    if (p.gapPct != null && p.gapPct <= -3) return `실거래보다 ${Math.abs(p.gapPct).toFixed(0)}% 싸게 나옴`;
+    if (p.trendPct != null && p.trendPct <= -3) return `최근 ${Math.abs(p.trendPct).toFixed(0)}% 조정 구간`;
+    if (p.jeonseRatioPct != null && p.jeonseRatioPct >= 70) return `전세가율 ${p.jeonseRatioPct}% 실수요 탄탄`;
+    if (p.tradeCount >= 15) return `120일 ${p.tradeCount}건 거래 활발`;
+    return `현금 약 ${eok(fundingOf(p.minPrice).cash)}이면 시작`;
+  };
+  const capLines = top.map((p, i) => `${i + 1} ${p.name} ${eok(p.minPrice)} — ${hookOf(p)}`).join('\n');
+  const caption = `${CAP_LABEL}로 내 집, 지금 볼만한 5곳 🏠 (${today.slice(5).replace('-', '.')})
 
 ${capLines}
 
-📊 원천: 국토교통부 실거래가 공개시스템(rt.molit.go.kr) × 네이버부동산 호가 — 매일 같은 규칙으로 자동 채점. 호재는 정부·공식 발표(착공·승인 단계만) 근거.
-${ctxSrcLines ? `\n📰 정책·시장 참고(${ctx?.asOf ?? today} 리서치):\n${ctxSrcLines}\n` : ''}
-⚠️ 정보 공유이며 투자 자문이 아닙니다. 전망은 인용 보도 기준으로 확정이 아니며, 매수 전 반드시 현장 확인·전문가 상담을 거치세요.
+💳 필요 현금·월 상환까지 카드에 계산해뒀어요
+📌 저장했다가 임장 갈 때 꺼내보세요
 
-#부동산 #아파트 #내집마련 #서울아파트 #${CAP_LABEL.replace(' ', '')} #실거래가 #부동산데이터 #재테크 #부동산공부 #무주택자`;
+국토부 실거래 × 네이버 호가 · 매일 자동 분석 · 출처는 카드 마지막 장 · 투자 자문 아님
+
+#내집마련 #첫집 #${CAP_LABEL.replace(/[\s~]/g, '')}아파트 #아파트추천 #실거래가 #무주택자 #부동산공부 #신혼집`;
 
   return { pages, names, picks: top.map((p) => `${p.name}(${p.score})`), pickNos: top.map((p) => p.complexNo), caption };
 }

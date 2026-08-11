@@ -138,18 +138,17 @@ checkLog.unshift({
 });
 writeFileSync(CHECK_LOG_PATH, JSON.stringify(checkLog.slice(0, 60), null, 2) + '\n');
 
-// ── 5. 텔레그램 보고 본문 ───────────────────────────────────────────────────
+// ── 5. 텔레그램 보고 본문 — 변경 없음이면 1줄(2026-08-11 다이어트), 변경 시에만 상세 ──
 const checks = Array.isArray(radar.checks) ? radar.checks : [];
 const unchanged = checks.filter((c) => c.status === 'unchanged').length;
-const header =
-  valid.length > 0 || regionChanges.length > 0
-    ? `🏛️ 정책 레이더 보고 (${today}) — 변경 감지`
-    : `🏛️ 정책 레이더 보고 (${today}) — 변경 없음`;
-console.log(
-  [
-    header,
-    `· 점검 항목 ${checks.length}개 중 ${unchanged}개 현행 유지 확인 (출처 ${radar.sources?.length ?? 0}건 대조)`,
-    ...(radar.summary ? [`· ${radar.summary}`] : []),
-    ...lines,
-  ].join('\n'),
-);
+if (valid.length > 0 || regionChanges.length > 0) {
+  console.log(
+    [
+      `🏛️ 정책 레이더 (${today}) — 변경 감지`,
+      ...(radar.summary ? [`· ${radar.summary}`] : []),
+      ...lines,
+    ].join('\n'),
+  );
+} else {
+  console.log(`🏛️ 06:45 정책 점검 — 변경 없음 (${checks.length}항목·출처 ${radar.sources?.length ?? 0}건)`);
+}

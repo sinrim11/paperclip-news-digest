@@ -154,22 +154,13 @@ ${gyeonggiRegions.map(mdRegion).join('\n')}
   const mdPath = join(process.cwd(), 'docs', `region-affordability-${today}.md`);
   writeFileSync(mdPath, md);
 
-  // ── 3. 텔레그램 요약 (stdout — 호출측이 발송) ──
+  // ── 3. 텔레그램 요약 (stdout — 호출측이 발송) — 2026-08-11 다이어트: 5줄, 상세는 /regions ──
   const totalAll = regions.reduce((s, r) => s + r.counts.total, 0);
-  const guLine = (r: (typeof regions)[number]) =>
-    `· ${r.gu}: ${r.counts.total}곳 (🟢${r.counts.자기자본권}/🟡${r.counts.스트레치}/🟣${r.counts.부모님찬스})` +
-    (r.complexes[0] ? ` — 대표 ${r.complexes[0].name} ${eok(r.complexes[0].medianManwon)}` : '');
+  const topSeoul = [...seoulRegions].sort((x, y) => y.counts.자기자본권 - x.counts.자기자본권).slice(0, 3);
   const summary = [
-    `🗺️ 구별 매수 가능 목록 (${today}) — 수도권 ${regions.length}개 구·시 ${totalAll}개 단지`,
-    `기준: 🟢 자기자본권 ≤${eok(comfortable)} · 🟡 스트레치 ≤${eok(stretch)} · 🟣 부모님 찬스 ≤${eok(parentMax)} (+${eok(parentSupport)})`,
-    '',
-    `[서울 ${seoulRegions.length}개 구]`,
-    ...seoulRegions.map(guLine),
-    '',
-    `[경기 ${gyeonggiRegions.length}개 시·구]`,
-    ...gyeonggiRegions.map(guLine),
-    '',
-    `📄 전체 목록: docs/region-affordability-${today}.md`,
+    `🗺️ 구별 매수 가능 ${totalAll}단지 (🟢≤${eok(comfortable)} ${regions.reduce((s, r) => s + r.counts.자기자본권, 0)} · 🟡≤${eok(stretch)} ${regions.reduce((s, r) => s + r.counts.스트레치, 0)} · 🟣≤${eok(parentMax)} ${regions.reduce((s, r) => s + r.counts.부모님찬스, 0)})`,
+    `서울 자기자본권 상위: ${topSeoul.map((r) => `${r.gu} ${r.counts.자기자본권}`).join(' · ')}`,
+    `전체 목록·필터: 대시보드 /regions`,
   ].join('\n');
   if (!quiet) console.log(summary);
   console.error(`[affordability] ${regions.length}개 구·시 · ${totalAll}개 단지 → region-affordability.json + ${mdPath}`);

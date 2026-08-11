@@ -42,25 +42,23 @@ export interface RecoView {
 
 const eok = (manwon: number) => (manwon / 10000).toFixed(2).replace(/\.?0+$/, '') + '억';
 
-/** 규제 상태 표기(공통) — label + 근거 URL 1개. label 없으면 빈 배열. */
+/** 규제 상태 1줄 — 근거 URL은 매일 동일해 소음이라 생략(웹 /regions·/guide에 상세). */
 function regulationLines(r: RecoView): string[] {
-  if (!r.regulationLabel) return [];
-  const lines = [`🧾 규제: ${r.regulationLabel}`];
-  if (r.regulationSources?.length) lines.push(`   └ 근거: ${r.regulationSources[0]}`);
-  return lines;
+  return r.regulationLabel ? [`🧾 ${r.regulationLabel.split(' — ')[0]}`] : [];
+}
+
+/** 근거 다이어트(2026-08-11) — 신호(🔻📈)·피드백(❤️)·부모님찬스(👨‍👩‍👦)·호재(🚧)는 우선 보존, 상위 n개만. */
+function topReasons(reasons: string[], n = 4): string[] {
+  const hot = reasons.filter((x) => /^(🔻|📈|❤️|👨‍👩‍👦|🚧)/.test(x));
+  const rest = reasons.filter((x) => !hot.includes(x));
+  return [...hot, ...rest].slice(0, n);
 }
 
 export function header(count: number, asOf: string): string {
   return [
-    '🏠📊 오늘의 매물 추천',
-    `🗓️ ${asOf} · 총 ${count}건`,
-    '',
-    '💡 기준: 투자우선 — 신축프리미엄·전세가율·환금성·시세방어·개발호재 종합',
-    '📌 예산: 2년 적립 자기자본권 기준 (생애최초 LTV70%·마통 해지 — 상세는 매물별 표기)',
-    '🎯 전략: Path A — 서울/경기 준신축 실거주 후 2년 뒤 임대전환(생애최초 활용)',
-    '🧭 장세: 공급절벽發 완만상승·초양극화 — 서남·동북권 중저가가 강세',
-    '',
-    '아래 매물별로 이어서 보냅니다 👇',
+    `🏠 오늘의 매물 추천 · ${asOf}`,
+    `${count}건 — 투자우선 기준(전세가율·환금성·신축·호재) · 생애최초 예산 프레임`,
+    '매물별로 이어집니다 👇 각 메시지의 👍/🚫 버튼으로 취향을 알려주세요',
   ].join('\n');
 }
 
@@ -77,107 +75,45 @@ export function emptyMessage(asOf: string): string {
 }
 
 export function stretchHeader(count: number, asOf: string): string {
-  return [
-    '➕ 스트레치+ — 조금 더 보태면 사정권',
-    `🗓️ ${asOf} · ${count}건`,
-    '',
-    '💡 오늘 자기자본권을 넘지만 스윕 상한 이내인 구간 — 메인 추천과 분리된 참고 트랙입니다.',
-    '📌 각 매물에 "+얼마 더" · 월 상환 증가분 · 조달 개월(월 적립 기준)을 표기합니다.',
-    '⚠️ 실행 전 대출 한도(LTV·DSR·정책한도) 재확인 필수 — 점수는 참고자료이며 판단은 본인이 합니다.',
-    '',
-  ].join('\n');
+  return `➕ 스트레치+ ${count}건 — 예산을 넘지만 사정권(부모님 찬스 포함) · 실행 전 대출 한도 재확인 필수`;
 }
 
 export function formatStretchReco(r: RecoView): string {
   const lines: string[] = [];
-  lines.push(`➕ ${r.rank}. ${r.name}`);
-  lines.push(`📍 ${r.gu} ${r.dong}`);
-  lines.push('━━━━━━━━━━━━━━');
-  const spec = [r.buildYear ? `${r.buildYear}년` : '연식미상', r.areaText].filter(Boolean);
-  lines.push(`🏢 ${spec.join(' · ')}${r.tradeCount ? ` · 최근 ${r.tradeCount}건` : ''}`);
-  lines.push(`💰 실거래 중간 ${eok(r.medianManwon)}${r.priceRangeText ? ` (범위 ${r.priceRangeText})` : ''}`);
-  if (r.overComfortManwon != null) lines.push(`💸 더 보태면: +${eok(r.overComfortManwon)} (오늘 자기자본권 초과분)`);
-  if (r.monthlyPayAddManwon != null) lines.push(`📈 월 상환 증가분: 약 +${r.monthlyPayAddManwon}만/월`);
-  lines.push(`⏳ 조달: ${r.monthsToReach != null ? `월 적립 유지 시 약 ${r.monthsToReach}개월 뒤 도달${r.monthsToReach <= 24 ? ' ✅(2년 내)' : ' ⚠️(2년 초과)'}` : '월 적립액 미설정 — 판정 불가'}`);
-  lines.push(...regulationLines(r));
-  if (r.station && r.station !== '역세권 정보 확인 필요') lines.push(`🚇 ${r.station}`);
-  if (r.catalyst) lines.push(`🚧 호재: ${r.catalyst}`);
-  lines.push('');
-  lines.push('📈 선정 근거');
-  for (const reason of r.reasons) lines.push(`  ✅ ${reason}`);
-  if (r.cautions?.length) {
-    lines.push('');
-    lines.push('⚠️ 유의점');
-    for (const c of r.cautions) lines.push(`  • ${c}`);
-  }
-  if (r.complexNo) lines.push(`\n🔗 네이버: https://fin.land.naver.com/complexes/${r.complexNo}?tab=article`);
-  if (r.sources?.length) lines.push(`📚 근거: ${r.sources.slice(0, 3).join(' · ')}`);
+  lines.push(`➕ ${r.rank}. ${r.name} — ${r.gu} ${r.dong}`);
+  lines.push(`💰 실거래 중간 ${eok(r.medianManwon)}${r.tradeCount ? ` (${r.tradeCount}건)` : ''}${r.buildYear ? ` · ${r.buildYear}년` : ''}`);
+  if (r.overComfortManwon != null) lines.push(`💸 +${eok(r.overComfortManwon)} 더 필요${r.monthlyPayAddManwon != null ? ` · 월 상환 약 +${r.monthlyPayAddManwon}만` : ''}${r.monthsToReach != null ? ` · 적립 ${r.monthsToReach}개월${r.monthsToReach <= 24 ? '✅' : '⚠️'}` : ''}`);
+  for (const reason of topReasons(r.reasons, 3)) lines.push(`✅ ${reason}`);
+  for (const c of (r.cautions ?? []).slice(0, 1)) lines.push(`⚠️ ${c}`);
+  if (r.complexNo) lines.push(`🔗 https://fin.land.naver.com/complexes/${r.complexNo}?tab=article`);
   return lines.join('\n');
 }
 
 export function gapHeader(count: number, asOf: string): string {
-  return [
-    '🔓 참고: 비규제 갭 대안 (Path B)',
-    `🗓️ ${asOf} · ${count}건`,
-    '',
-    '💡 메인은 Path A(실거주→임대) 선택. 아래는 참고용 — 비규제 지역(규제 테이블 검증분: 안양 만안·남양주)에서 전세 끼고 무대출 매수 시 즉시임대 가능한 대안.',
-    '⚠️ 1주택 되면 현 전세대출 회수·생애최초 소진 리스크 — 실행 전 은행/규제 확인.',
-    '',
-  ].join('\n');
+  return `🔓 참고: 비규제 갭 대안 ${count}건 — 전세 끼고 무대출 매수(즉시임대) · 실행 전 은행·규제 확인`;
 }
 
 export function formatGapReco(r: RecoView): string {
   const lines: string[] = [];
-  lines.push(`🔓 ${r.rank}. ${r.name}`);
-  lines.push(`📍 ${r.gu} ${r.dong} · 비규제`);
-  lines.push('━━━━━━━━━━━━━━');
-  const spec = [r.buildYear ? `${r.buildYear}년` : '연식미상', r.areaText].filter(Boolean);
-  lines.push(`🏢 ${spec.join(' · ')}${r.tradeCount ? ` · 최근 ${r.tradeCount}건` : ''}`);
-  lines.push(`💰 매매 ${eok(r.medianManwon)} − 전세 ${eok(r.jeonseManwon ?? 0)} = 갭 ${eok(r.gapManwon ?? 0)}`);
-  lines.push(`📊 전세가율 ${r.jeonseRatioPct}% · ${r.gapCoverable ? '갭 자기자본 내 ✅' : '갭 자기자본 초과분 필요 ⚠️'}`);
-  lines.push(...regulationLines(r));
-  if (r.station && r.station !== '역세권 정보 확인 필요') lines.push(`🚇 ${r.station}`);
-  lines.push('');
-  lines.push('📈 선정 근거');
-  for (const reason of r.reasons) lines.push(`  ✅ ${reason}`);
-  if (r.cautions?.length) {
-    lines.push('');
-    lines.push('⚠️ 유의점');
-    for (const c of r.cautions) lines.push(`  • ${c}`);
-  }
-  if (r.complexNo) lines.push(`\n🔗 네이버: https://fin.land.naver.com/complexes/${r.complexNo}?tab=article`);
-  if (r.sources?.length) lines.push(`📚 근거: ${r.sources.slice(0, 3).join(' · ')}`);
+  lines.push(`🔓 ${r.rank}. ${r.name} — ${r.gu} ${r.dong} (비규제)`);
+  lines.push(`💰 매매 ${eok(r.medianManwon)} − 전세 ${eok(r.jeonseManwon ?? 0)} = 갭 ${eok(r.gapManwon ?? 0)} · 전세가율 ${r.jeonseRatioPct}%${r.gapCoverable ? ' · 자기자본 내 ✅' : ' ⚠️'}`);
+  for (const reason of topReasons(r.reasons, 2)) lines.push(`✅ ${reason}`);
+  for (const c of (r.cautions ?? []).slice(0, 1)) lines.push(`⚠️ ${c}`);
+  if (r.complexNo) lines.push(`🔗 https://fin.land.naver.com/complexes/${r.complexNo}?tab=article`);
   return lines.join('\n');
 }
 
 export function formatReco(r: RecoView): string {
   const lines: string[] = [];
   const budget = r.budgetLabel ?? (r.scenario === '현행' ? '생애최초 예산(8억) 내 ✅' : '8~9억 · 대출 최적화 시 🔓');
-  lines.push(`🏠 ${r.rank}. ${r.name}`);
-  lines.push(`📍 ${r.gu} ${r.dong}`);
-  lines.push('━━━━━━━━━━━━━━');
-  const spec = [r.buildYear ? `${r.buildYear}년` : '연식미상', r.household ? `${r.household.toLocaleString()}세대` : null, r.areaText].filter(Boolean);
-  lines.push(`🏢 ${spec.join(' · ')}`);
-  lines.push(`💰 실거래 중간 ${eok(r.medianManwon)}${r.priceRangeText ? ` (범위 ${r.priceRangeText})` : ''}${r.tradeCount ? ` · 최근 ${r.tradeCount}건 거래` : ''}`);
-  lines.push(`🎯 예산: ${budget}`);
+  lines.push(`🏠 ${r.rank}. ${r.name} — ${r.gu} ${r.dong}`);
+  const spec = [r.buildYear ? `${r.buildYear}년` : null, r.household ? `${r.household.toLocaleString()}세대` : null, r.areaText].filter(Boolean);
+  lines.push(`${spec.join(' · ')}`);
+  lines.push(`💰 실거래 중간 ${eok(r.medianManwon)}${r.tradeCount ? ` (${r.tradeCount}건)` : ''} · ${budget}`);
   lines.push(...regulationLines(r));
-  if (r.station) lines.push(`🚇 ${r.station}`);
-  if (r.catalyst) lines.push(`🚧 호재: ${r.catalyst}`);
-  if (r.school) lines.push(`🏫 학군: ${r.school}`);
-  if (r.amenities) lines.push(`🛒 편의: ${r.amenities}`);
-  if (r.living) lines.push(`🏡 거주: ${r.living}`);
-  lines.push('');
-  lines.push('📈 선정 근거');
-  for (const reason of r.reasons) lines.push(`  ✅ ${reason}`);
-  if (r.cautions?.length) {
-    lines.push('');
-    lines.push('⚠️ 유의점');
-    for (const c of r.cautions) lines.push(`  • ${c}`);
-  }
-  if (r.complexNo) {
-    lines.push('');
-    lines.push(`🔗 네이버: https://fin.land.naver.com/complexes/${r.complexNo}?tab=article`);
-  }
-  if (r.sources?.length) lines.push(`📚 근거: ${r.sources.slice(0, 3).join(' · ')}`);
+  if (r.station && r.station !== '역세권 정보 확인 필요') lines.push(`🚇 ${r.station}`);
+  for (const reason of topReasons(r.reasons)) lines.push(`✅ ${reason}`);
+  for (const c of (r.cautions ?? []).slice(0, 2)) lines.push(`⚠️ ${c}`);
+  if (r.complexNo) lines.push(`🔗 https://fin.land.naver.com/complexes/${r.complexNo}?tab=article`);
   return lines.join('\n');
 }
