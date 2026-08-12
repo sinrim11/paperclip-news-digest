@@ -17,14 +17,23 @@ if (!TOKEN || !CHAT_ID) {
 }
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
+/**
+ * 하드 타임아웃(2026-08-12) — AbortSignal.timeout만으로는 부족했다.
+ * 실제 장애: 네트워크 오류 후 fetch가 abort 신호에도 응답하지 않고 영원히 pending
+ * (undici 커넥션 풀 데드락) → 루프가 조용히 멈춤. 프로세스는 살아 있어 launchd도
+ * 재시작하지 않는 silent failure. Promise.race로 fetch 자체를 버리고 진행한다.
+ */
 async function tg(method: string, payload: Record<string, unknown>, timeoutMs = 15_000): Promise<Record<string, unknown>> {
-  const res = await fetch(`${API}/${method}`, {
+  const req = fetch(`${API}/${method}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(timeoutMs),
-  });
-  return (await res.json()) as Record<string, unknown>;
+  }).then((r) => r.json() as Promise<Record<string, unknown>>);
+  const hardTimeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`hard timeout ${timeoutMs + 10_000}ms (${method})`)), timeoutMs + 10_000).unref(),
+  );
+  return Promise.race([req, hardTimeout]);
 }
 
 interface CallbackQuery {
@@ -71,8 +80,23 @@ async function handleCallback(cb: CallbackQuery): Promise<void> {
 }
 
 async function main() {
-  console.log('[feedback-bot] 시작 — 콜백 롱폴링');
+  console.log(`[feedback-bot] 시작 — 콜백 롱폴링 (${new Date().toISOString().slice(0, 19)})`);
+
+  // 워치독(2026-08-12) — 루프가 5분 이상 진전 없으면 스스로 종료해 launchd KeepAlive에 재시작을 맡긴다.
+  // hang은 예외를 던지지 않으므로 catch로는 잡히지 않는다. 죽는 게 침묵보다 낫다.
+  let lastProgress = Date.now();
+  setInterval(() => {
+    const idleMin = (Date.now() - lastProgress) / 60_000;
+    if (idleMin > 5) {
+      console.error(`[feedback-bot] ⚠️ 워치독: ${idleMin.toFixed(1)}분간 폴링 진전 없음 — 재시작을 위해 종료`);
+      process.exit(1);
+    }
+  }, 60_000).unref();
+
+  let heartbeat = 0;
   for (;;) {
+    lastProgress = Date.now();
+    if (++heartbeat % 60 === 0) console.log(`[feedback-bot] 💓 정상 폴링 중 (${new Date().toISOString().slice(11, 16)} UTC)`);
     try {
       const store = loadFeedback();
       const res = (await tg('getUpdates', { offset: store._offset ?? 0, timeout: 50, allowed_updates: ['callback_query'] }, 60_000)) as {
