@@ -29,6 +29,25 @@ function fundingOf(priceManwon: number): { loan: number; cash: number; monthly: 
   return { loan, cash: priceManwon - loan, monthly: Math.round(loan * monthlyPaymentPerWon(FUND.ratePct, FUND.termYears)) };
 }
 
+/**
+ * 취득세(만원) — 지방세법 표준세율 + 지방교육세(취득세의 1/10), 전용 85㎡ 이하 기준(농특세 비과세).
+ * 6억↓ 1% · 6~9억 (가액×2/3억−3)% 누진 · 9억↑ 3%. 생애최초 감면(12억 이하, 최대 200만원) 반영.
+ */
+function acquisitionTax(priceManwon: number, firstTime = true): number {
+  const eokVal = priceManwon / 10000;
+  const ratePct = eokVal <= 6 ? 1 : eokVal <= 9 ? Math.round(((eokVal * 2) / 3 - 3) * 100) / 100 : 3;
+  const base = priceManwon * (ratePct / 100) * 1.1; // 지방교육세 포함
+  const relief = firstTime && eokVal <= 12 ? 200 : 0; // 생애최초 감면 한도
+  return Math.max(0, Math.round(base - relief));
+}
+
+/** 중개보수 상한(만원) — 2021.10 개편 요율(협의로 낮출 수 있는 '상한'). 부가세 별도. */
+function brokerFee(priceManwon: number): number {
+  const eokVal = priceManwon / 10000;
+  const rate = eokVal < 2 ? 0.005 : eokVal < 9 ? 0.004 : eokVal < 12 ? 0.005 : eokVal < 15 ? 0.006 : 0.007;
+  return Math.round(priceManwon * rate);
+}
+
 /** 실거래·전세 조인은 지역(lawdCd) 스코프 필수 — 단지명만으로 조인하면 타 지역 동명 단지(현대6차 등)가 섞인다(2026-08-10 교정). */
 const GU_TO_LAWD: Record<string, string> = Object.fromEntries(Object.entries(LAWD_GU).map(([cd, gu]) => [gu, cd]));
 const normName = (s: string) => s.replace(/\s|아파트/g, '');
@@ -312,31 +331,92 @@ function outlookHtml(ctx: MarketCtx, page: number, total: number): string {
   </div>`;
 }
 
-function methodHtml(page: number, total: number, scanned: number, guCount: number): string {
-  const rows = [
-    ['실거래 갭', 40, '최저 호가 vs 최근 실거래 중간 — 실거래보다 낮으면 만점, 거품 클수록 감점', '#16A34A'],
-    ['유동성', 30, '세대수(1,500세대 만점 15) + 매매 매물 수(15건 만점 15) — 팔기 쉬운가', '#0EA5E9'],
-    ['연식·재건축', 15, '준신축(10년↓) 만점 · 30년↑은 용적률 180%↓면 만점(재건축 사업성)', '#F59E0B'],
-    ['전세가율', 15, '전세 중간 ÷ 매매 중간 — 70%↑면 실거주 수요 탄탄', '#7C3AED'],
-  ] as const;
-  const rowHtml = rows.map(([k, max, d, c]) => `
-    <div style="display:flex;gap:26px;align-items:flex-start;border-bottom:2px solid #1E293B;padding:32px 0">
-      <span style="display:inline-block;width:20px;height:20px;border-radius:6px;background:${c};margin-top:10px;flex-shrink:0"></span>
-      <div style="flex:1">
-        <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <span style="font-size:38px;font-weight:800;color:#fff">${k}</span>
-          <span class="num" style="font-size:38px;font-weight:800;color:#60A5FA">${max}점</span>
-        </div>
-        <div style="font-size:27px;color:#94A3B8;margin-top:8px;line-height:1.5">${d}</div>
+/**
+ * 💰 총 필요자금 카드(2026-08-12) — 점수 산식 카드를 대체.
+ * "집값 외에 얼마 더 드나"는 첫 구매자가 계약 직전 가장 많이 놓치는 항목이고,
+ * 오늘 TOP5의 실제 가격으로 계산되므로 매번 값이 달라진다(정적 방법론 카드와 다른 점).
+ */
+function totalCashHtml(top: SharePick[], page: number, total: number): string {
+  const rows = top.map((p, i) => {
+    const f = fundingOf(p.minPrice);
+    const tax = acquisitionTax(p.minPrice);
+    const fee = brokerFee(p.minPrice);
+    const totalCash = f.cash + tax + fee;
+    return `<div style="display:flex;align-items:center;border-bottom:2px solid #E2E8F0;padding:22px 0">
+      <div style="width:300px;padding-right:14px">
+        <div style="font-size:29px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i + 1} ${p.name}</div>
+        <div style="font-size:22px;color:#94A3B8;margin-top:3px">${p.gu} · 호가 ${eok(p.minPrice)}</div>
       </div>
-    </div>`).join('');
-  return `<style>${baseCss}</style><div class="card dark">
+      <div class="num" style="width:150px;font-size:27px;color:${tax === 0 ? '#16A34A' : '#334155'};font-weight:${tax === 0 ? '700' : '400'}">${tax === 0 ? '면제' : tax.toLocaleString() + '만'}</div>
+      <div class="num" style="width:150px;font-size:27px;color:#334155">${fee.toLocaleString()}만</div>
+      <div class="num" style="width:190px;font-size:33px;font-weight:800;color:#0F172A">${eok(totalCash)}</div>
+      <div class="num" style="flex:1;text-align:right;font-size:29px;font-weight:700;color:#1D4ED8">${f.monthly}만</div>
+    </div>`;
+  }).join('');
+  const th = (w: string, label: string, align = 'left') => `<div style="${w};font-size:22px;font-weight:700;color:#94A3B8;text-align:${align}">${label}</div>`;
+  return `<style>${baseCss}</style><div class="card">
     ${brandBar(page, total)}
-    <div style="font-size:66px;font-weight:800;margin-top:60px;line-height:1.25">레이더 지수,<br/>이렇게 계산했어요 <span style="color:#60A5FA">(100점)</span></div>
-    <div style="font-size:29px;color:#CBD5E1;margin-top:26px;line-height:1.6">대상: <b style="color:#fff">수집권 ${guCount}개 구·시 · ${CAP_LABEL} · 300세대+</b> ${scanned.toLocaleString()}곳 통과<br/>모든 지표가 <b style="color:#fff">공개 데이터</b> — 특정인의 예산·통근 기준이 아닙니다 · 가격대 컷 밖 단지는 미포함</div>
-    <div style="margin-top:24px">${rowHtml}</div>
-    <div style="margin-top:30px;font-size:26px;color:#CBD5E1;line-height:1.6">카드 표기: 지표별 등급은 배점 대비 획득률 — <b style="color:#4ADE80">매우 좋음</b> ≥90% · <b style="color:#2DD4BF">좋음</b> ≥65% · <b style="color:#FBBF24">보통</b> ≥40% · <b style="color:#F87171">약함</b> &lt;40%. '상위 N%'는 같은 가격대 통과 단지 중 종합점수 순위.</div>
-    <div class="foot" style="color:#64748B">감(感)이 아니라 규칙 — 매일 같은 기준 자동 채점 · 국토부 실거래가(공공) × 네이버부동산 호가</div>
+    <div style="font-size:58px;font-weight:800;margin-top:44px">집값 말고, 얼마가 더 들까</div>
+    <div style="font-size:26px;color:#64748B;margin-top:12px;line-height:1.5">계약 직전 가장 많이 놓치는 항목 — 취득세·중개보수까지 넣은 <b>실제 필요 현금</b></div>
+    <div style="display:flex;margin-top:34px;border-bottom:3px solid #0F172A;padding-bottom:12px">
+      ${th('width:300px', '단지')}${th('width:150px', '취득세')}${th('width:150px', '중개보수')}${th('width:190px', '총 필요현금')}${th('flex:1', '월 상환', 'right')}
+    </div>
+    ${rows}
+    <div style="margin-top:30px;display:flex;flex-direction:column;gap:10px;font-size:23px;color:#475569;line-height:1.5">
+      <div>· <b>총 필요현금</b> = 집값−대출 + 취득세 + 중개보수 (이사·인테리어·등기 대행료는 별도)</div>
+      <div>· <b>취득세</b> 6억↓ 1.1% · 6~9억 누진 · 9억↑ 3.3% — <b style="color:#16A34A">생애최초 최대 200만원 감면 반영</b>(12억 이하)</div>
+      <div>· <b>중개보수</b>는 법정 <b>상한</b> 요율 — 협의로 낮출 수 있고 부가세는 별도입니다</div>
+    </div>
+    <div class="foot">전용 85㎡ 이하·1주택 기준 · 대출은 LTV 70%·한도 6억·금리 4.5%·30년 가정 — 실제 세액은 취득 시점 기준으로 확인하세요</div>
+  </div>`;
+}
+
+/**
+ * ✅ 임장 체크리스트 카드(2026-08-12) — 정적 규제표를 대체.
+ * 실무 콘텐츠의 공통 뼈대(서류 3 · 현장 5 · 비용 3)에, 오늘 TOP5의 실제 특성
+ * (연식·전세가율·급매 여부)에서 뽑은 맞춤 주의사항을 덧붙여 매번 내용이 달라진다.
+ */
+function checklistHtml(top: SharePick[], page: number, total: number): string {
+  const years = top.map((p) => p.elapsedYear).filter((y): y is number => y != null);
+  const avgYear = years.length ? years.reduce((a, b) => a + b, 0) / years.length : null;
+  const hasBargain = top.some((p) => p.gapPct != null && p.gapPct <= -5);
+  const highJeonse = top.some((p) => p.jeonseRatioPct != null && p.jeonseRatioPct >= 75);
+  const lowLiquidity = top.some((p) => p.tradeCount <= 5);
+
+  const tailored: string[] = [];
+  if (avgYear != null && avgYear >= 22) tailored.push(`오늘 목록은 <b>평균 ${Math.round(avgYear)}년차 구축</b> — 누수·결로 흔적, 배관·샷시 교체 이력, 주차 대수를 우선 확인`);
+  if (avgYear != null && avgYear <= 12) tailored.push(`오늘 목록은 <b>준신축 위주</b> — 하자보수 이력, 커뮤니티 운영·관리비 수준을 확인`);
+  if (hasBargain) tailored.push('<b>급매(호가 &lt; 실거래)</b>가 포함 — 싼 데는 이유가 있습니다. 저층·북향·소송·특수관계 거래 여부 확인');
+  if (highJeonse) tailored.push('<b>전세가율 높은 단지</b> 포함 — 전세 낀 매물이면 임차인 퇴거일·보증금 승계 조건을 계약서에 명시');
+  if (lowLiquidity) tailored.push('<b>거래 적은 단지</b> 포함 — 시세 표본이 얇아 호가 신뢰도가 낮습니다. 인근 단지 시세와 교차 확인');
+  const tailoredHtml = tailored.slice(0, 3)
+    .map((t) => `<div style="display:flex;gap:12px;font-size:26px;line-height:1.5;color:#78350F"><span>▸</span><span>${t}</span></div>`)
+    .join('');
+
+  const col = (icon: string, title: string, items: string[], bg: string) => `
+    <div style="flex:1;background:${bg};border-radius:20px;padding:26px 28px;min-width:0">
+      <div style="font-size:28px;font-weight:800;color:#0F172A">${icon} ${title}</div>
+      <div style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
+        ${items.map((s) => `<div style="display:flex;gap:10px;font-size:25px;line-height:1.4;color:#334155"><span style="color:#94A3B8">□</span><span>${s}</span></div>`).join('')}
+      </div>
+    </div>`;
+
+  return `<style>${baseCss}</style><div class="card">
+    ${brandBar(page, total)}
+    <div style="font-size:58px;font-weight:800;margin-top:44px">임장 갈 때, 이것만은</div>
+    <div style="font-size:26px;color:#64748B;margin-top:12px;line-height:1.5">저장해두고 현장에서 하나씩 지워보세요</div>
+    <div style="display:flex;gap:16px;margin-top:34px">
+      ${col('📄', '서류 3종', ['등기부등본 — 근저당·가압류', '건축물대장 — 위반건축물 여부', '토지이용계획 — 개발·규제'], '#F8FAFC')}
+      ${col('🏠', '현장 5개', ['수압 — 최고층 물 틀어보기', '누수·결로 — 베란다·창틀', '소음 — 층간·도로·철도', '채광 — 향·앞동 간격', '관리비 — 최근 3개월'], '#F0FDF4')}
+    </div>
+    <div style="display:flex;gap:16px;margin-top:16px">
+      ${col('💸', '비용 3항목', ['실거래가 — 같은 동·층 비교', '취득세 — 생애최초 감면 신청', '중개보수 — 계약 전 요율 합의'], '#EFF6FF')}
+      <div style="flex:1;background:#FFFBEB;border:2px solid #FDE68A;border-radius:20px;padding:26px 28px;min-width:0">
+        <div style="font-size:28px;font-weight:800;color:#92400E">⚠️ 오늘 목록 맞춤</div>
+        <div style="margin-top:16px;display:flex;flex-direction:column;gap:12px">${tailoredHtml || '<div style="font-size:25px;color:#B45309">특이 사항 없음 — 기본 항목대로 확인하세요</div>'}</div>
+      </div>
+    </div>
+    <div class="foot">온라인 발품(실거래·평면도·세대수)을 먼저 끝내고 현장에서는 '눈으로만 확인되는 것'에 집중 — 계약 전 서류는 반드시 본인이 직접 열람</div>
   </div>`;
 }
 
@@ -554,15 +634,16 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
     if (top.length >= 5) break;
   }
 
-  // 2026-08-10 개편: 자기홍보성 아웃트로 제거 → TOP5 정량 비교표(2p) + 정책 동향·전망(10p, 출처 동반) — "선택"을 위한 정보 밀도 우선
+  // 2026-08-12 개편: 매번 동일하던 정적 카드(점수 산식·규제표)를 빼고, 오늘 데이터로 계산되는
+  // 실행 도구 2장(총 필요자금·임장 체크리스트)으로 교체. 정책은 매일 갱신되는 동향 카드만 유지.
   const ctx = loadMarketCtx();
   const total = ctx ? 10 : 9;
   const pages: string[] = [coverHtml(scanned.length, pool.length, total, guCount)];
   const names: string[] = ['01-cover'];
   pages.push(compareHtml(top, 2, total)); names.push('02-compare');
   top.forEach((p, i) => { pages.push(itemHtml(p, i + 1, i + 3, total)); names.push(`0${i + 3}-pick${i + 1}`); });
-  pages.push(methodHtml(8, total, pool.length, guCount)); names.push('08-method');
-  pages.push(policyHtml(9, total)); names.push('09-policy');
+  pages.push(totalCashHtml(top, 8, total)); names.push('08-cash');
+  pages.push(checklistHtml(top, 9, total)); names.push('09-checklist');
   if (ctx) { pages.push(outlookHtml(ctx, 10, total)); names.push('10-outlook'); }
 
   // ── 인스타 캡션 v2(2026-08-11) — 훅 1줄 + 단지당 1줄 + CTA. 근거·출처 상세는 카드에 ──
@@ -578,8 +659,9 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
 
 ${capLines}
 
-💳 필요 현금·월 상환까지 카드에 계산해뒀어요
-📌 저장했다가 임장 갈 때 꺼내보세요
+💳 취득세·중개보수까지 넣은 실제 필요 현금
+✅ 임장 체크리스트(서류3·현장5·비용3)도 같이
+📌 저장해두고 임장 갈 때 꺼내보세요
 
 국토부 실거래 × 네이버 호가 · 매일 자동 분석 · 출처는 카드 마지막 장 · 투자 자문 아님
 
