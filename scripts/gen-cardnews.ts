@@ -6,7 +6,9 @@
  *   - 프레임: "서울 6억 이하 · 300세대 이상" (특정 개인 예산이 아닌 공개 가격대 컷 — 카드에 명시)
  *   - 레이더 지수(100): 실거래갭 40 · 유동성 30(세대15+매물15) · 연식 15 · 전세가율 15 — 전부 공개 데이터
  *   - 카드는 점수보다 수치 우선: 실거래 중간(N건)·호가 갭%·전세 중간/전세가율·180일 거래량·세대/연식
- * 규격: 1080×1350(4:5) ×2배율, 9장(표지→TOP5→산정기준→정책→아웃트로).
+ * 규격: 1080×1350(4:5) ×2배율, 9장(표지→TOP5 비교표→단지 5장→총 필요자금→임장 체크리스트).
+ *   설명형 카드(점수 산식·규제표·정책 동향)는 2026-08-12/27에 전부 제거 — 남은 카드는
+ *   전부 그날 데이터로 계산된다. 정책 콘텐츠는 briefing 시리즈 전담(월요일 별도 생성).
  * ⚠️ 개인 재무 수치·개인 예산/통근 기준 절대 미포함.
  * 출력: output/cardnews/<YYYY-MM-DD>/*.png + index.json(caption 포함, /cardnews 소비)
  * 실행: npx tsx scripts/gen-cardnews.ts
@@ -115,18 +117,6 @@ function gradeOf(part: number, max: number): { label: string; color: string; bg:
   return { label: '약함', color: '#DC2626', bg: '#FEF2F2' };
 }
 
-/** 정책 동향·전망 카드 데이터 — 일일 시장리서치(market-context.json, 출처 URL 동반). 개인 예산(budgetReality)은 공유 콘텐츠라 미사용. */
-interface MarketCtx {
-  asOf?: string;
-  regime?: string;
-  rate?: { base?: number; direction?: string; note?: string };
-  policy?: { note?: string };
-  cautions?: string[];
-  sources?: Array<{ title: string; url: string }>;
-}
-function loadMarketCtx(): MarketCtx | null {
-  try { return JSON.parse(readFileSync(join(process.cwd(), 'config', 'market-context.json'), 'utf-8')) as MarketCtx; } catch { return null; }
-}
 const domainOf = (u: string) => u.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
 
 /* ── 스타일 ── */
@@ -300,34 +290,6 @@ function itemHtml(p: SharePick, rank: number, page: number, total: number): stri
          </div>`
       : ''}
     <div class="foot">수도권 ${CAP_LABEL} · 300세대+ 전수 스캔 — 국토교통부 실거래가 공개시스템(rt.molit.go.kr) × 네이버부동산 호가 · ${today} 기준 · 투자 자문 아님 · 현장 확인 필수</div>
-  </div>`;
-}
-
-/** 정책 동향·전망 카드(2026-08-10) — 일일 리서치 결과를 출처와 함께: 금리·정책 방향·체크포인트 */
-function outlookHtml(ctx: MarketCtx, page: number, total: number): string {
-  const dirLabel = ctx.rate?.direction === 'up' ? ['인상 국면', '#DC2626'] : ctx.rate?.direction === 'down' ? ['인하 국면', '#16A34A'] : ['동결 국면', '#94A3B8'];
-  const cautions = (ctx.cautions ?? []).slice(0, 3).map((c) =>
-    `<div style="display:flex;gap:14px;font-size:27px;line-height:1.55;color:#CBD5E1"><span style="color:#F59E0B;font-weight:800">!</span><span>${c}</span></div>`).join('');
-  const srcs = (ctx.sources ?? []).slice(0, 4).map((s) =>
-    `<div style="font-size:23px;color:#94A3B8;line-height:1.5">· ${s.title} <span style="color:#64748B">(${domainOf(s.url)})</span></div>`).join('');
-  return `<style>${baseCss}</style><div class="card dark">
-    ${brandBar(page, total)}
-    <div style="font-size:64px;font-weight:800;margin-top:56px">정책 동향 · 전망</div>
-    <div style="font-size:28px;color:#94A3B8;margin-top:14px">일일 자동 리서치 · ${ctx.asOf ?? today} 기준 — 전 항목 출처 명시</div>
-    <div style="display:flex;gap:18px;margin-top:40px">
-      <div style="flex:1;background:#1E293B;border-radius:18px;padding:26px 30px">
-        <div style="font-size:25px;color:#94A3B8;font-weight:700">한은 기준금리</div>
-        <div class="num" style="font-size:52px;font-weight:800;margin-top:6px">${ctx.rate?.base != null ? ctx.rate.base + '%' : '—'} <span style="font-size:28px;color:${dirLabel[1]}">${dirLabel[0]}</span></div>
-      </div>
-    </div>
-    ${ctx.policy?.note ? `<div style="margin-top:26px;font-size:29px;line-height:1.6;color:#E2E8F0">${ctx.policy.note.slice(0, 190)}${ctx.policy.note.length > 190 ? '…' : ''}</div>` : ''}
-    <div style="margin-top:34px;font-size:27px;font-weight:800;color:#F59E0B">매수 전 체크포인트</div>
-    <div style="margin-top:16px;display:flex;flex-direction:column;gap:14px">${cautions}</div>
-    <div style="margin-top:auto;padding-top:28px;border-top:2px solid #1E293B">
-      <div style="font-size:24px;font-weight:700;color:#64748B;margin-bottom:10px">📎 출처</div>
-      ${srcs}
-    </div>
-    <div class="foot" style="color:#64748B">전망·해석은 인용 보도 기준이며 확정이 아닙니다 — 발표 시 수치가 바뀔 수 있습니다</div>
   </div>`;
 }
 
@@ -634,17 +596,15 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
     if (top.length >= 5) break;
   }
 
-  // 2026-08-12 개편: 매번 동일하던 정적 카드(점수 산식·규제표)를 빼고, 오늘 데이터로 계산되는
-  // 실행 도구 2장(총 필요자금·임장 체크리스트)으로 교체. 정책은 매일 갱신되는 동향 카드만 유지.
-  const ctx = loadMarketCtx();
-  const total = ctx ? 10 : 9;
+  // 2026-08-12/27 개편: 매번 동일하던 카드(점수 산식·규제표·정책 동향)를 전부 제거.
+  // 남은 9장은 모두 그날 데이터로 계산된다. 정책 콘텐츠는 briefing 시리즈가 전담.
+  const total = 9;
   const pages: string[] = [coverHtml(scanned.length, pool.length, total, guCount)];
   const names: string[] = ['01-cover'];
   pages.push(compareHtml(top, 2, total)); names.push('02-compare');
   top.forEach((p, i) => { pages.push(itemHtml(p, i + 1, i + 3, total)); names.push(`0${i + 3}-pick${i + 1}`); });
   pages.push(totalCashHtml(top, 8, total)); names.push('08-cash');
   pages.push(checklistHtml(top, 9, total)); names.push('09-checklist');
-  if (ctx) { pages.push(outlookHtml(ctx, 10, total)); names.push('10-outlook'); }
 
   // ── 인스타 캡션 v2(2026-08-11) — 훅 1줄 + 단지당 1줄 + CTA. 근거·출처 상세는 카드에 ──
   const hookOf = (p: SharePick): string => {
