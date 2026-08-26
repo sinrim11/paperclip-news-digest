@@ -140,7 +140,15 @@ const baseCss = `
 const brandBar = (page: number, total: number) =>
   `<div class="brand"><span>🏠 뉴스 다이제스트 · 매수 레이더</span><span class="pageno">${today.replaceAll('-', '.')} · ${page}/${total}</span></div>`;
 
-const eok = (m: number) => (m / 10000).toFixed(m % 10000 === 0 ? 0 : 2).replace(/\.?0+$/, '') + '억';
+/**
+ * 억 표기 — 정수는 그대로, 소수는 끝 0만 정리.
+ * 2026-08-27 버그 수정: 기존 정규식 /\.?0+$/ 이 정수의 끝자리 0까지 지워
+ * 10억 → "1억", 20억 → "2억"으로 표기됐다(9~12억 시리즈에서 발견).
+ */
+const eok = (m: number) => {
+  const v = m / 10000;
+  return (Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')) + '억';
+};
 
 function coverHtml(scanned: number, passed: number, total: number, guCount: number): string {
   return `<style>${baseCss}</style><div class="card dark">

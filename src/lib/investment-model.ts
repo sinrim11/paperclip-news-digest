@@ -159,7 +159,11 @@ function policyCapOf(price: number, params: PolicyParams): number {
   return params.loanCapByPrice[params.loanCapByPrice.length - 1]?.cap ?? Infinity;
 }
 
-const eok1 = (m: number) => (m / 10000).toFixed(m % 10000 === 0 ? 0 : 2).replace(/\.?0+$/, '') + '억';
+/** 억 표기 — 2026-08-27: 기존 정규식이 정수 끝자리 0을 지워 10억→"1억"으로 표기되던 버그 수정(/listings 근거 문구에 노출). */
+const eok1 = (m: number) => {
+  const v = m / 10000;
+  return (Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')) + '억';
+};
 const man = (m: number) => Math.round(m).toLocaleString() + '만';
 
 const DEFAULT_ETF_TAX = { cgtPct: 22, divYieldPct: 1.5, divTaxPct: 15.4, interestTaxPct: 15.4 };
