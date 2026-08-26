@@ -74,11 +74,17 @@ const setDir = today + DIR_SUFFIX[series];
 const OUT_DIR = join(process.cwd(), 'output', 'cardnews', setDir);
 
 /** 공개 프레임 — 개인 예산이 아닌 카드 명시용 가격대 창 [min, max) (만원) */
-const PRICE_WINDOW: Record<Exclude<Series, 'briefing'>, { min: number; max: number; label: string }> = {
-  price6: { min: 0, max: 60000, label: '6억 이하' },
-  price8: { min: 60000, max: 80000, label: '6~8억' },
-  price9: { min: 80000, max: 92000, label: '8~9억' },
-  price12: { min: 92000, max: 120000, label: '9~12억' },
+const PRICE_WINDOW: Record<Exclude<Series, 'briefing'>, { min: number; max: number; label: string; tags: string }> = {
+  // tags: 라벨을 기계적으로 변환하면 '#912억아파트' 같은 게 나와 실제 검색어와 어긋난다 → 가격대별 명시.
+  price6: { min: 0, max: 60000, label: '6억 이하', tags: '#6억대아파트 #6억이하아파트' },
+  price8: { min: 60000, max: 80000, label: '6~8억', tags: '#7억대아파트 #서울아파트' },
+  price9: { min: 80000, max: 92000, label: '8~9억', tags: '#8억대아파트 #서울아파트' },
+  price12: { min: 92000, max: 120000, label: '9~12억', tags: '#10억대아파트 #서울아파트' },
+};
+/** 한글 조사 — 마지막 글자 받침 유무로 '로/으로' 선택("6억 이하로" vs "9~12억으로"). */
+const withRo = (s: string) => {
+  const c = s.charCodeAt(s.length - 1) - 0xac00;
+  return s + (c >= 0 && c <= 11171 && c % 28 !== 0 ? '으로' : '로');
 };
 const WINDOW = series === 'briefing' ? PRICE_WINDOW.price6 : PRICE_WINDOW[series];
 const CAP_LABEL = WINDOW.label;
@@ -623,7 +629,7 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
     return `현금 약 ${eok(fundingOf(p.minPrice).cash)}이면 시작`;
   };
   const capLines = top.map((p, i) => `${i + 1} ${p.name} ${eok(p.minPrice)} — ${hookOf(p)}`).join('\n');
-  const caption = `${CAP_LABEL}로 내 집, 지금 볼만한 5곳 🏠 (${today.slice(5).replace('-', '.')})
+  const caption = `${withRo(CAP_LABEL)} 내 집, 지금 볼만한 5곳 🏠 (${today.slice(5).replace('-', '.')})
 
 ${capLines}
 
@@ -633,7 +639,7 @@ ${capLines}
 
 국토부 실거래 × 네이버 호가 · 매일 자동 분석 · 출처는 카드 마지막 장 · 투자 자문 아님
 
-#내집마련 #첫집 #${CAP_LABEL.replace(/[\s~]/g, '')}아파트 #아파트추천 #실거래가 #무주택자 #부동산공부 #신혼집`;
+#내집마련 #첫집 ${WINDOW.tags} #아파트추천 #실거래가 #무주택자 #부동산공부 #신혼집`;
 
   return { pages, names, picks: top.map((p) => `${p.name}(${p.score})`), pickNos: top.map((p) => p.complexNo), caption };
 }
