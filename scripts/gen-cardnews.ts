@@ -123,7 +123,57 @@ function gradeOf(part: number, max: number): { label: string; color: string; bg:
   return { label: '약함', color: '#DC2626', bg: '#FEF2F2' };
 }
 
-const domainOf = (u: string) => u.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
+const domainOf = (u: string) => u.replace(/^https?:\/\//, '').split('/')[0].replace(/^(www|m)\./, '');
+
+/**
+ * 출처 표기·선택(2026-08-29) — 두 가지 문제를 함께 해결.
+ *  ① 한글 도메인이 punycode 그대로 노출("www.xn--3-3u6ey6lv7rsa.kr" ← 3기신도시.kr)
+ *  ② 노선형 호재는 여러 지자체를 지나는데 sourceUrls[0]이 무관한 구청일 수 있음
+ *     (안양 단지에 GTX-C 근거가 도봉구청으로 표기되던 건)
+ */
+const SOURCE_LABEL: Record<string, string> = {
+  'xn--3-3u6ey6lv7rsa.kr': '3기신도시(정부)',
+  'molit.go.kr': '국토교통부',
+  'korea.kr': '정책브리핑',
+  'eiec.kdi.re.kr': 'KDI',
+  'gg.go.kr': '경기도',
+  'mediahub.seoul.go.kr': '서울시',
+  'seoul.go.kr': '서울시',
+  'dobong.go.kr': '도봉구',
+  'kyeongin.com': '경인일보',
+  'news1.kr': '뉴스1',
+  'hankyung.com': '한국경제',
+  'newsis.com': '뉴시스',
+  'metroseoul.co.kr': '메트로서울',
+  'electimes.com': '전기신문',
+  'redaily.co.kr': '부동산일보',
+  'v.daum.net': '다음뉴스',
+};
+/** 기초지자체 도메인 → 관할 지역(대상 단지와 다르면 강등). */
+const GOV_DOMAIN_REGION: Record<string, string> = {
+  'dobong.go.kr': '도봉구', 'nowon.go.kr': '노원구', 'gangdong.go.kr': '강동구',
+  'ep.go.kr': '은평구', 'sdm.go.kr': '서대문구', 'mapo.go.kr': '마포구',
+  'anyang.go.kr': '안양', 'uiwang.go.kr': '의왕', 'nyj.go.kr': '남양주',
+};
+const sourceLabel = (u: string) => SOURCE_LABEL[domainOf(u)] ?? domainOf(u);
+
+/** 출처 적합도 — 전국 공공 > 해당 지역 지자체 > 광역 > 언론 > 타 지역 지자체. */
+function sourceScore(u: string, gu?: string): number {
+  const h = domainOf(u);
+  if (/^(molit\.go\.kr|korea\.kr|xn--3-3u6ey6lv7rsa\.kr)$/.test(h) || h.endsWith('kdi.re.kr')) return 100;
+  const govRegion = GOV_DOMAIN_REGION[h];
+  if (govRegion) return gu && gu.includes(govRegion.replace(/구$/, '')) ? 90 : 20; // 타 지역 구청은 강등
+  if (h === 'gg.go.kr') return gu && !gu.endsWith('구') ? 85 : 70; // 경기도청 — 경기 단지에 더 적합
+  if (h.endsWith('seoul.go.kr')) return gu?.endsWith('구') ? 85 : 70;
+  if (h.endsWith('.go.kr') || h.endsWith('.re.kr')) return 60;
+  return 50; // 언론
+}
+
+/** 단지 지역에 가장 적합한 출처 1개 — 동점이면 원래 순서 유지. */
+function bestSource(urls: string[], gu?: string): string | null {
+  if (!urls.length) return null;
+  return [...urls].sort((a, b) => sourceScore(b, gu) - sourceScore(a, gu))[0];
+}
 
 /* ── 스타일 ── */
 const baseCss = `
@@ -440,7 +490,8 @@ function briefCoverHtml(count: number, total: number): string {
 /** 호재 카드 v2(2026-08-11 시각화) — 개통 타임라인 + 영향 지역 칩: "언제·어디"가 한눈에 */
 function factorHtml(f: MomentumFactor, page: number, total: number): string {
   const badge = f.certainty === '확정' ? ['#16A34A', '확정 — 착공·개통일 확정'] : ['#F59E0B', '진행 — 승인·부분 착공'];
-  const srcs = f.sourceUrls.map((s) => s.replace(/^https?:\/\//, '').split('/')[0]).join(' · ');
+  // 브리핑 카드는 노선 전체가 대상이라 지역 가중 없이 권위 순으로만 정렬
+  const srcs = [...f.sourceUrls].sort((a, b) => sourceScore(b) - sourceScore(a)).map(sourceLabel).join(' · ');
   const nowYear = Number(today.slice(0, 4));
   const targetYear = Number((f.expected.match(/20\d{2}/) ?? [])[0]) || null;
   const yearsLeft = targetYear ? Math.max(0, targetYear - nowYear) : null;
@@ -590,7 +641,8 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
     const s = radarScore({ household: base.household, elapsedYear: base.elapsedYear, far: base.far, dealArticles: base.dealArticles, gapPct: base.gapPct, jeonseRatioPct: base.jeonseRatioPct, tradeCount: base.tradeCount });
     // 지역 호재(확정·진행만) — 정부·공식 발표 근거 URL 동반(momentum-factors)
     const mf = recoFactorsFor(c.gu, c.dong)[0];
-    const factor = mf ? { certainty: mf.certainty, title: mf.title, expected: mf.expected, srcDomain: mf.sourceUrls[0] ? domainOf(mf.sourceUrls[0]) : '공식 발표' } : null;
+    const src = mf ? bestSource(mf.sourceUrls, c.gu) : null; // 단지 지역에 맞는 출처(타 지역 구청 강등)
+    const factor = mf ? { certainty: mf.certainty, title: mf.title, expected: mf.expected, srcDomain: src ? sourceLabel(src) : '공식 발표' } : null;
     return { ...base, ...s, factor };
   });
   picks.sort((a, b) => b.score - a.score || (a.gapPct ?? 99) - (b.gapPct ?? 99));
