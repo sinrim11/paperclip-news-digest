@@ -25,6 +25,7 @@ const GROUPS: NavGroup[] = [
       { href: '/regions', label: '구별 예산맵', desc: '내 예산으로 갈 수 있는 곳' },
       { href: '/listings', label: '전체 매물', desc: '수집된 매물 전수' },
       { href: '/candidates', label: '매물 후보', desc: '스윕 원본 목록' },
+      { href: '/gosi', label: '개발 고시', desc: '기사보다 먼저 잡은 재개발 신호' },
     ],
   },
   {

@@ -113,7 +113,10 @@ export function HomeRealEstate() {
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         {/* 고시 선행감지 — 기사보다 먼저 나오는 원문 */}
         <div className="rounded-xl border border-gray-200 bg-white p-3.5">
-          <h3 className="mb-2 text-sm font-semibold">📜 최근 개발 고시 <span className="font-normal text-gray-400">기사보다 먼저</span></h3>
+          <div className="mb-2 flex items-baseline justify-between">
+            <h3 className="text-sm font-semibold">📜 최근 개발 고시 <span className="font-normal text-gray-400">기사보다 먼저</span></h3>
+            <Link href="/gosi" className="text-xs font-medium text-blue-600 hover:underline">이력 →</Link>
+          </div>
           {freshGosi.length ? (
             <ul className="space-y-1.5">
               {freshGosi.map((g) => (

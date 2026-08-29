@@ -7,8 +7,9 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { prisma } from '@/lib/db';
 import { loadPolicyParams, loadReaderFinances, computeBudget, formatKRW } from '@/lib/tracker';
-import { rankCandidates, type Recommendation } from '@/lib/recommend';
+import { rankCandidates, GRADE_CUTS, type Recommendation } from '@/lib/recommend';
 import { tradeKey } from '@/lib/trade-key';
+import { LoanRoutes } from '@/components/LoanRoutes';
 import { LAWD_GU } from '@/lib/tiers';
 
 /** daily-recommend가 생성한 스트레치+ 트랙(config/recommendations.json) — 없으면 섹션 미노출 */
@@ -123,6 +124,11 @@ export default async function RecommendPage() {
   const top = ranked.slice(0, 20);
   const sweptAt = candidates.length ? candidates.reduce((m, c) => (c.sweptAt > m ? c.sweptAt : m), candidates[0].sweptAt) : null;
 
+  // '91점'만으로는 그게 좋은 건지 알 수 없다. 백분위는 상위 20위가 전부 1%로 붙어 변별이 안 되므로
+  // 등급 커트라인을 병기한다(S 75↑ / A 60↑ / B 45↑).
+  const cutOf = (g: Recommendation['grade']) =>
+    g === 'S' ? `S 기준 ${GRADE_CUTS.S}점↑` : g === 'A' ? `A 기준 ${GRADE_CUTS.A}점↑` : g === 'B' ? `B 기준 ${GRADE_CUTS.B}점↑` : `B 미달(${GRADE_CUTS.B}점)`;
+
   // 근거 등급 — 비교표와 상세 카드가 같은 판정을 쓰도록 한 곳에서 계산
   const evidenceOf = (r: (typeof top)[number]) => {
     const k = tradeKey(r.gu, r.dong, r.name);
@@ -160,7 +166,9 @@ export default async function RecommendPage() {
                   <span className="font-mono text-lg font-bold tabular-nums text-gray-700">{i + 1}</span>
                   <span className={`rounded px-2 py-0.5 text-sm font-bold ${GRADE_STYLE[r.grade]}`}>{r.grade}</span>
                   <h3 className="text-xl font-bold text-gray-900">{r.name}</h3>
-                  <span className="rounded bg-gray-100 px-2 py-0.5 text-[13px] font-semibold text-gray-600">{r.score}점</span>
+                  <span className="rounded bg-gray-100 px-2 py-0.5 text-[13px] font-semibold text-gray-600">
+                    {r.score}점 <span className="font-normal text-gray-400">· {cutOf(r.grade)}</span>
+                  </span>
                   <span className="ml-auto font-mono text-2xl font-bold tabular-nums text-blue-700">
                     {r.minDealPrice ? formatKRW(r.minDealPrice * 10_000) : '-'}
                   </span>
@@ -183,6 +191,8 @@ export default async function RecommendPage() {
                     <a href={`https://fin.land.naver.com/complexes/${r.complexNo}?tab=article`} target="_blank" rel="noreferrer" className="self-center text-blue-600 hover:underline">네이버 ↗</a>
                   </span>
                 </div>
+
+                {r.minDealPrice ? <LoanRoutes priceManwon={r.minDealPrice} /> : null}
 
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {r.reasons.map((reason, j) => (
@@ -345,6 +355,8 @@ export default async function RecommendPage() {
                     ) : null}
                   </p>
                 )}
+                <LoanRoutes priceManwon={r.medianManwon} />
+
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {r.reasons.map((reason, j) => (
                     <span key={j} className="rounded bg-green-50 px-2.5 py-1 text-[13px] text-green-700">✓ {reason}</span>

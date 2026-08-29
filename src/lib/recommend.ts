@@ -43,10 +43,13 @@ export interface Recommendation {
 
 // 투자지역 Tier는 src/lib/tiers.ts로 이전(recommend-engine.ts와 공유). tierOf() import.
 
+/** 등급 컷 — 화면에서 '91점이 좋은 건지'를 설명하려면 기준선도 함께 보여야 한다. */
+export const GRADE_CUTS = { S: 75, A: 60, B: 45 } as const;
+
 function gradeOf(score: number): Recommendation['grade'] {
-  if (score >= 75) return 'S';
-  if (score >= 60) return 'A';
-  if (score >= 45) return 'B';
+  if (score >= GRADE_CUTS.S) return 'S';
+  if (score >= GRADE_CUTS.A) return 'A';
+  if (score >= GRADE_CUTS.B) return 'B';
   return 'C';
 }
 
