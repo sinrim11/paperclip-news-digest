@@ -1,0 +1,59 @@
+{
+  "_comment": "무주택자 정책대출 파라미터 (2026-08-29 신설). 카드뉴스 자금계획이 시중은행 기준(4.5%)만 쓰고 있어 실제 무주택자가 쓰는 경로와 달랐던 문제를 교정. 수치는 전부 주택도시기금 공식 안내(myhome.go.kr) 원문 기준이며, 블로그·기사 수치는 쓰지 않는다. 정책 레이더(scripts/policy-refresh.sh)의 점검 항목에 편입되어 변경 시 갱신 제안이 온다.",
+  "asOf": "2026-08-29",
+  "sources": [
+    {
+      "title": "내집마련 디딤돌대출 (마이홈포털 공식)",
+      "url": "https://www.myhome.go.kr/hws/portal/cont/selectSteppingStoneLoanView.do"
+    },
+    {
+      "title": "신생아 특례 디딤돌대출 (마이홈포털 공식)",
+      "url": "https://www.myhome.go.kr/hws/portal/cont/selectBabySpecialCaseStepStoneLoneView.do"
+    }
+  ],
+  "_ltvNote": "생애최초는 LTV 80%이나 '수도권·규제지역 소재 주택은 LTV 70%' — 본 시스템 커버리지(서울·경기)는 전부 수도권이므로 70%를 적용한다. 정책 레이더가 매일 검증하는 policy-params.json과도 일치.",
+  "products": [
+    {
+      "id": "didimdol",
+      "label": "디딤돌 (생애최초)",
+      "ratePctMin": 2.85,
+      "ratePctMax": 4.15,
+      "rateTypicalPct": 3.8,
+      "_rateNote": "소득구간별 2.85~4.15%. 카드 계산엔 4~7천만원 구간(3.55~3.80%)의 상단인 3.8% 사용 — 낙관 표기 방지.",
+      "capManwon": 24000,
+      "_capNote": "생애최초 2.4억(일반 2억·신혼/2자녀 3.2억). 한도가 작아 금리는 낮지만 필요 현금은 커진다.",
+      "maxPriceManwon": 50000,
+      "_maxPriceNote": "담보주택 평가액 5억 이하(신혼·2자녀 6억 이하).",
+      "ltv": 0.7,
+      "eligibility": "부부합산 소득 7천만원 이하 · 무주택 세대주 · 주택가 5억 이하",
+      "termYears": 30,
+      "eligibilityShort": "소득 7천↓ · 주택가 5억↓"
+    },
+    {
+      "id": "newborn",
+      "label": "신생아 특례 디딤돌",
+      "ratePctMin": 1.8,
+      "ratePctMax": 4.5,
+      "rateTypicalPct": 2.7,
+      "_rateNote": "1.8~4.5% 구간. 카드엔 중하단 2.7%를 쓰되 '소득별 차등' 라벨을 함께 표기.",
+      "capManwon": 40000,
+      "maxPriceManwon": 90000,
+      "ltv": 0.7,
+      "eligibility": "2년 내 출산(2023.1.1 이후 출생아) · 부부합산 1.3억(맞벌이 2억) 이하",
+      "termYears": 30,
+      "eligibilityShort": "2년 내 출산 · 소득 1.3억↓"
+    }
+  ],
+  "bank": {
+    "id": "bank",
+    "label": "시중은행 (생애최초)",
+    "ratePctTypical": 4.5,
+    "capManwon": 60000,
+    "_capNote": "수도권 주담대 정책한도 6억(15억 이하 주택). policy-params.json loanCapByPrice와 동일.",
+    "ltv": 0.7,
+    "eligibility": "소득·출산 요건 없음 · DSR 40% 심사",
+    "termYears": 30,
+    "eligibilityShort": "소득·출산 요건 없음 · DSR 40%"
+  },
+  "_shortNote": "eligibilityShort는 카드 렌더용 축약(카드 높이 제약). 전체 조건은 eligibility."
+}

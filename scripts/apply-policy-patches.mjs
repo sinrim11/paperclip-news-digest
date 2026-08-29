@@ -123,6 +123,15 @@ if (regionChanges.length > 0) {
   lines.push(`   제안 저장: ${proposalPath}`);
 }
 
+// ── 3b. 정책대출(카드뉴스 소비) 변경 알림 — 자동 반영 없이 사람에게 갱신 요청 ──
+// policy-loans.json은 주택도시기금 공식 페이지 원문만 담는 파일이라, LLM 판단으로 덮어쓰지 않는다.
+const loanKeywords = /디딤돌|신생아|정책대출|버팀목/;
+const loanChanges = (radar.checks ?? []).filter((c) => c.status === 'changed' && loanKeywords.test(String(c.item ?? '') + String(c.latest ?? '')));
+if (loanChanges.length > 0) {
+  lines.push(`💳 정책대출 조건 변경 감지 ${loanChanges.length}건 — config/policy-loans.json 갱신 필요(카드뉴스 자금계획이 이 값을 씁니다):`);
+  for (const c of loanChanges) lines.push(`   · ${c.item}: ${c.current ?? '?'} → ${c.latest ?? '?'}\n     └ ${c.sourceUrl ?? ''}`);
+}
+
 // ── 4. 점검 이력 기록 ───────────────────────────────────────────────────────
 let checkLog = [];
 if (existsSync(CHECK_LOG_PATH)) {
@@ -141,7 +150,7 @@ writeFileSync(CHECK_LOG_PATH, JSON.stringify(checkLog.slice(0, 60), null, 2) + '
 // ── 5. 텔레그램 보고 본문 — 변경 없음이면 1줄(2026-08-11 다이어트), 변경 시에만 상세 ──
 const checks = Array.isArray(radar.checks) ? radar.checks : [];
 const unchanged = checks.filter((c) => c.status === 'unchanged').length;
-if (valid.length > 0 || regionChanges.length > 0) {
+if (valid.length > 0 || regionChanges.length > 0 || loanChanges.length > 0) {
   console.log(
     [
       `🏛️ 정책 레이더 (${today}) — 변경 감지`,

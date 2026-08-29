@@ -32,6 +32,100 @@ function fundingOf(priceManwon: number): { loan: number; cash: number; monthly: 
 }
 
 /**
+ * 무주택자 정책대출 경로(2026-08-29) — config/policy-loans.json(주택도시기금 공식 수치).
+ * 시중은행 기준만 보여주면 무주택 실수요자의 실제 선택지와 다르다. 다만 정책대출은
+ * 금리가 낮은 대신 한도가 작아 "필요 현금이 오히려 커지는" 트레이드오프가 있어,
+ * 유리한 쪽으로 조용히 갈아끼우지 않고 두 경로를 나란히 보여준다.
+ */
+interface LoanProduct {
+  id: string; label: string; ratePctMin?: number; ratePctMax?: number; rateTypicalPct?: number;
+  ratePctTypical?: number; capManwon: number; maxPriceManwon?: number; ltv: number;
+  eligibility: string; eligibilityShort?: string; termYears?: number;
+}
+interface PolicyLoans { products: LoanProduct[]; bank: LoanProduct }
+let _loansCache: PolicyLoans | null | undefined;
+function loadPolicyLoans(): PolicyLoans | null {
+  if (_loansCache !== undefined) return _loansCache;
+  try { _loansCache = JSON.parse(readFileSync(join(process.cwd(), 'config', 'policy-loans.json'), 'utf-8')) as PolicyLoans; }
+  catch { _loansCache = null; }
+  return _loansCache;
+}
+
+interface LoanPath { label: string; loan: number; cash: number; monthly: number; rateText: string; eligibility: string }
+function pathOf(price: number, p: LoanProduct): LoanPath {
+  const rate = p.rateTypicalPct ?? p.ratePctTypical ?? 4.5;
+  const loan = Math.min(Math.floor(price * p.ltv), p.capManwon);
+  return {
+    label: p.label,
+    loan,
+    cash: price - loan,
+    monthly: Math.round(loan * monthlyPaymentPerWon(rate, p.termYears ?? 30)),
+    rateText: p.ratePctMin != null && p.ratePctMax != null ? `${p.ratePctMin}~${p.ratePctMax}%` : `${rate}%`,
+    eligibility: p.eligibilityShort ?? p.eligibility, // 카드 높이 제약 — 축약본 우선
+  };
+}
+
+/**
+ * 🚇 입지 도식(2026-08-29 사용자 요청) — kakao-context.json의 실측 데이터.
+ * 지도 타일 대신 "역까지 도보 N분 + 생활시설 개수" 도식으로 전달한다(카드 가독성·저작권 모두 유리).
+ * 도보 환산은 통상 보행속도 80m/분 기준.
+ */
+interface KakaoCtx { subway?: { name?: string; distanceM?: number }; counts?: Record<string, number> }
+let _kakaoCache: Record<string, KakaoCtx> | null | undefined;
+function kakaoOf(complexNo: string): KakaoCtx | null {
+  if (_kakaoCache === undefined) {
+    try { _kakaoCache = (JSON.parse(readFileSync(join(process.cwd(), 'config', 'kakao-context.json'), 'utf-8')) as { complexes?: Record<string, KakaoCtx> }).complexes ?? null; }
+    catch { _kakaoCache = null; }
+  }
+  return _kakaoCache?.[complexNo] ?? null;
+}
+
+function localeBarHtml(complexNo: string): string {
+  const k = kakaoOf(complexNo);
+  if (!k) return '';
+  const walkMin = k.subway?.distanceM != null ? Math.max(1, Math.round(k.subway.distanceM / 80)) : null;
+  const c = k.counts ?? {};
+  const chip = (icon: string, label: string, val: string, accent = '#334155') =>
+    `<div style="flex:1;text-align:center;min-width:0">
+       <div style="font-size:30px">${icon}</div>
+       <div class="num" style="font-size:30px;font-weight:800;color:${accent};margin-top:2px">${val}</div>
+       <div style="font-size:20px;color:#94A3B8">${label}</div>
+     </div>`;
+  const station = k.subway?.name
+    ? `<div style="flex:1.5;min-width:0;border-right:2px solid #E2E8F0;padding-right:14px">
+         <div style="font-size:30px">🚇</div>
+         <div style="font-size:27px;font-weight:800;color:#1D4ED8;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${k.subway.name}역</div>
+         <div style="font-size:20px;color:#94A3B8">${walkMin != null ? `도보 ${walkMin}분 · ${k.subway.distanceM}m` : '거리 미상'}</div>
+       </div>`
+    : '';
+  return `<div style="margin-top:20px;display:flex;align-items:center;gap:14px;background:#F8FAFC;border-radius:18px;padding:18px 24px">
+    ${station}
+    ${chip('🏫', '학교', String(c.school ?? '—'))}
+    ${chip('📚', '학원', String(c.academy ?? '—'))}
+    ${chip('🛒', '마트', String(c.mart ?? '—'))}
+    ${chip('🏥', '병원', String(c.hospital ?? '—'))}
+  </div>`;
+}
+
+/** 매물 가격에 적용 가능한 경로들. policy=디딤돌(주택가 상한 내일 때만), newborn=신생아특례 배지용. */
+function loanRoutes(price: number): { policy: LoanPath | null; policyBlockedBy: string | null; bank: LoanPath; newborn: LoanPath | null } {
+  const cfg = loadPolicyLoans();
+  if (!cfg) {
+    const f = fundingOf(price);
+    return { policy: null, policyBlockedBy: null, bank: { label: '시중은행', ...f, rateText: '4.5%', eligibility: '' }, newborn: null };
+  }
+  const didim = cfg.products.find((p) => p.id === 'didimdol');
+  const newbornP = cfg.products.find((p) => p.id === 'newborn');
+  const policyOk = didim && price <= (didim.maxPriceManwon ?? Infinity);
+  return {
+    policy: policyOk ? pathOf(price, didim!) : null,
+    policyBlockedBy: !policyOk && didim ? `주택가 ${eok(didim.maxPriceManwon!)} 초과` : null,
+    bank: pathOf(price, cfg.bank),
+    newborn: newbornP && price <= (newbornP.maxPriceManwon ?? 0) ? pathOf(price, newbornP) : null,
+  };
+}
+
+/**
  * 취득세(만원) — 지방세법 표준세율 + 지방교육세(취득세의 1/10), 전용 85㎡ 이하 기준(농특세 비과세).
  * 6억↓ 1% · 6~9억 (가액×2/3억−3)% 누진 · 9억↑ 3%. 생애최초 감면(12억 이하, 최대 200만원) 반영.
  */
@@ -206,16 +300,32 @@ const eok = (m: number) => {
   return (Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')) + '억';
 };
 
-function coverHtml(scanned: number, passed: number, total: number, guCount: number): string {
+/**
+ * 표지(2026-08-29 개편) — "데이터 자랑"에서 "독자 이익"으로.
+ * 인스타 캐러셀은 첫 장에서 스크롤을 멈추지 못하면 나머지가 무의미하다(2026 알고리즘 조사).
+ * 훅 수치는 그날 TOP5의 실제 최저 월 상환에서 동적으로 뽑아 — 매번 달라지고, 지어내지 않는다.
+ */
+function coverHtml(scanned: number, passed: number, total: number, guCount: number, top: SharePick[]): string {
+  const best = top.reduce<{ monthly: number; cash: number; name: string } | null>((m, p) => {
+    const r = loanRoutes(p.minPrice);
+    const path = r.policy ?? r.bank;
+    return !m || path.monthly < m.monthly ? { monthly: path.monthly, cash: path.cash, name: p.name } : m;
+  }, null);
+  const hook = best
+    ? `월 <span style="color:#60A5FA">${best.monthly}만원</span>부터<br/>가능한 집, ${CAP_LABEL}`
+    : `무주택자를 위한<br/><span style="color:#60A5FA">${CAP_LABEL}</span> 5곳`;
   return `<style>${baseCss}</style><div class="card dark">
     ${brandBar(1, total)}
-    <div style="margin-top:150px">
-      <div style="font-size:38px;font-weight:700;color:#60A5FA;letter-spacing:0.06em">DATA RADAR</div>
-      <div style="font-size:96px;font-weight:800;line-height:1.18;margin-top:26px">수도권 <span style="color:#60A5FA">${CAP_LABEL}</span><br/>아파트 레이더 TOP 5</div>
-      <div style="font-size:34px;color:#CBD5E1;margin-top:42px;line-height:1.65">${guCount}개 구·시 <b style="color:#fff">${scanned.toLocaleString()}곳 스캔</b> → ${passed.toLocaleString()}곳 통과, 공개 데이터로만 채점<br/><b style="color:#60A5FA">💳 필요 현금·월 상환까지 계산해뒀습니다</b></div>
+    <div style="margin-top:130px">
+      <div style="font-size:36px;font-weight:700;color:#60A5FA;letter-spacing:0.04em">무주택 · 생애최초</div>
+      <div style="font-size:92px;font-weight:800;line-height:1.2;margin-top:24px">${hook}</div>
+      <div style="font-size:33px;color:#CBD5E1;margin-top:40px;line-height:1.65">
+        ${best ? `필요 현금 <b style="color:#fff">${eok(best.cash)}</b>부터 · 디딤돌·시중은행 <b style="color:#fff">두 경로를 나란히</b> 계산<br/>` : ''}
+        ${guCount}개 구·시 ${scanned.toLocaleString()}곳을 공개 데이터로만 채점 → ${passed.toLocaleString()}곳 통과
+      </div>
     </div>
     <div style="margin-top:auto;display:flex;align-items:center;justify-content:space-between">
-      <div style="font-size:27px;color:#64748B">국토교통부 실거래가 × 네이버부동산 호가 · 특정인 예산 기준 아님</div>
+      <div style="font-size:26px;color:#64748B">국토교통부 실거래가 × 네이버 호가 × 주택도시기금 공식 대출조건</div>
       <div style="font-size:34px;color:#60A5FA;font-weight:700">→</div>
     </div>
   </div>`;
@@ -247,17 +357,20 @@ function verdictGridHtml(p: SharePick): string {
         : `전세가율 <b>${p.jeonseRatioPct}%</b>${p.jeonseRatioPct >= 70 ? ' — 실거주 수요 탄탄' : p.jeonseRatioPct < 55 ? ' — 하락 방어력 낮음' : ''}`,
     },
   ];
-  const cells = tiles.map((t) => {
+  // 2026-08-29: 정책대출 2경로·입지 바가 들어오며 카드가 넘쳐, 메타/입지와 중복되는 두 타일
+  // (팔리나=세대·매물수, 건물가치=연차)은 제거하고 대체 불가능한 두 축만 남긴다.
+  const keep = new Set(['싸게 나왔나', '전세가 받쳐주나']);
+  const cells = tiles.filter((t) => keep.has(t.q)).map((t) => {
     const g = gradeOf(t.part, t.max);
-    return `<div style="flex:1 1 42%;background:${g.bg};border-radius:18px;padding:24px 28px;min-width:0">
+    return `<div style="flex:1 1 42%;background:${g.bg};border-radius:16px;padding:18px 24px;min-width:0">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-        <span style="font-size:26px;font-weight:700;color:#475569">${t.icon} ${t.q}</span>
-        <span style="font-size:26px;font-weight:800;color:${g.color};white-space:nowrap">${g.label}</span>
+        <span style="font-size:25px;font-weight:700;color:#475569">${t.icon} ${t.q}</span>
+        <span style="font-size:25px;font-weight:800;color:${g.color};white-space:nowrap">${g.label}</span>
       </div>
-      <div style="font-size:25px;color:#334155;margin-top:10px;line-height:1.45">${t.evidence}</div>
+      <div style="font-size:23px;color:#334155;margin-top:6px;line-height:1.4">${t.evidence}</div>
     </div>`;
   }).join('');
-  return `<div style="display:flex;flex-wrap:wrap;gap:18px">${cells}</div>`;
+  return `<div style="display:flex;flex-wrap:wrap;gap:14px">${cells}</div>`;
 }
 
 /** TOP5 한눈 비교표(2026-08-10) — "어느 단지를 볼지" 선택을 위한 정량 비교 한 장 */
@@ -308,48 +421,69 @@ function itemHtml(p: SharePick, rank: number, page: number, total: number): stri
   const gapColor = p.gapPct == null ? '#94A3B8' : p.gapPct <= 2 ? '#16A34A' : p.gapPct > 10 ? '#DC2626' : '#B45309';
   return `<style>${baseCss}</style><div class="card">
     ${brandBar(page, total)}
-    <div style="margin-top:56px;display:flex;align-items:center;gap:22px">
+    <div style="margin-top:44px;display:flex;align-items:center;gap:20px">
       <div class="num" style="font-size:50px;font-weight:800;color:#CBD5E1">${rank}</div>
       <span class="chip num" style="background:#0F172A;color:#fff;font-size:30px">레이더 ${p.score}점</span>
       ${p.topPct != null ? `<span class="num" style="font-size:27px;font-weight:700;color:#2563EB">${CAP_LABEL} ${p.poolSize?.toLocaleString()}곳 중 상위 ${p.topPct}%</span>` : ''}
     </div>
-    <div style="font-size:76px;font-weight:800;letter-spacing:-0.02em;margin-top:20px;line-height:1.15">${p.name}</div>
-    <div style="font-size:31px;color:#64748B;margin-top:14px">${p.gu} ${p.dong} · ${p.household.toLocaleString()}세대${p.elapsedYear != null ? ` · ${p.elapsedYear}년차` : ''}</div>
+    <div style="font-size:66px;font-weight:800;letter-spacing:-0.02em;margin-top:16px;line-height:1.15">${p.name}</div>
+    <div style="font-size:29px;color:#64748B;margin-top:10px">${p.gu} ${p.dong} · ${p.household.toLocaleString()}세대${p.elapsedYear != null ? ` · ${p.elapsedYear}년차` : ''}</div>
 
-    <div style="display:flex;gap:36px;margin-top:44px;align-items:flex-end">
+    <div style="display:flex;gap:36px;margin-top:32px;align-items:flex-end">
       <div style="flex:1">
         <div style="font-size:27px;color:#94A3B8;font-weight:700">최저 호가</div>
-        <div class="num" style="font-size:88px;font-weight:800;color:#2563EB;line-height:1.1;margin-top:4px">${eok(p.minPrice)}</div>
+        <div class="num" style="font-size:72px;font-weight:800;color:#2563EB;line-height:1.1;margin-top:2px">${eok(p.minPrice)}</div>
       </div>
       <div style="flex:1">
         ${p.tradeMedian
           ? `<div style="font-size:27px;color:#94A3B8;font-weight:700">실거래 중간 <span style="color:#CBD5E1">(120일·${p.tradeCount}건)</span></div>
-             <div class="num" style="font-size:60px;font-weight:800;color:#0F172A;line-height:1.15;margin-top:6px">${eok(p.tradeMedian)}</div>
+             <div class="num" style="font-size:52px;font-weight:800;color:#0F172A;line-height:1.15;margin-top:4px">${eok(p.tradeMedian)}</div>
              <div style="font-size:25px;font-weight:700;margin-top:6px"><span class="num" style="color:${gapColor}">호가 ${p.gapPct! >= 0 ? '+' : ''}${p.gapPct!.toFixed(1)}%</span>${p.trendPct != null ? ` <span style="color:#CBD5E1">·</span> <span class="num" style="color:${p.trendPct <= -1 ? '#16A34A' : p.trendPct >= 1 ? '#DC2626' : '#64748B'}">추이 ${p.trendPct > 0 ? '▲' : p.trendPct < 0 ? '▼' : ''}${Math.abs(p.trendPct).toFixed(1)}%</span>` : ''}</div>`
           : `<div style="font-size:27px;color:#94A3B8;font-weight:700">실거래</div><div style="font-size:36px;color:#CBD5E1;font-weight:700;margin-top:12px">120일 표본 없음</div>`}
       </div>
     </div>
 
     ${(() => {
-      // 💳 자금 계획 — 첫 구매자의 1번 질문. 최저 호가 기준, 생애최초 일반 가정(개인 수치 아님).
-      const f = fundingOf(p.minPrice);
-      return `<div style="margin-top:34px;background:#EFF6FF;border-radius:20px;padding:28px 34px">
+      // 💳 자금 계획 — 무주택 실수요자의 실제 선택지 2경로 병기(2026-08-29).
+      // 정책대출은 금리가 낮은 대신 한도가 작아 필요 현금이 커진다 → 한쪽만 보여주면 오도.
+      const r = loanRoutes(p.minPrice);
+      const row = (path: LoanPath, accent: string, sub: string) => `
+        <div style="display:flex;align-items:center;padding:14px 0;border-top:2px solid #DBEAFE">
+          <div style="width:300px">
+            <div style="font-size:26px;font-weight:800;color:${accent}">${path.label} <span style="font-weight:600;color:#64748B">${path.rateText}</span></div>
+            <div style="font-size:20px;color:#94A3B8;margin-top:3px">${sub}</div>
+          </div>
+          <div class="num" style="width:150px;font-size:28px;font-weight:700;color:#334155">${eok(path.loan)}</div>
+          <div class="num" style="width:170px;font-size:34px;font-weight:800;color:#0F172A">${eok(path.cash)}</div>
+          <div class="num" style="flex:1;text-align:right;font-size:34px;font-weight:800;color:${accent}">${path.monthly}만</div>
+        </div>`;
+      const blocked = `
+        <div style="display:flex;align-items:center;padding:14px 0;border-top:2px solid #DBEAFE;opacity:0.55">
+          <div style="width:300px">
+            <div style="font-size:26px;font-weight:800;color:#64748B">디딤돌 <span style="font-weight:600">2.85~4.15%</span></div>
+            <div style="font-size:20px;color:#94A3B8;margin-top:3px">${r.policyBlockedBy} — 대상 아님</div>
+          </div>
+          <div style="flex:1;text-align:right;font-size:24px;color:#94A3B8">시중은행 경로만 가능</div>
+        </div>`;
+      return `<div style="margin-top:30px;background:#EFF6FF;border-radius:20px;padding:24px 30px">
         <div style="display:flex;align-items:baseline;justify-content:space-between">
-          <span style="font-size:27px;font-weight:800;color:#1D4ED8">💳 이 가격이면 (생애최초 가정)</span>
-          <span style="font-size:22px;color:#64748B">최저 호가 ${eok(p.minPrice)} 기준</span>
+          <span style="font-size:27px;font-weight:800;color:#1D4ED8">💳 무주택 생애최초라면 (호가 ${eok(p.minPrice)} 기준)</span>
         </div>
-        <div style="display:flex;gap:40px;margin-top:16px">
-          <div><div style="font-size:24px;color:#64748B;font-weight:700">필요 현금</div><div class="num" style="font-size:52px;font-weight:800;color:#0F172A">약 ${eok(f.cash)}</div></div>
-          <div><div style="font-size:24px;color:#64748B;font-weight:700">월 상환</div><div class="num" style="font-size:52px;font-weight:800;color:#1D4ED8">약 ${f.monthly}만원</div></div>
-          <div style="flex:1;align-self:flex-end;font-size:22px;color:#94A3B8;line-height:1.5;text-align:right">대출 ${eok(f.loan)} · LTV 70%·한도 6억<br/>금리 4.5%·30년 가정 · 부대비용 별도</div>
+        <div style="display:flex;font-size:21px;font-weight:700;color:#94A3B8;margin-top:12px">
+          <div style="width:300px">경로</div><div style="width:150px">대출</div><div style="width:170px">필요 현금</div><div style="flex:1;text-align:right">월 상환</div>
         </div>
+        ${r.policy ? row(r.policy, '#15803D', r.policy.eligibility) : blocked}
+        ${row(r.bank, '#1D4ED8', r.bank.eligibility)}
+        ${r.newborn ? `<div style="margin-top:10px;font-size:21px;color:#B45309">🍼 신생아 특례 ${r.newborn.rateText} · 대출 ${eok(r.newborn.loan)} · 월 ${r.newborn.monthly}만 (2년 내 출산)</div>` : ''}
+        <div style="margin-top:8px;font-size:19px;color:#94A3B8">LTV 70%(수도권) · 30년 원리금균등 · 취득세·중개보수 별도 — 금리·한도는 소득에 따라 달라집니다</div>
       </div>`;
     })()}
-    <div style="margin-top:26px">${verdictGridHtml(p)}</div>
+    ${localeBarHtml(p.complexNo)}
+    <div style="margin-top:18px">${verdictGridHtml(p)}</div>
     ${p.factor
-      ? `<div style="margin-top:20px;display:flex;gap:14px;align-items:flex-start;padding:20px 26px;background:#FFFBEB;border:2px solid #FDE68A;border-radius:16px">
-           <span style="font-size:26px">🚧</span>
-           <div style="font-size:25px;line-height:1.5;color:#78350F"><b>[${p.factor.certainty}]</b> ${p.factor.title} — ${p.factor.expected}
+      ? `<div style="margin-top:16px;display:flex;gap:12px;align-items:flex-start;padding:16px 24px;background:#FFFBEB;border:2px solid #FDE68A;border-radius:16px">
+           <span style="font-size:24px">🚧</span>
+           <div style="font-size:24px;line-height:1.45;color:#78350F"><b>[${p.factor.certainty}]</b> ${p.factor.title} — ${p.factor.expected}
              <span style="color:#B45309">· ${p.factor.srcDomain}</span></div>
          </div>`
       : ''}
@@ -665,7 +799,7 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
   // 2026-08-12/27 개편: 매번 동일하던 카드(점수 산식·규제표·정책 동향)를 전부 제거.
   // 남은 9장은 모두 그날 데이터로 계산된다. 정책 콘텐츠는 briefing 시리즈가 전담.
   const total = 9;
-  const pages: string[] = [coverHtml(scanned.length, pool.length, total, guCount)];
+  const pages: string[] = [coverHtml(scanned.length, pool.length, total, guCount, top)];
   const names: string[] = ['01-cover'];
   pages.push(compareHtml(top, 2, total)); names.push('02-compare');
   top.forEach((p, i) => { pages.push(itemHtml(p, i + 1, i + 3, total)); names.push(`0${i + 3}-pick${i + 1}`); });
@@ -680,18 +814,24 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
     if (p.tradeCount >= 15) return `120일 ${p.tradeCount}건 거래 활발`;
     return `현금 약 ${eok(fundingOf(p.minPrice).cash)}이면 시작`;
   };
-  const capLines = top.map((p, i) => `${i + 1} ${p.name} ${eok(p.minPrice)} — ${hookOf(p)}`).join('\n');
-  const caption = `${withRo(CAP_LABEL)} 내 집, 지금 볼만한 5곳 🏠 (${today.slice(5).replace('-', '.')})
+  const capLines = top.map((p, i) => {
+    const r = loanRoutes(p.minPrice);
+    const path = r.policy ?? r.bank;
+    return `${i + 1} ${p.name} ${eok(p.minPrice)} — 현금 ${eok(path.cash)}·월 ${path.monthly}만${r.policy ? ' (디딤돌)' : ''}`;
+  }).join('\n');
+  const caption = `무주택자라면, ${withRo(CAP_LABEL)} 지금 볼만한 5곳 🏠 (${today.slice(5).replace('-', '.')})
 
 ${capLines}
 
-💳 취득세·중개보수까지 넣은 실제 필요 현금
+💳 디딤돌 vs 시중은행 — 두 경로를 나란히 계산했어요
+   (금리는 정책대출이 낮지만 한도가 작아 필요 현금은 더 큽니다)
+🚇 역 도보시간·학교·마트·병원까지 카드에
 ✅ 임장 체크리스트(서류3·현장5·비용3)도 같이
 📌 저장해두고 임장 갈 때 꺼내보세요
 
-국토부 실거래 × 네이버 호가 · 매일 자동 분석 · 출처는 카드 마지막 장 · 투자 자문 아님
+국토부 실거래 × 네이버 호가 × 주택도시기금 공식 대출조건 · 매일 자동 분석 · 투자 자문 아님
 
-#내집마련 #첫집 ${WINDOW.tags} #아파트추천 #실거래가 #무주택자 #부동산공부 #신혼집`;
+#내집마련 #첫집 #디딤돌대출 ${WINDOW.tags} #생애최초 #실거래가 #무주택자 #부동산공부 #신혼집`;
 
   return { pages, names, picks: top.map((p) => `${p.name}(${p.score})`), pickNos: top.map((p) => p.complexNo), caption };
 }
