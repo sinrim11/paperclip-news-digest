@@ -8,6 +8,8 @@ import { join } from 'path';
 import { prisma } from '@/lib/db';
 import { loadPolicyParams, loadReaderFinances, computeBudget, formatKRW } from '@/lib/tracker';
 import { rankCandidates, type Recommendation } from '@/lib/recommend';
+import { tradeKey } from '@/lib/trade-key';
+import { LAWD_GU } from '@/lib/tiers';
 
 /** daily-recommend가 생성한 스트레치+ 트랙(config/recommendations.json) — 없으면 섹션 미노출 */
 interface StretchReco {
@@ -93,18 +95,18 @@ export default async function RecommendPage() {
     prisma.aptTrade
       .findMany({
         where: { dealDate: { gte: new Date(Date.now() - 120 * 86_400_000) } },
-        select: { aptName: true, dong: true, dealAmount: true },
+        select: { aptName: true, dong: true, lawdCd: true, dealAmount: true },
       })
       .catch(() => []),
   ]);
 
-  // 실거래 중앙값 — 법정동으로 스코프한다.
+  // 실거래 중앙값 — 파이프라인의 나머지(추천 엔진·매칭·카드뉴스)와 같은 `구|법정동|정규화이름` 키로 묶는다.
   // 이름만으로 묶으면 '현대'처럼 흔한 단지명이 여러 동의 거래를 한 표본에 섞어(관악 신림동 현대가
-  // 208건·중간 9.18억으로 잡혀 갭 -47.7%) 급매도 아닌 매물을 급매로 보이게 했다.
-  // 스코프를 좁히면 매칭이 702→536건으로 줄지만, 못 맞춘 건 '표본 없음 → 보류'로 정직하게 표시된다.
+  // 208건·중간 9.18억으로 잡혀 갭 -47.7%) 급매도 아닌 매물을 최상위 급매로 보이게 했다.
+  // 구까지 넣는 이유: 신사동(강남·은평)·갈현동(은평·과천)처럼 법정동명만으로는 갈리지 않는 곳이 7곳 있다.
   const byName = new Map<string, number[]>();
   for (const t of trades) {
-    const key = `${t.dong}|${t.aptName}`;
+    const key = tradeKey(LAWD_GU[t.lawdCd] ?? t.lawdCd, t.dong, t.aptName);
     const arr = byName.get(key) ?? [];
     arr.push(t.dealAmount);
     byName.set(key, arr);
@@ -123,8 +125,9 @@ export default async function RecommendPage() {
 
   // 근거 등급 — 비교표와 상세 카드가 같은 판정을 쓰도록 한 곳에서 계산
   const evidenceOf = (r: (typeof top)[number]) => {
-    const tm = medianByName.get(`${r.dong}|${r.name}`) ?? null;
-    const cnt = countByName.get(`${r.dong}|${r.name}`) ?? 0;
+    const k = tradeKey(r.gu, r.dong, r.name);
+    const tm = medianByName.get(k) ?? null;
+    const cnt = countByName.get(k) ?? 0;
     const gap = tm && r.minDealPrice ? +(((r.minDealPrice - tm) / tm) * 100).toFixed(1) : null;
     const ev = cnt === 0 || gap == null ? { label: '근거 부족 — 보류', cls: 'bg-red-100 text-red-700' }
       : cnt < 3 ? { label: `표본 ${cnt}건 — 보류`, cls: 'bg-red-100 text-red-700' }

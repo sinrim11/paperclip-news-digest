@@ -14,6 +14,7 @@
  */
 
 import type { ComplexCandidate } from '@prisma/client';
+import { tradeKey } from './trade-key';
 import { tierOf } from './tiers';
 
 export interface RecoInput {
@@ -139,7 +140,7 @@ export function scoreCandidate(input: RecoInput): Recommendation {
 
 export function rankCandidates(
   candidates: ComplexCandidate[],
-  tradeMedianByDongName: Map<string, number>, // 키: `${법정동}|${단지명}`
+  tradeMedianByKey: Map<string, number>, // 키: tradeKey(구, 법정동, 단지명)
   nowBudget: number | null,
   easedBudget: number | null,
 ): Recommendation[] {
@@ -147,7 +148,7 @@ export function rankCandidates(
     .map((c) =>
       scoreCandidate({
         candidate: c,
-        recentTradeMedian: tradeMedianByDongName.get(`${c.dong}|${c.name}`) ?? null,
+        recentTradeMedian: tradeMedianByKey.get(tradeKey(c.gu, c.dong, c.name)) ?? null,
         nowBudgetManwon: nowBudget,
         easedBudgetManwon: easedBudget,
       }),
