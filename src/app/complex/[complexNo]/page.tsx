@@ -4,6 +4,8 @@
  *   · 통근·상권(카카오 실데이터) · 3단 투자분석(활성 프로필 기준) · 10년 집vs주식 · 정성 팩트·출처.
  */
 import Link from 'next/link';
+import { LocaleMap } from '@/components/LocaleMap';
+import { fetchNearby } from '@/lib/nearby';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { cookies } from 'next/headers';
@@ -89,6 +91,8 @@ export default async function ComplexPage({ params }: { params: Promise<{ comple
   const kc0 = kakaoAll?.complexes?.[complexNo] ?? null;
   const kc = kc0 && kakaoAll && kakaoAll.workKey !== workKey ? { ...kc0, driveMin: null, driveKm: null } : kc0;
   const cm = ctx && c.lat != null && c.lng != null ? computeCommute(c.lat, c.lng, ctx.work, kc) : null;
+  // 입지도용 반경 인프라 — 카카오 조회는 complexNo로 캐시되어 두 번째부터는 파일에서 온다
+  const nearby = c.lat != null && c.lng != null ? await fetchNearby(c.lat, c.lng, c.complexNo) : [];
   const am = c.lat != null && c.lng != null
     ? (kc?.counts ? computeAmenityKakao(kc.counts, kc.subway?.distanceM ?? null, c.lat, c.lng, ctx?.lifestyle) : computeAmenity(c.lat, c.lng, c.household))
     : null;
@@ -357,6 +361,13 @@ export default async function ComplexPage({ params }: { params: Promise<{ comple
           </ul>
         )}
       </section>
+
+      {/* ── 입지도 — '지하철·마트·학교가 어느 쪽에 얼마나'를 문장 대신 도식으로(2026-08-29) ── */}
+      {c.lat != null && c.lng != null && nearby.length > 0 && (
+        <div className="mb-6">
+          <LocaleMap lat={c.lat} lng={c.lng} places={nearby} />
+        </div>
+      )}
 
       {/* ── 통근·상권 ── */}
       {(cm || am) && (

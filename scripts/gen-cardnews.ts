@@ -14,6 +14,7 @@
  * 실행: npx tsx scripts/gen-cardnews.ts
  */
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'fs';
+import { fetchNearby, type NearbyPlace } from '../src/lib/nearby';
 import { join } from 'path';
 import { PrismaClient } from '@prisma/client';
 import { radarScore } from '../src/lib/radar-score';
@@ -264,38 +265,6 @@ interface SharePick {
  * (호갱노노류 앱은 실제 지도+도보시간을 쓰지만, 정지 이미지인 카드뉴스에는 도식이 맞고
  *  지도 타일 저작권 문제도 없다. 배치는 임의가 아니라 실제 방위·거리를 따른다.)
  */
-interface NearbyPlace { kind: string; icon: string; name: string; distance: number; lat: number; lng: number }
-const NEARBY_CATEGORIES: Array<{ code: string; kind: string; icon: string }> = [
-  { code: 'SW8', kind: '지하철', icon: '🚇' },
-  { code: 'SC4', kind: '학교', icon: '🏫' },
-  { code: 'MT1', kind: '마트', icon: '🛒' },
-  { code: 'HP8', kind: '병원', icon: '🏥' },
-];
-const NEARBY_CACHE = join(process.cwd(), 'output', 'locale-cache.json');
-
-async function fetchNearby(lat: number, lng: number, cacheKey: string): Promise<NearbyPlace[]> {
-  let cache: Record<string, NearbyPlace[]> = {};
-  try { cache = JSON.parse(readFileSync(NEARBY_CACHE, 'utf-8')); } catch { /* 첫 실행 */ }
-  if (cache[cacheKey]) return cache[cacheKey];
-  const key = process.env.KAKAO_REST_API_KEY;
-  if (!key) return [];
-  const out: NearbyPlace[] = [];
-  for (const c of NEARBY_CATEGORIES) {
-    try {
-      const url = `https://dapi.kakao.com/v2/local/search/category.json?category_group_code=${c.code}&x=${lng}&y=${lat}&radius=2000&sort=distance&size=1`;
-      const res = await fetch(url, { headers: { Authorization: `KakaoAK ${key}` }, signal: AbortSignal.timeout(10_000) });
-      if (!res.ok) continue;
-      const j = (await res.json()) as { documents?: Array<{ place_name: string; distance: string; x: string; y: string }> };
-      const d = j.documents?.[0];
-      if (d) out.push({ kind: c.kind, icon: c.icon, name: d.place_name, distance: Number(d.distance), lat: Number(d.y), lng: Number(d.x) });
-    } catch { /* 개별 실패는 무시 — 입지도는 부가 정보 */ }
-    await new Promise((r) => setTimeout(r, 120));
-  }
-  cache[cacheKey] = out;
-  try { writeFileSync(NEARBY_CACHE, JSON.stringify(cache, null, 2)); } catch { /* 캐시 실패 무시 */ }
-  return out;
-}
-
 /**
  * 지표별 등급(2026-08-10 직관화) — "N/40점" 같은 가중치 점수는 체계를 모르면 해석 불가.
  * 매수자의 4가지 실제 질문(싸게 나왔나·팔리나·건물 가치·전세 수요)에 등급+근거 수치로 답한다.
