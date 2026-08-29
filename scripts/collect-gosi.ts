@@ -13,13 +13,17 @@
  * 실행: npx tsx scripts/collect-gosi.ts [--pages=8] [--dry]
  */
 
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
 import { LAWD_GU } from '../src/lib/tiers';
 import { sendTelegram } from '../src/lib/telegram';
+import { extractGosiFacts, formatArea, type GosiFacts } from '../src/lib/gosi-extract';
 
-const LIST_URL = 'https://www.eum.go.kr/web/gs/gv/gvGosiList.jsp';
-const DETAIL_URL = 'https://www.eum.go.kr/web/gs/gv/gvGosiDet.jsp?seq=';
+const BASE = 'https://www.eum.go.kr';
+const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36';
+const LIST_URL = `${BASE}/web/gs/gv/gvGosiList.jsp`;
+const DETAIL_URL = `${BASE}/web/gs/gv/gvGosiDet.jsp?seq=`;
 const SEEN_PATH = join(process.cwd(), 'config', 'gosi-seen.json');
 const HITS_PATH = join(process.cwd(), 'config', 'gosi-hits.json');
 
@@ -60,7 +64,7 @@ const FACILITY_NOISE = ['근린공원', '공공공지', '수도공급', '자동�
   '폐기물', '체육시설', '종합의료시설', '도시계획시설(도로', '시설:도로', '(도로)'];
 const EXCLUDE = ['자연재해', '산사태', '농지', '축사', '분뇨', '묘지', '수산', '어항'];
 
-interface Gosi { seq: string; date: string; no: string; title: string; org: string; gu: string; grade?: '높음' | '중간' }
+interface Gosi { seq: string; date: string; no: string; title: string; org: string; gu: string; grade?: '높음' | '중간'; facts?: GosiFacts }
 
 /** 등급 판정 — HIGH 우선, 없으면 MID. 시설 노이즈만 있으면 null(제외). */
 function gradeOf(title: string): '높음' | '중간' | null {
@@ -71,12 +75,44 @@ function gradeOf(title: string): '높음' | '중간' | null {
   return null;
 }
 
+/**
+ * 고시 원문(PDF)에서 면적·제한기간을 뽑아 알림에 덧붙인다(2026-08-29).
+ * 양식이 지자체·유형마다 달라 전건 성공은 불가능하므로(조사 결과 7/10) "되면 붙이고 안 되면 생략".
+ * 다운로드 규약: POST /web/FileDownload.do · 파일명 EUC-KR 인코딩 필수(UTF-8이면 서버가 거부)
+ *   + gosi=Y, seq, Referer. Node에 EUC-KR 인코더가 없어 python3로 퍼센트 인코딩만 위임한다.
+ */
+async function fetchFacts(seq: string): Promise<GosiFacts | null> {
+  try {
+    const { execFile } = await import('child_process');
+    const { promisify } = await import('util');
+    const exec = promisify(execFile);
+
+    const res = await fetch(`${DETAIL_URL}${seq}`, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(20_000) });
+    const html = dec(await res.arrayBuffer());
+    const pdfPath = [...html.matchAll(/download\('\/web\/FileDownload\.do',\s*'([^']+)'\)/g)]
+      .map((m) => m[1]).find((f) => /\.pdf$/i.test(f));
+    if (!pdfPath) return null;
+
+    const { stdout: enc } = await exec('python3', ['-c', `import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1].encode('euc-kr')))`, pdfPath]);
+    const tmp = join(tmpdir(), `gosi-${seq}.pdf`);
+    await exec('curl', ['-s', '-L', '--max-time', '60', '-A', UA, '-e', `${DETAIL_URL}${seq}`,
+      '--data', `file=${enc.trim()}&gosi=Y&seq=${seq}&mobile_yn=`, `${BASE}/web/FileDownload.do`, '-o', tmp]);
+
+    const { stdout: text } = await exec('pdftotext', ['-layout', '-f', '1', '-l', '4', tmp, '-'], { maxBuffer: 20e6 });
+    rmSync(tmp, { force: true });
+    const facts = extractGosiFacts(text);
+    return facts.areaM2 || facts.periodText ? facts : null;
+  } catch {
+    return null; // 원문 파싱은 부가 정보 — 실패해도 알림 자체는 나가야 한다
+  }
+}
+
 const dec = (buf: ArrayBuffer) => new TextDecoder('euc-kr').decode(buf);
 const strip = (s: string) => s.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 
 async function fetchPage(pageNo: number): Promise<Gosi[]> {
   const res = await fetch(`${LIST_URL}?pageNo=${pageNo}`, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
+    headers: { 'User-Agent': UA },
     signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -125,6 +161,13 @@ async function main() {
   console.log(`[gosi] ${pages}페이지 ${all.length}건 수집 · 커버리지+키워드 적중 ${hits.length}건 · 신규 ${fresh.length}건`);
   for (const g of fresh) console.log(`  · ${g.grade === '높음' ? '🔴' : '🟡'} [${g.date}] ${g.gu} — ${g.title}`);
 
+  // 알림에 나갈 건만 원문에서 면적·기간 보강(있으면 붙이고 없으면 생략)
+  for (const g of fresh.slice(0, 8)) {
+    g.facts = (await fetchFacts(g.seq)) ?? undefined;
+    if (g.facts?.areaM2) console.log(`     └ 원문: ${formatArea(g.facts.areaM2)}${g.facts.periodText ? ` · ${g.facts.periodText}` : ''}`);
+    await new Promise((r) => setTimeout(r, 800));
+  }
+
   if (dry) return;
 
   for (const g of all) seen.add(g.seq); // 적중 여부와 무관하게 '본 것'으로 기록(재알림 방지)
@@ -133,7 +176,10 @@ async function main() {
   if (fresh.length) {
     const hist = loadJson<Gosi[]>(HITS_PATH, []);
     writeFileSync(HITS_PATH, JSON.stringify([...fresh, ...hist].slice(0, 200), null, 2));
-    const lines = fresh.slice(0, 8).map((g) => `${g.grade === '높음' ? '🔴' : '🟡'} [${g.gu}] ${g.title}\n  ${g.no} (${g.date})\n  ${DETAIL_URL}${g.seq}`);
+    const lines = fresh.slice(0, 8).map((g) => {
+      const f = [g.facts?.areaM2 ? `면적 ${formatArea(g.facts.areaM2)}` : null, g.facts?.periodText].filter(Boolean).join(' · ');
+      return `${g.grade === '높음' ? '🔴' : '🟡'} [${g.gu}] ${g.title}\n${f ? `  📐 ${f}\n` : ''}  ${g.no} (${g.date})\n  ${DETAIL_URL}${g.seq}`;
+    });
     await sendTelegram(
       [`📜 도시계획 고시 ${fresh.length}건 (🔴정비·개발 ${fresh.filter((g) => g.grade === '높음').length} · 🟡계획변경 ${fresh.filter((g) => g.grade === '중간').length}) — 기사보다 먼저 나오는 원문`, '', ...lines,
         fresh.length > 8 ? `\n외 ${fresh.length - 8}건` : '',
