@@ -51,6 +51,18 @@ const DISTRICTS: Array<{ lawdCd: string; name: string }> = [
   { lawdCd: '41430', name: '의왕시' },
   // 경기 동북(1-B-iii) — 남양주=비규제, GTX-B·왕숙 생활권
   { lawdCd: '41360', name: '남양주시' },
+  // 강남권 1시간 내외(2026-08-29 사용자 지시 — 남양주 편중 완화).
+  // 전부 region-regulation.json에 검증 등재된 지역이라 추천 게이트를 바로 통과한다.
+  { lawdCd: '41290', name: '과천시' },
+  { lawdCd: '41210', name: '광명시' },
+  { lawdCd: '41450', name: '하남시' },
+  { lawdCd: '41310', name: '구리시' },
+  { lawdCd: '41131', name: '성남 수정구' },
+  { lawdCd: '41133', name: '성남 중원구' },
+  { lawdCd: '41135', name: '성남 분당구' },
+  { lawdCd: '41465', name: '용인 수지구' },
+  { lawdCd: '41463', name: '용인 기흥구' },
+  { lawdCd: '41117', name: '수원 영통구' },
 ];
 
 function recentMonths(n: number): string[] {

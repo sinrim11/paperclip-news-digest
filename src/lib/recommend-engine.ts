@@ -29,6 +29,11 @@ export interface DailyReco {
   tradeCount: number;
   scenario: string; // 로그/분류용: "현행" | "빠듯"
   budgetLabel: string; // 텔레그램 표시용
+  // 단지 규모·상태(2026-08-29) — ComplexCandidate(네이버 스윕) 조인. 미수집 단지는 null.
+  household?: number | null; // 총 세대수 — 투자 가치 판단의 기본 축(소규모 단지 배제)
+  far?: number | null; // 용적률 %
+  lastTradeDate?: string; // 최근 실거래일 "MM-DD"
+  lastTradeManwon?: number; // 최근 실거래가(만원)
   station: string;
   catalyst?: string;
   school?: string;
@@ -60,11 +65,11 @@ export interface DailyReco {
 }
 
 interface Rules {
-  filters: { minExclusiveAreaM2: number; minTrades180d: number; lookbackDays: number; rentMinSamples?: number };
+  filters: { minExclusiveAreaM2: number; minTrades180d: number; lookbackDays: number; rentMinSamples?: number; minHousehold?: number };
   weights: { tierMultiplier: number; liquidityCap: number; budgetFitComfortable: number; budgetFitStretch: number; freshnessMax: number; regionHeatMax: number; jeonseRatioMax?: number };
   freshnessByAge: Array<{ maxAge: number; score: number }>;
   jeonseRatioByPct?: Array<{ minPct: number; score: number }>;
-  diversity?: { maxPerGu: number; maxNonSeoulPerDay?: number };
+  diversity?: { maxPerGu: number; maxNonSeoulPerDay?: number; maxPerNonSeoulCity?: number };
   dailyLimit: number;
   downsideFlags?: Partial<DownsideConfig>;
   stretchPlus?: { enabled?: boolean; limit: number; ceilingManwon: number; maxPerGu?: number; cooldownDays?: number };
@@ -232,6 +237,21 @@ export async function buildDailyRecommendations(
   const aggs = buildAggs(stretch);
   const aggsWide = spCeiling > stretch ? buildAggs(spCeiling) : aggs;
 
+  // 1a) 단지 제원(세대수·용적률) 조인(2026-08-29) — 국토부 실거래엔 없는 정보라
+  //     네이버 스윕 결과(ComplexCandidate)에서 gu|dong|정규화 단지명으로 매칭.
+  //     미수집 단지는 null → 세대수 게이트는 "아는 경우에만" 적용(신규 편입 지역 전멸 방지).
+  const candidates = await prisma.complexCandidate.findMany({ select: { gu: true, dong: true, name: true, household: true, far: true } });
+  const specByKey = new Map<string, { household: number; far: number | null }>();
+  for (const c of candidates) specByKey.set(`${c.gu}|${c.dong}|${normName(c.name)}`, { household: c.household, far: c.far ?? null });
+  const specOf = (a: ComplexAgg) => specByKey.get(`${a.gu}|${a.dong}|${normName(a.name)}`) ?? null;
+  /** 최근 실거래 1건(날짜·가격) — "언제 얼마에 팔렸나"는 호가 신뢰도 판단의 기준점. */
+  const lastTradeOf = (a: ComplexAgg): { lastTradeDate?: string; lastTradeManwon?: number } => {
+    const last = a.recentTrades.reduce<{ price: number; ms: number } | null>((m, t) => (!m || t.ms > m.ms ? t : m), null);
+    return last ? { lastTradeDate: kstDateStr(new Date(last.ms)).slice(5), lastTradeManwon: last.price } : {};
+  };
+  const minHousehold = rules.filters.minHousehold ?? 0;
+  let smallSkipped = 0;
+
   // 1b) 전세(월세0) 집계 — 전세가율 계산용. 매매와 동일 lookback·전용면적.
   const rentRows = await prisma.aptRent.findMany({
     where: { dealDate: { gte: since }, excluUseAr: { gte: rules.filters.minExclusiveAreaM2 }, monthlyRent: 0 },
@@ -304,6 +324,8 @@ export async function buildDailyRecommendations(
   for (const a of aggs.values()) {
     if (a.prices.length < rules.filters.minTrades180d) continue;
     if (fbBan.has(a.key)) { fbBannedKeys.add(a.key); continue; } // 사용자 제외 피드백
+    const spec = specOf(a);
+    if (spec && spec.household < minHousehold) { smallSkipped++; continue; } // 소규모 단지 — 투자 가치 게이트
     const reg = regulationOf(a.gu);
     if (reg.status === 'unverified') {
       skippedUnverifiedGu.add(a.gu);
@@ -425,6 +447,9 @@ export async function buildDailyRecommendations(
       scenario: inComfortable ? '자기자본' : '2년적립',
       budgetLabel: inComfortable ? `자기자본권(≤${eok(comfortable)}) ✅` : `2년 적립 자기자본권(≤${eok(stretch)}) 🔓`,
       station: '역세권 정보 확인 필요',
+      household: spec?.household ?? null,
+      far: spec?.far ?? null,
+      ...lastTradeOf(a),
       reasons,
       cautions,
       score,
@@ -441,6 +466,7 @@ export async function buildDailyRecommendations(
   const facts = loadJson<ComplexFact[]>('config/complex-facts.json') ?? [];
   const isSeoulKey = (complexKey: string) => complexKey.startsWith('11'); // lawdCd 11* = 서울
   const maxNonSeoul = rules.diversity?.maxNonSeoulPerDay ?? 99;
+  const maxPerCity = rules.diversity?.maxPerNonSeoulCity ?? 99; // 경기 특정 시(남양주) 독점 방지
   scored.sort((a, b) => b.score - a.score);
   const picked: DailyReco[] = [];
   const perGu: Record<string, number> = {};
@@ -451,6 +477,7 @@ export async function buildDailyRecommendations(
     if ((perGu[r.gu] ?? 0) >= cap) continue;
     if (!isSeoulKey(r.complexKey)) {
       if (nonSeoulPicked >= maxNonSeoul) continue;
+      if ((perGu[r.gu] ?? 0) >= maxPerCity) continue;
       nonSeoulPicked++;
     }
     perGu[r.gu] = (perGu[r.gu] ?? 0) + 1;
@@ -495,6 +522,8 @@ export async function buildDailyRecommendations(
     for (const a of aggsWide.values()) {
       if (a.prices.length < rules.filters.minTrades180d) continue;
       if (fbBan.has(a.key)) { fbBannedKeys.add(a.key); continue; } // 사용자 제외 피드백
+      const spCand = specOf(a);
+      if (spCand && spCand.household < minHousehold) { smallSkipped++; continue; }
       const reg = regulationOf(a.gu);
       if (reg.status === 'unverified') {
         skippedUnverifiedGu.add(a.gu);
@@ -563,6 +592,9 @@ export async function buildDailyRecommendations(
         medianManwon: med,
         priceRangeText: `${eok(a.prices[0])}~${eok(a.prices[a.prices.length - 1])}`,
         tradeCount: a.prices.length,
+        household: spCand?.household ?? null,
+        far: spCand?.far ?? null,
+        ...lastTradeOf(a),
         scenario: '스트레치+',
         budgetLabel: med > stretch ? `부모님 찬스 (≤${eok(spDynamicCeiling)}) 👨‍👩‍👦` : `스트레치+ (≤${eok(spDynamicCeiling)}) ➕`,
         station: '역세권 정보 확인 필요',
@@ -587,6 +619,7 @@ export async function buildDailyRecommendations(
       if ((spPerGu[r.gu] ?? 0) >= spCap) continue;
       if (!r.complexKey.startsWith('11')) {
         if (spNonSeoul >= spMaxNonSeoul) continue;
+        if ((spPerGu[r.gu] ?? 0) >= (rules.diversity?.maxPerNonSeoulCity ?? 99)) continue;
         spNonSeoul++;
       }
       spPerGu[r.gu] = (spPerGu[r.gu] ?? 0) + 1;
@@ -618,6 +651,8 @@ export async function buildDailyRecommendations(
       if (!nonRegGus.has(a.gu)) continue;
       if (a.prices.length < gapCfg.minTrades) continue;
       if (fbBan.has(a.key)) { fbBannedKeys.add(a.key); continue; } // 사용자 제외 피드백
+      const gapCand = specOf(a);
+      if (gapCand && gapCand.household < minHousehold) { smallSkipped++; continue; }
       if (pickedKeys.has(a.key)) continue; // 메인 추천과 중복 제외
       if (lastSentByKey.has(a.key)) continue; // 쿨다운(2026-08-05 추가) — 갭 트랙도 14일 로테이션 적용, 같은 단지 매일 반복 방지
       a.prices.sort((x, y) => x - y);
@@ -664,6 +699,9 @@ export async function buildDailyRecommendations(
         medianManwon: med,
         priceRangeText: `${eok(a.prices[0])}~${eok(a.prices[a.prices.length - 1])}`,
         tradeCount: a.prices.length,
+        household: gapCand?.household ?? null,
+        far: gapCand?.far ?? null,
+        ...lastTradeOf(a),
         scenario: '갭투자',
         budgetLabel: coverable ? '갭 자기자본 내 🔓' : '갭 자기자본 초과분 필요',
         station: '역세권 정보 확인 필요',
@@ -701,9 +739,10 @@ export async function buildDailyRecommendations(
     : '';
   const flagNote = excluded.length ? ` · 🚩 하방 플래그 제외 ${excluded.length}건` : '';
   const fbNote = fbBannedKeys.size ? ` · 🚫 사용자 제외 ${fbBannedKeys.size}개 단지` : '';
+  const smallNote = smallSkipped ? ` · 🏢 ${minHousehold}세대 미만 제외 ${smallSkipped}건` : '';
   const note = items.length
-    ? `${items.length}건 추천 (신규 ${items.filter((x) => x.isNew).length} · 재등장 ${items.filter((x) => !x.isNew).length})${stretchPlus.length ? ` · 스트레치+ ${stretchPlus.length}건` : ''}${gapTrack.length ? ` · 갭투자 트랙 ${gapTrack.length}건` : ''}${gateNote}${flagNote}${fbNote}`
-    : `오늘은 규칙을 통과한 신규 후보가 없습니다(최근 14일 추천분 쿨다운). 시장 변화 시 재등장합니다.${gateNote}${flagNote}${fbNote}`;
+    ? `${items.length}건 추천 (신규 ${items.filter((x) => x.isNew).length} · 재등장 ${items.filter((x) => !x.isNew).length})${stretchPlus.length ? ` · 스트레치+ ${stretchPlus.length}건` : ''}${gapTrack.length ? ` · 갭투자 트랙 ${gapTrack.length}건` : ''}${gateNote}${flagNote}${fbNote}${smallNote}`
+    : `오늘은 규칙을 통과한 신규 후보가 없습니다(최근 14일 추천분 쿨다운). 시장 변화 시 재등장합니다.${gateNote}${flagNote}${fbNote}${smallNote}`;
 
   return { asOf: todayStr, items, stretchPlus, gapTrack, excluded, note, scanned: aggs.size };
 }

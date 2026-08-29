@@ -5,7 +5,9 @@
     "minExclusiveAreaM2": 50,
     "minTrades180d": 3,
     "lookbackDays": 180,
-    "rentMinSamples": 2
+    "rentMinSamples": 2,
+    "minHousehold": 300,
+    "_minHouseholdNote": "투자 가치 게이트(2026-08-29 사용자 지시) — 나홀로·소규모 단지는 환금성·시세 방어력이 떨어져 제외. 세대수는 네이버 스윕(ComplexCandidate) 조인으로만 알 수 있어, 미수집 단지는 통과시킨다(신규 편입 지역 전멸 방지). 더 보수적으로 가려면 500으로 상향."
   },
   "_stance": "투자 우선(사용자 확정 2026-07-04). 규제상 서울 아파트는 '2년 실거주 후 임대전환'이 유일 합법 투자경로 — 투자 수익 신호(신축프리미엄·전세가율·환금성)를 최우선 가중. 실거주 편의(직주근접) 가중은 미포함.",
   "weights": {
@@ -25,8 +27,9 @@
   ],
   "diversity": {
     "maxPerGu": 2,
-    "maxNonSeoulPerDay": 2,
-    "_note": "하루 추천에서 한 구 최대 N개(동네 편중 방지) + 비서울(경기) 합산 최대 N개(2026-08-10 — 남양주 편중 완화, 서울 전역 우선). lawdCd 11* = 서울."
+    "maxNonSeoulPerDay": 3,
+    "maxPerNonSeoulCity": 1,
+    "_note": "하루 추천에서 한 구 최대 N개(동네 편중 방지) + 비서울(경기) 합산 최대 N개(서울 전역 우선). lawdCd 11* = 서울. 2026-08-29: 비서울 합산 캡만으로는 남양주가 슬롯을 독점해 신규 편입 지역(강남권 1시간)이 못 들어왔다 → 비서울은 같은 시 하루 1건으로 세분화하고 합산 캡을 3으로."
   },
   "budgetFallback": {
     "_note": "market-context.json 부재 시 사용. comfortable=오늘 자기자본권(약7억·마통해지 생초LTV70%), stretch=2년 적립 자기자본권(약7.8억). 가족지원은 사실상 불필요. budgetFitStretch를 1로 유지해 오늘 자기자본 내(≤7억)를 우선.",

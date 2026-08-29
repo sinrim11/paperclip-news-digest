@@ -10,6 +10,9 @@ export interface RecoView {
   dong: string;
   buildYear?: number | null;
   household?: number | null;
+  far?: number | null; // 용적률 %
+  lastTradeDate?: string; // "MM-DD"
+  lastTradeManwon?: number;
   areaText: string;
   medianManwon: number;
   priceRangeText?: string;
@@ -47,6 +50,23 @@ function regulationLines(r: RecoView): string[] {
   return r.regulationLabel ? [`🧾 ${r.regulationLabel.split(' — ')[0]}`] : [];
 }
 
+/** 단지 제원 한 줄(2026-08-29) — 준공·세대수·용적률·전용면적. 투자 판단의 기본 정보. */
+function specLine(r: RecoView): string {
+  const parts = [
+    r.buildYear ? `🏗 ${r.buildYear}년` : null,
+    r.household ? `👥 ${r.household.toLocaleString()}세대` : '👥 세대수 미상', // 모른다는 것도 투자 판단 정보
+    r.far != null ? `📐 용적률 ${Math.round(r.far)}%` : null,
+    r.areaText,
+  ].filter(Boolean);
+  return parts.join(' · ');
+}
+
+/** 최근 실거래 — 호가·중간값이 아니라 "마지막으로 실제 팔린 날짜와 값". */
+function lastTradeLine(r: RecoView): string {
+  if (!r.lastTradeDate || r.lastTradeManwon == null) return '🕘 최근 실거래 정보 없음';
+  return `🕘 최근 거래 ${r.lastTradeDate.replace('-', '/')} · ${eok(r.lastTradeManwon)}`;
+}
+
 /** 근거 다이어트(2026-08-11) — 신호(🔻📈)·피드백(❤️)·부모님찬스(👨‍👩‍👦)·호재(🚧)는 우선 보존, 상위 n개만. */
 function topReasons(reasons: string[], n = 4): string[] {
   const hot = reasons.filter((x) => /^(🔻|📈|❤️|👨‍👩‍👦|🚧)/.test(x));
@@ -81,7 +101,8 @@ export function stretchHeader(count: number, asOf: string): string {
 export function formatStretchReco(r: RecoView): string {
   const lines: string[] = [];
   lines.push(`➕ ${r.rank}. ${r.name} — ${r.gu} ${r.dong}`);
-  lines.push(`💰 실거래 중간 ${eok(r.medianManwon)}${r.tradeCount ? ` (${r.tradeCount}건)` : ''}${r.buildYear ? ` · ${r.buildYear}년` : ''}`);
+  lines.push(specLine(r));
+  lines.push(`💰 실거래 중간 ${eok(r.medianManwon)}${r.tradeCount ? ` (${r.tradeCount}건)` : ''} · ${lastTradeLine(r).replace('🕘 ', '')}`);
   if (r.overComfortManwon != null) lines.push(`💸 +${eok(r.overComfortManwon)} 더 필요${r.monthlyPayAddManwon != null ? ` · 월 상환 약 +${r.monthlyPayAddManwon}만` : ''}${r.monthsToReach != null ? ` · 적립 ${r.monthsToReach}개월${r.monthsToReach <= 24 ? '✅' : '⚠️'}` : ''}`);
   for (const reason of topReasons(r.reasons, 3)) lines.push(`✅ ${reason}`);
   for (const c of (r.cautions ?? []).slice(0, 1)) lines.push(`⚠️ ${c}`);
@@ -96,7 +117,9 @@ export function gapHeader(count: number, asOf: string): string {
 export function formatGapReco(r: RecoView): string {
   const lines: string[] = [];
   lines.push(`🔓 ${r.rank}. ${r.name} — ${r.gu} ${r.dong} (비규제)`);
+  lines.push(specLine(r));
   lines.push(`💰 매매 ${eok(r.medianManwon)} − 전세 ${eok(r.jeonseManwon ?? 0)} = 갭 ${eok(r.gapManwon ?? 0)} · 전세가율 ${r.jeonseRatioPct}%${r.gapCoverable ? ' · 자기자본 내 ✅' : ' ⚠️'}`);
+  lines.push(lastTradeLine(r));
   for (const reason of topReasons(r.reasons, 2)) lines.push(`✅ ${reason}`);
   for (const c of (r.cautions ?? []).slice(0, 1)) lines.push(`⚠️ ${c}`);
   if (r.complexNo) lines.push(`🔗 https://fin.land.naver.com/complexes/${r.complexNo}?tab=article`);
@@ -107,9 +130,9 @@ export function formatReco(r: RecoView): string {
   const lines: string[] = [];
   const budget = r.budgetLabel ?? (r.scenario === '현행' ? '생애최초 예산(8억) 내 ✅' : '8~9억 · 대출 최적화 시 🔓');
   lines.push(`🏠 ${r.rank}. ${r.name} — ${r.gu} ${r.dong}`);
-  const spec = [r.buildYear ? `${r.buildYear}년` : null, r.household ? `${r.household.toLocaleString()}세대` : null, r.areaText].filter(Boolean);
-  lines.push(`${spec.join(' · ')}`);
+  lines.push(specLine(r));
   lines.push(`💰 실거래 중간 ${eok(r.medianManwon)}${r.tradeCount ? ` (${r.tradeCount}건)` : ''} · ${budget}`);
+  lines.push(lastTradeLine(r));
   lines.push(...regulationLines(r));
   if (r.station && r.station !== '역세권 정보 확인 필요') lines.push(`🚇 ${r.station}`);
   for (const reason of topReasons(r.reasons)) lines.push(`✅ ${reason}`);
