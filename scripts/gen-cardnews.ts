@@ -80,6 +80,57 @@ function kakaoOf(complexNo: string): KakaoCtx | null {
   return _kakaoCache?.[complexNo] ?? null;
 }
 
+/** 동심원 입지도 — 반경 400m(도보 5분)·800m(10분) 링에 실제 방위대로 시설을 찍는다. */
+function localeMapHtml(p: SharePick): string {
+  const places = (p.nearby ?? []).filter((n) => n.distance <= 1600);
+  if (!places.length || p.lat == null || p.lng == null) return localeBarHtml(p.complexNo);
+  const S = 250; // 지도 한 변(px)
+  const c = S / 2;
+  const MAX_M = 1600; // 지도 가장자리 = 1.6km
+  const px = (m: number) => (m / MAX_M) * (c - 26);
+  const latRad = (p.lat * Math.PI) / 180;
+  const used: number[] = [];
+  const dot = places.map((n) => {
+    const dx = (n.lng - p.lng!) * Math.cos(latRad) * 111_320;
+    const dy = (n.lat - p.lat!) * 110_540;
+    const dist = Math.max(1, Math.hypot(dx, dy));
+    const r = px(Math.min(dist, MAX_M));
+    let ang = Math.atan2(dy, dx);
+    // 같은 방향(20° 이내)에 이미 아이콘이 있으면 겹치므로 24°씩 벌린다 — 거리는 유지
+    while (used.some((u) => Math.abs(((ang - u + Math.PI) % (2 * Math.PI)) - Math.PI) < 0.35)) ang += 0.42;
+    used.push(ang);
+    const x = c + Math.cos(ang) * r;
+    const y = c - Math.sin(ang) * r; // SVG y축 반전
+    return `<text x="${x.toFixed(0)}" y="${(y + 10).toFixed(0)}" font-size="30" text-anchor="middle">${n.icon}</text>`;
+  }).join('');
+  const rings = [400, 800, 1200].map((m) =>
+    `<circle cx="${c}" cy="${c}" r="${px(m).toFixed(0)}" fill="none" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="6 6"/>`).join('');
+  const list = places.map((n) => {
+    const walk = Math.max(1, Math.round(n.distance / 80));
+    return `<div style="display:flex;align-items:baseline;gap:10px;font-size:24px;line-height:1.5">
+      <span>${n.icon}</span>
+      <span style="font-weight:700;color:#0F172A;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.name}</span>
+      <span class="num" style="color:#64748B">${n.distance}m · 도보 ${walk}분</span>
+    </div>`;
+  }).join('');
+  return `<div style="margin-top:16px;display:flex;gap:22px;align-items:center;background:#F8FAFC;border-radius:18px;padding:16px 22px">
+    <svg width="${S}" height="${S}" viewBox="0 0 ${S} ${S}" style="flex-shrink:0">
+      <rect width="${S}" height="${S}" rx="16" fill="#fff"/>
+      ${rings}
+      <circle cx="${c}" cy="${c}" r="13" fill="#2563EB"/>
+      <text x="${c}" y="${c + 34}" font-size="19" text-anchor="middle" fill="#1D4ED8" font-weight="700">단지</text>
+      ${dot}
+      <text x="${c}" y="${(c - px(800) - 6).toFixed(0)}" font-size="17" text-anchor="middle" fill="#94A3B8">800m</text>
+      <text x="${c}" y="${(c - px(400) - 6).toFixed(0)}" font-size="17" text-anchor="middle" fill="#94A3B8">400m</text>
+    </svg>
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:23px;font-weight:800;color:#475569">🗺 걸어서 닿는 거리</div>
+      ${list}
+      <div style="font-size:19px;color:#94A3B8;margin-top:2px">점선 = 반경 400m(도보 5분)·800m(10분)·1.2km · 실제 방위 기준</div>
+    </div>
+  </div>`;
+}
+
 function localeBarHtml(complexNo: string): string {
   const k = kakaoOf(complexNo);
   if (!k) return '';
@@ -203,6 +254,46 @@ interface SharePick {
   factor?: { certainty: string; title: string; expected: string; srcDomain: string } | null; // 지역 호재(확정·진행만, momentum-factors — 정부·공식 발표 근거)
   topPct?: number; // 같은 가격대 통과 단지 중 상위 % (1~100) — 절대점수보다 직관적인 비교 맥락
   poolSize?: number; // 백분위 모수(통과 단지 수)
+  lat?: number | null; lng?: number | null;
+  nearby?: NearbyPlace[]; // 입지도용 주변 시설(카카오 카테고리 검색 실좌표)
+}
+
+/**
+ * 입지도(2026-08-29 사용자 요청 + 벤치마크) — 분양 홍보물의 표준 표현인
+ * "동심원 반경 + 방위별 아이콘 배치"를 실좌표로 재현한다.
+ * (호갱노노류 앱은 실제 지도+도보시간을 쓰지만, 정지 이미지인 카드뉴스에는 도식이 맞고
+ *  지도 타일 저작권 문제도 없다. 배치는 임의가 아니라 실제 방위·거리를 따른다.)
+ */
+interface NearbyPlace { kind: string; icon: string; name: string; distance: number; lat: number; lng: number }
+const NEARBY_CATEGORIES: Array<{ code: string; kind: string; icon: string }> = [
+  { code: 'SW8', kind: '지하철', icon: '🚇' },
+  { code: 'SC4', kind: '학교', icon: '🏫' },
+  { code: 'MT1', kind: '마트', icon: '🛒' },
+  { code: 'HP8', kind: '병원', icon: '🏥' },
+];
+const NEARBY_CACHE = join(process.cwd(), 'output', 'locale-cache.json');
+
+async function fetchNearby(lat: number, lng: number, cacheKey: string): Promise<NearbyPlace[]> {
+  let cache: Record<string, NearbyPlace[]> = {};
+  try { cache = JSON.parse(readFileSync(NEARBY_CACHE, 'utf-8')); } catch { /* 첫 실행 */ }
+  if (cache[cacheKey]) return cache[cacheKey];
+  const key = process.env.KAKAO_REST_API_KEY;
+  if (!key) return [];
+  const out: NearbyPlace[] = [];
+  for (const c of NEARBY_CATEGORIES) {
+    try {
+      const url = `https://dapi.kakao.com/v2/local/search/category.json?category_group_code=${c.code}&x=${lng}&y=${lat}&radius=2000&sort=distance&size=1`;
+      const res = await fetch(url, { headers: { Authorization: `KakaoAK ${key}` }, signal: AbortSignal.timeout(10_000) });
+      if (!res.ok) continue;
+      const j = (await res.json()) as { documents?: Array<{ place_name: string; distance: string; x: string; y: string }> };
+      const d = j.documents?.[0];
+      if (d) out.push({ kind: c.kind, icon: c.icon, name: d.place_name, distance: Number(d.distance), lat: Number(d.y), lng: Number(d.x) });
+    } catch { /* 개별 실패는 무시 — 입지도는 부가 정보 */ }
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  cache[cacheKey] = out;
+  try { writeFileSync(NEARBY_CACHE, JSON.stringify(cache, null, 2)); } catch { /* 캐시 실패 무시 */ }
+  return out;
 }
 
 /**
@@ -438,7 +529,7 @@ function itemHtml(p: SharePick, rank: number, page: number, total: number): stri
         ${p.tradeMedian
           ? `<div style="font-size:27px;color:#94A3B8;font-weight:700">실거래 중간 <span style="color:#CBD5E1">(120일·${p.tradeCount}건)</span></div>
              <div class="num" style="font-size:52px;font-weight:800;color:#0F172A;line-height:1.15;margin-top:4px">${eok(p.tradeMedian)}</div>
-             <div style="font-size:25px;font-weight:700;margin-top:6px"><span class="num" style="color:${gapColor}">호가 ${p.gapPct! >= 0 ? '+' : ''}${p.gapPct!.toFixed(1)}%</span>${p.trendPct != null ? ` <span style="color:#CBD5E1">·</span> <span class="num" style="color:${p.trendPct <= -1 ? '#16A34A' : p.trendPct >= 1 ? '#DC2626' : '#64748B'}">추이 ${p.trendPct > 0 ? '▲' : p.trendPct < 0 ? '▼' : ''}${Math.abs(p.trendPct).toFixed(1)}%</span>` : ''}</div>`
+             <div style="font-size:25px;font-weight:700;margin-top:6px"><span class="num" style="color:${gapColor}">호가 ${p.gapPct! >= 0 ? '+' : ''}${p.gapPct!.toFixed(1)}%</span>${p.jeonseRatioPct != null ? ` <span style="color:#CBD5E1">·</span> <span class="num" style="color:#7C3AED">전세가율 ${p.jeonseRatioPct}%</span>` : ''}${p.trendPct != null ? ` <span style="color:#CBD5E1">·</span> <span class="num" style="color:${p.trendPct <= -1 ? '#16A34A' : p.trendPct >= 1 ? '#DC2626' : '#64748B'}">추이 ${p.trendPct > 0 ? '▲' : p.trendPct < 0 ? '▼' : ''}${Math.abs(p.trendPct).toFixed(1)}%</span>` : ''}</div>`
           : `<div style="font-size:27px;color:#94A3B8;font-weight:700">실거래</div><div style="font-size:36px;color:#CBD5E1;font-weight:700;margin-top:12px">120일 표본 없음</div>`}
       </div>
     </div>
@@ -465,7 +556,7 @@ function itemHtml(p: SharePick, rank: number, page: number, total: number): stri
           </div>
           <div style="flex:1;text-align:right;font-size:24px;color:#94A3B8">시중은행 경로만 가능</div>
         </div>`;
-      return `<div style="margin-top:30px;background:#EFF6FF;border-radius:20px;padding:24px 30px">
+      return `<div style="margin-top:24px;background:#EFF6FF;border-radius:20px;padding:20px 28px">
         <div style="display:flex;align-items:baseline;justify-content:space-between">
           <span style="font-size:27px;font-weight:800;color:#1D4ED8">💳 무주택 생애최초라면 (호가 ${eok(p.minPrice)} 기준)</span>
         </div>
@@ -478,8 +569,7 @@ function itemHtml(p: SharePick, rank: number, page: number, total: number): stri
         <div style="margin-top:8px;font-size:19px;color:#94A3B8">LTV 70%(수도권) · 30년 원리금균등 · 취득세·중개보수 별도 — 금리·한도는 소득에 따라 달라집니다</div>
       </div>`;
     })()}
-    ${localeBarHtml(p.complexNo)}
-    <div style="margin-top:18px">${verdictGridHtml(p)}</div>
+    ${localeMapHtml(p)}
     ${p.factor
       ? `<div style="margin-top:16px;display:flex;gap:12px;align-items:flex-start;padding:16px 24px;background:#FFFBEB;border:2px solid #FDE68A;border-radius:16px">
            <span style="font-size:24px">🚧</span>
@@ -767,6 +857,7 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
       name: c.name, gu: c.gu, dong: c.dong, complexNo: c.complexNo,
       household: c.household, elapsedYear: c.elapsedYear, far: c.far ?? null,
       minPrice: c.minDealPrice!, dealArticles: c.dealArticles,
+      lat: c.lat ?? null, lng: c.lng ?? null,
       tradeMedian: t?.median ?? null, tradeCount: t?.count ?? 0,
       pyeongManwon: t?.pyeong ?? null, trendPct: t?.trendPct ?? null,
       jeonseMedian: j, jeonseRatioPct: jr, gapPct,
@@ -794,6 +885,11 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
     p.poolSize = picks.length;
     top.push(p);
     if (top.length >= 5) break;
+  }
+
+  // 입지도용 주변 시설 — 선정된 5곳만 조회(캐시로 재생성 시 0콜)
+  for (const t of top) {
+    if (t.lat != null && t.lng != null) t.nearby = await fetchNearby(t.lat, t.lng, t.complexNo);
   }
 
   // 2026-08-12/27 개편: 매번 동일하던 카드(점수 산식·규제표·정책 동향)를 전부 제거.
