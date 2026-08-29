@@ -47,3 +47,5 @@ docs/goals/
 output/
 config/persona-recos.json
 config/reco-feedback.json
+config/gosi-seen.json
+config/gosi-hits.json
