@@ -23,13 +23,30 @@ const DETAIL_URL = 'https://www.eum.go.kr/web/gs/gv/gvGosiDet.jsp?seq=';
 const SEEN_PATH = join(process.cwd(), 'config', 'gosi-seen.json');
 const HITS_PATH = join(process.cwd(), 'config', 'gosi-hits.json');
 
-/** 우리 커버리지 — LAWD_GU의 시·구 이름에서 매칭 토큰을 만든다(예: '안양 동안구' → '안양','동안구'). */
-const REGION_TOKENS: Array<{ token: string; gu: string }> = Object.values(LAWD_GU).flatMap((gu) => {
+/**
+ * 우리 커버리지 매칭 토큰 — 구 이름만 보면 안 된다(2026-08-29 오탐 교정).
+ * '중구'·'강서구'·'중랑구'는 전국에 여러 개라, 실제로 대전광역시 중구 고시가
+ * 서울 중구로 잘못 잡혔다. lawdCd 앞 2자리로 시·도를 판별해 org 접두어까지 검증한다.
+ */
+const SIDO_PREFIX: Record<string, string[]> = { '11': ['서울특별시', '서울시', '서울'], '41': ['경기도'] };
+const REGION_TOKENS: Array<{ token: string; gu: string; sido: string[] }> = Object.entries(LAWD_GU).flatMap(([cd, gu]) => {
+  const sido = SIDO_PREFIX[cd.slice(0, 2)] ?? [];
   const parts = gu.split(' ');
   return parts.length > 1
-    ? [{ token: parts[1], gu }, { token: parts[0], gu }] // '동안구','안양'
-    : [{ token: gu, gu }]; // '남양주시','노원구'
+    ? [{ token: parts[1], gu, sido }, { token: parts[0], gu, sido }] // '동안구','안양'
+    : [{ token: gu, gu, sido }]; // '남양주시','노원구'
 });
+
+/** org(게시 지자체)와 고시번호에서 시·도까지 일치하는 지역만 우리 커버리지로 인정. */
+function matchRegion(org: string, no: string): string {
+  const hay = `${org} ${no}`;
+  for (const r of REGION_TOKENS) {
+    if (!hay.includes(r.token)) continue;
+    if (r.sido.length && !r.sido.some((s) => hay.includes(s))) continue; // 타 시·도 동명 구 배제
+    return r.gu;
+  }
+  return '';
+}
 
 /* 부동산 가치 영향도 등급(2026-08-29, 한 달치 500건 표본으로 튜닝):
    초기 필터가 '도시계획시설'을 통째로 통과시켜 도로·공원·공공공지·수도설비 같은 소규모 시설
@@ -71,8 +88,7 @@ async function fetchPage(pageNo: number): Promise<Gosi[]> {
     const cells = (row.match(/<td[^>]*>[\s\S]*?<\/td>/g) ?? []).map(strip);
     if (cells.length < 4) continue;
     const [date, no, title, org] = cells;
-    const hit = REGION_TOKENS.find((r) => org.includes(r.token) || no.includes(r.token));
-    out.push({ seq, date, no, title, org, gu: hit?.gu ?? '' });
+    out.push({ seq, date, no, title, org, gu: matchRegion(org, no) });
   }
   return out;
 }
