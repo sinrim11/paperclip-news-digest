@@ -13,10 +13,12 @@ set -a
 [ -f .env.local ] && source .env.local
 set +a
 # 요일 분할 그룹(G2-4): sun=일·목, wed=수·토 — 각 그룹 주 2회 → 지역당 3~4일 간격 재수집.
-# 수동 실행 시 인자로 지정 가능: naver-sweep.sh wed | gyeonggi-new | backfill
+# 화=gangnam1h(강남권 1시간 10곳, 2026-08-29 편입) — 기존 그룹에 얹으면 6.5→9시간대가 되어 전용 회차로 분리.
+# 수동 실행 시 인자로 지정 가능: naver-sweep.sh wed | gangnam1h | gyeonggi-new | backfill
 GROUP="${1:-}"
 if [ -z "$GROUP" ]; then
   case "$(date +%u)" in
+    2) GROUP="gangnam1h" ;;
     3|6) GROUP="wed" ;;
     *) GROUP="sun" ;;
   esac
