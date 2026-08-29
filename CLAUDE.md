@@ -120,5 +120,10 @@ interface NewsItem {
 ## 운영
 - 웹: launchd `com.news-digest.web` → `next start -p 3200` (3000/3100은 타 프로젝트 점유)
 - 데일리: launchd `com.news-digest.daily` → 매일 06:30 `scripts/run-daily-digest.sh`
+- 아침 점검: launchd `com.news-digest.morning-review` → 매일 09:17 `scripts/morning-review.sh`
+  사이클 마지막 작업(cardnews 09:00) 직후에 전 단계를 점검해 텔레그램으로 보고한다.
+  `claude -p`를 쓰므로 **`.env`의 `CLAUDE_CODE_OAUTH_TOKEN`이 필수** — launchd 프로세스는
+  대화형 세션의 OAuth를 물려받지 못해 없으면 "session expired"로 즉사한다.
+  권한은 Bash·Read·Grep·Glob만. 무인 실행에서 코드 수정·배포는 하지 않고 제안만 보고한다.
 - 검증: `scripts/verify-e2e.sh` (LM Studio 인증→DB→웹→생성→알림 전 구간)
 - Gen1 Python 파이프라인은 `_legacy/`에 아카이브됨 — 수정·실행 비대상
