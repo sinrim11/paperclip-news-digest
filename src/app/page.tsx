@@ -7,6 +7,7 @@ import { CategoryTabs, type CategoryTabData } from '@/components/CategoryTabs';
 import { ContextMap, type ContextMapItem } from '@/components/ContextMap';
 import { GenerateButton } from '@/components/GenerateButton';
 import { ProgressPoller } from '@/components/ProgressPoller';
+import { HomeRealEstate } from '@/components/HomeRealEstate';
 
 export const dynamic = 'force-dynamic';
 
@@ -205,10 +206,20 @@ export default async function HomePage({
 
       {digest && digest.status === 'done' && (
         <>
-          {/* Market snapshot */}
-          {digest.marketDaily && (
-            <MarketDashboard market={digest.marketDaily} />
-          )}
+          {/* 부동산 요약 — 이 대시보드의 실사용 목적(2026-08-29). 증시·뉴스보다 위에 온다. */}
+          <HomeRealEstate />
+
+          {/* 이하 뉴스 브리핑 — 부차 정보로 강등, 시장 지표는 접어둔다 */}
+          <details className="rounded-xl border border-gray-200 bg-white">
+            <summary className="cursor-pointer px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+              📊 시장 지표 <span className="font-normal text-gray-400">KOSPI·환율·유가·BTC</span>
+            </summary>
+            <div className="border-t border-gray-100 p-3">
+              {digest.marketDaily && <MarketDashboard market={digest.marketDaily} />}
+            </div>
+          </details>
+
+          <h2 className="pt-1 text-base font-bold text-gray-800 sm:text-lg">📰 오늘의 뉴스 브리핑</h2>
 
           {/* TOP 3 */}
           {top3Items.length > 0 && <TopHighlights items={top3Items} />}

@@ -1,0 +1,96 @@
+{
+  "asOf": "2026-08-11",
+  "regions": [
+    {
+      "region": "남양주시",
+      "unsold": {
+        "count": null,
+        "trend": "미상",
+        "asOfMonth": null
+      },
+      "supply12m": {
+        "units": null,
+        "note": "확정치 없음(자료 상충). LH 3기 신도시 왕숙 A1(629세대)·A24(592세대, 합 약1,221세대)는 2027년3월 입주 목표로 보도됐으나 순연 가능성 언급 있음. 반면 민간 입주캘린더(아파트써처)는 2026~2027년 남양주 입주단지가 없고 2028년부터(덕소역라온프라이빗리버포레 999세대·오남역서희스타힐스 2개단지 2,364세대 등) 집중된다고 집계 — 두 자료가 상충해 12개월 확정 물량 산정 불가"
+      },
+      "riskLevel": "mid",
+      "note": "미분양 가구수는 경기부동산포털(gris.gg.go.kr)·경기도청 미분양정보 게시판을 직접 확인했으나 최신 시군별 수치가 게시되어 있지 않아 미확인. 2026년 7·8월 HUG 미분양관리지역(인천 영종구·경기 이천·양주·강원 강릉)에는 남양주가 미포함되어 단기 급성 리스크 신호는 없으나, 3기 신도시 왕숙(약 6.6만가구 규모) 대량 공급 파이프라인이 진행 중이고 2026년에도 신규 분양(진접 서한이다음 512세대 등)이 이어지고 있어 중기 공급 부담을 보수적으로 반영해 mid로 판정",
+      "sourceUrls": [
+        "https://www.apartsearcher.ai/move-in/%EA%B2%BD%EA%B8%B0%EB%8F%84",
+        "https://seemsinfo.com/entry/2025%EB%85%84-%EC%9D%B4%ED%9B%84-%EB%82%A8%EC%96%91%EC%A3%BC-%EC%B2%AD%EC%95%BD-%EC%9D%BC%EC%A0%95-%EB%B6%84%EC%96%91-%EC%98%88%EC%A0%95-%EC%95%84%ED%8C%8C%ED%8A%B8",
+        "https://edaily.co.kr/News/Read?mediaCodeNo=257&newsId=03693286645544696"
+      ]
+    },
+    {
+      "region": "안양시",
+      "unsold": {
+        "count": null,
+        "trend": "미상",
+        "asOfMonth": null
+      },
+      "supply12m": {
+        "units": 458,
+        "note": "민간 입주캘린더(아파트써처) 기준 확인된 최소치. e편한세상평촌어반밸리(동안구 호계동) 458세대, 2026년10월 입주예정 1개 단지만 12개월 창(2026.08~2027.08) 내 확인됨. 대단지 평촌자이퍼스니티(2,737세대)는 2027년12월 입주로 12개월 창 밖. 2025~2027년 3개년 누적 입주는 7,696가구로 직전 3개년(2022~2024, 16,873가구) 대비 약 54% 급감(경기도 평균 감소율 34.86%를 상회)"
+      },
+      "riskLevel": "low",
+      "note": "미분양 가구수 자체는 시군별 공식 통계 미확인이나, 2026년 7·8월 HUG 미분양관리지역 목록에 안양 미포함, 향후 12개월 확인된 입주물량이 458세대로 매우 제한적이며 최근 3년간 입주물량이 큰 폭으로 감소해 공급과잉 우려가 낮다는 정성적 근거로 low 판정",
+      "sourceUrls": [
+        "https://www.apartsearcher.ai/move-in/%EA%B2%BD%EA%B8%B0%EB%8F%84",
+        "https://magazine.hankyung.com/business/article/202511116397b",
+        "https://edaily.co.kr/News/Read?mediaCodeNo=257&newsId=03693286645544696"
+      ]
+    },
+    {
+      "region": "의왕시",
+      "unsold": {
+        "count": null,
+        "trend": "미상",
+        "asOfMonth": null
+      },
+      "supply12m": {
+        "units": 733,
+        "note": "의왕센트라인데시앙(오전동 재개발, 5개동 733세대 중 민간임대 532세대 포함), 2026년11월 입주예정 — 12개월 창 내 확인된 유일한 단지. 직전인 2026년6월 인덕원퍼스비엘(2,180세대, 일반분양 586세대)이 입주해 12개월 창 밖이지만 시장 소화 부담의 배경으로 참고. 2027년11~12월 예정된 의왕월암 신혼희망타운·대방디에트르레이크파크(합 1,377세대)는 12개월 창 밖이라 제외"
+      },
+      "riskLevel": "mid",
+      "note": "미분양 가구수는 미확인. 2026년 7·8월 HUG 미분양관리지역 목록에는 의왕 미포함(긍정적 신호)이나, 일부 자료에서 2025년경 의왕이 미분양관리지역 후보로 언급된 바 있어(출처 불명확, 미확인) 신뢰도 낮게 참고만 함. 직전 대단지(인덕원퍼스비엘) 준공 직후 소화 부담과 12개월 내 733세대 추가 공급을 근거로 보수적으로 mid 판정",
+      "sourceUrls": [
+        "https://www.apartsearcher.ai/move-in/%EA%B2%BD%EA%B8%B0%EB%8F%84",
+        "https://www.ilyoeconomy.com/news/articleView.html?idxno=62539",
+        "https://www.kcenews.kr/9152"
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "title": "미분양 다시 증가세…악성 미분양 3만가구 눈앞 (파이낸셜뉴스, 2026-07-31)",
+      "url": "https://www.fnnews.com/news/202607310600589911"
+    },
+    {
+      "title": "7월 미분양관리지역 인천 영종구·이천·양주·강릉 4곳 (이데일리, 2026-07)",
+      "url": "https://edaily.co.kr/News/Read?mediaCodeNo=257&newsId=03693286645544696"
+    },
+    {
+      "title": "HUG, '26년 8월 미분양관리지역 4곳 유지…부산 사상구 빠지고 강릉 편입 (대한건설경제, 2026-08)",
+      "url": "https://www.kcenews.kr/9152"
+    },
+    {
+      "title": "2026 경기도 입주 예정 아파트 · 지역별 입주 물량 정리 (아파트써처)",
+      "url": "https://www.apartsearcher.ai/move-in/%EA%B2%BD%EA%B8%B0%EB%8F%84"
+    },
+    {
+      "title": "신축 아파트 희소성 커진 안양시… 안양자이 헤리티온 11월 분양 눈길 (매거진한경, 2025-11)",
+      "url": "https://magazine.hankyung.com/business/article/202511116397b"
+    },
+    {
+      "title": "[르포: 분양현장] 의왕 랜드마크 노리는 '인덕원 퍼스비엘', 미분양 한파 뚫고 완판 도전 (일요경제)",
+      "url": "https://www.ilyoeconomy.com/news/articleView.html?idxno=62539"
+    },
+    {
+      "title": "2025년 이후 남양주 청약 일정, 분양 예정 아파트 (daily info)",
+      "url": "https://seemsinfo.com/entry/2025%EB%85%84-%EC%9D%B4%ED%9B%84-%EB%82%A8%EC%96%91%EC%A3%BC-%EC%B2%AD%EC%95%BD-%EC%9D%BC%EC%A0%95-%EB%B6%84%EC%96%91-%EC%98%88%EC%A0%95-%EC%95%84%ED%8C%8C%ED%8A%B8"
+    },
+    {
+      "title": "2026년 경기도 주거종합계획 (경기도, 2026-04)",
+      "url": "https://www.gg.go.kr/uploads/CONTENTS/site/gg/2026%EB%85%84+%EA%B2%BD%EA%B8%B0%EB%8F%84+%EC%A3%BC%EA%B1%B0%EC%A2%85%ED%95%A9%EA%B3%84%ED%9A%8D_v20260513.pdf"
+    }
+  ]
+}

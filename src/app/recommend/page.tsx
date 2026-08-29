@@ -1,4 +1,6 @@
 import ProfileBadge from '@/components/ProfileBadge';
+import { RecoCompareTable, type CompareRow } from '@/components/RecoCompareTable';
+import { bestRoute } from '@/lib/policy-loans';
 import DecisionFlow from '@/components/DecisionFlow';
 import Link from 'next/link';
 import { readFileSync } from 'fs';
@@ -91,17 +93,21 @@ export default async function RecommendPage() {
     prisma.aptTrade
       .findMany({
         where: { dealDate: { gte: new Date(Date.now() - 120 * 86_400_000) } },
-        select: { aptName: true, dealAmount: true },
+        select: { aptName: true, dong: true, dealAmount: true },
       })
       .catch(() => []),
   ]);
 
-  // 이름별 실거래 중앙값
+  // 실거래 중앙값 — 법정동으로 스코프한다.
+  // 이름만으로 묶으면 '현대'처럼 흔한 단지명이 여러 동의 거래를 한 표본에 섞어(관악 신림동 현대가
+  // 208건·중간 9.18억으로 잡혀 갭 -47.7%) 급매도 아닌 매물을 급매로 보이게 했다.
+  // 스코프를 좁히면 매칭이 702→536건으로 줄지만, 못 맞춘 건 '표본 없음 → 보류'로 정직하게 표시된다.
   const byName = new Map<string, number[]>();
   for (const t of trades) {
-    const arr = byName.get(t.aptName) ?? [];
+    const key = `${t.dong}|${t.aptName}`;
+    const arr = byName.get(key) ?? [];
     arr.push(t.dealAmount);
-    byName.set(t.aptName, arr);
+    byName.set(key, arr);
   }
   const medianByName = new Map<string, number>();
   const countByName = new Map<string, number>(); // 근거 강도 판정용 표본 수
@@ -115,47 +121,38 @@ export default async function RecommendPage() {
   const top = ranked.slice(0, 20);
   const sweptAt = candidates.length ? candidates.reduce((m, c) => (c.sweptAt > m ? c.sweptAt : m), candidates[0].sweptAt) : null;
 
-  return (
-    <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
-      <DecisionFlow current={2} />
-      <ProfileBadge mode="ownerOnly" />
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900">⭐ 추천 매물 <span className="text-base font-normal text-gray-500">TOP {top.length}</span></h1>
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-gray-500">
-          <span>전체 후보 {candidates.length}개 중</span>
-          {sweptAt ? <span>수집 {sweptAt.toISOString().slice(0, 10)}</span> : null}
-          <Link href="/candidates" className="text-blue-600 hover:underline">전체 후보</Link>
-          <Link href="/strategy" className="text-blue-600 hover:underline">전략</Link>
-        </div>
-        <details className="mt-1 text-xs text-gray-500">
-          <summary className="cursor-pointer select-none hover:text-gray-700">자세히</summary>
-          <p className="mt-1 leading-relaxed">예산 적합·세대수·투자지역·실거래갭·연식을 종합 점수화한 순위입니다.</p>
-        </details>
-        <p className="mt-2 rounded-md bg-blue-50 px-3 py-2 text-[13px] leading-relaxed text-blue-900">
-          🧭 점수는 <b>사전 조사·분석의 요약(참고자료)</b>이며 판단을 대신하지 않습니다 — 각 단지의 <b>프로필</b>에서 실거래·전세·통근·계산 근거를 직접 검증하세요.
-        </p>
-      </header>
+  // 근거 등급 — 비교표와 상세 카드가 같은 판정을 쓰도록 한 곳에서 계산
+  const evidenceOf = (r: (typeof top)[number]) => {
+    const tm = medianByName.get(`${r.dong}|${r.name}`) ?? null;
+    const cnt = countByName.get(`${r.dong}|${r.name}`) ?? 0;
+    const gap = tm && r.minDealPrice ? +(((r.minDealPrice - tm) / tm) * 100).toFixed(1) : null;
+    const ev = cnt === 0 || gap == null ? { label: '근거 부족 — 보류', cls: 'bg-red-100 text-red-700' }
+      : cnt < 3 ? { label: `표본 ${cnt}건 — 보류`, cls: 'bg-red-100 text-red-700' }
+        : gap > 12 ? { label: `갭 +${gap}% — 보류`, cls: 'bg-red-100 text-red-700' }
+          : cnt >= 10 && gap <= 2 ? { label: '근거 강', cls: 'bg-emerald-100 text-emerald-700' }
+            : { label: '근거 중', cls: 'bg-amber-100 text-amber-800' };
+    return { tm, cnt, gap, ev };
+  };
 
-      {top.length === 0 ? (
-        <p className="rounded-lg border bg-white p-8 text-center text-sm text-gray-500">
-          수집된 후보가 아직 없습니다. 스윕 완료 후 표시됩니다.
-        </p>
-      ) : (
-        <ol className="space-y-3">
-          {top.map((r, i) => {
+  const compareRows: CompareRow[] = top.slice(0, 8).map((r, i) => {
+    const { tm, cnt, gap, ev } = evidenceOf(r);
+    return {
+      complexNo: r.complexNo, rank: i + 1, name: r.name, gu: r.gu, dong: r.dong,
+      minPrice: r.minDealPrice ?? null, tradeMedian: tm, gapPct: gap,
+      household: r.household, elapsedYear: r.elapsedYear, tradeCount: cnt,
+      monthly: r.minDealPrice ? bestRoute(r.minDealPrice)?.monthly ?? null : null,
+      cash: r.minDealPrice ? bestRoute(r.minDealPrice)?.cash ?? null : null,
+      evidence: ev.label,
+    };
+  });
+
+  // 상세 카드 렌더 — 상위 8곳은 펼치고 9위 이하는 접어 두려고 함수로 뺀다(2026-08-29)
+  const renderCard = (r: (typeof top)[number], i: number) => {
             const cand = candidates.find((c) => c.complexNo === r.complexNo);
             const listings = ((cand?.listings as unknown as Listing[]) ?? []).slice(0, 6);
-            const tm = medianByName.get(r.name) ?? null; // 실거래 중간(120일) — 근거 수치 노출
-            const cnt = countByName.get(r.name) ?? 0;
-            const gap = tm && r.minDealPrice ? +(((r.minDealPrice - tm) / tm) * 100).toFixed(1) : null;
-            // 설득 게이트: 시세 근거가 약하면 점수와 무관하게 '보류' 명시
-            const ev = cnt === 0 || gap == null ? { label: '근거 부족 — 보류', cls: 'bg-red-100 text-red-700' }
-              : cnt < 3 ? { label: `표본 ${cnt}건 — 보류`, cls: 'bg-red-100 text-red-700' }
-                : gap > 12 ? { label: `갭 +${gap}% — 보류`, cls: 'bg-red-100 text-red-700' }
-                  : cnt >= 10 && gap <= 2 ? { label: '근거 강', cls: 'bg-emerald-100 text-emerald-700' }
-                    : { label: '근거 중', cls: 'bg-amber-100 text-amber-800' };
+            const { tm, cnt, gap, ev } = evidenceOf(r); // 비교표와 동일 판정
             return (
-              <li key={r.complexNo} className="rounded-lg border bg-white p-4">
+              <li key={r.complexNo} id={`reco-${r.complexNo}`} className="scroll-mt-20 rounded-lg border bg-white p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-lg font-bold tabular-nums text-gray-700">{i + 1}</span>
                   <span className={`rounded px-2 py-0.5 text-sm font-bold ${GRADE_STYLE[r.grade]}`}>{r.grade}</span>
@@ -206,8 +203,51 @@ export default async function RecommendPage() {
                 )}
               </li>
             );
-          })}
+  };
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
+      <DecisionFlow current={2} />
+      <ProfileBadge mode="ownerOnly" />
+      <header>
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900">⭐ 추천 매물 <span className="text-base font-normal text-gray-500">TOP {top.length}</span></h1>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-gray-500">
+          <span>전체 후보 {candidates.length}개 중</span>
+          {sweptAt ? <span>수집 {sweptAt.toISOString().slice(0, 10)}</span> : null}
+          <Link href="/candidates" className="text-blue-600 hover:underline">전체 후보</Link>
+          <Link href="/strategy" className="text-blue-600 hover:underline">전략</Link>
+        </div>
+        <details className="mt-1 text-xs text-gray-500">
+          <summary className="cursor-pointer select-none hover:text-gray-700">자세히</summary>
+          <p className="mt-1 leading-relaxed">예산 적합·세대수·투자지역·실거래갭·연식을 종합 점수화한 순위입니다.</p>
+        </details>
+        <p className="mt-2 rounded-md bg-blue-50 px-3 py-2 text-[13px] leading-relaxed text-blue-900">
+          🧭 점수는 <b>사전 조사·분석의 요약(참고자료)</b>이며 판단을 대신하지 않습니다 — 각 단지의 <b>프로필</b>에서 실거래·전세·통근·계산 근거를 직접 검증하세요.
+        </p>
+      </header>
+
+      {top.length === 0 ? (
+        <p className="rounded-lg border bg-white p-8 text-center text-sm text-gray-500">
+          수집된 후보가 아직 없습니다. 스윕 완료 후 표시됩니다.
+        </p>
+      ) : (
+        <>
+        {/* 한눈 비교표(2026-08-29) — 세로 나열만으로는 상위끼리 비교가 불가능했다 */}
+        <RecoCompareTable rows={compareRows} />
+        <ol className="space-y-3">
+          {top.slice(0, 8).map((r, i) => renderCard(r, i))}
         </ol>
+        {top.length > 8 && (
+          <details className="rounded-lg border bg-white">
+            <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+              9~{top.length}위 더 보기 <span className="font-normal text-gray-400">— 조건은 통과했지만 우선순위는 낮음</span>
+            </summary>
+            <ol className="space-y-3 border-t p-3">
+              {top.slice(8).map((r, i) => renderCard(r, i + 8))}
+            </ol>
+          </details>
+        )}
+        </>
       )}
 
       {personaRecos && (
