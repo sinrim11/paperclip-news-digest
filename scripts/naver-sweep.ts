@@ -222,11 +222,27 @@ async function main() {
   const candidates: Array<ComplexInfo & { gu: string; dong: string }> = [];
   let zeroDongs = 0;
   let cappedDongs = 0;
+  // 조기 중단 가드(2026-08-29) — 차단/구조변경 시 전 동이 0단지가 되는데, 그대로 두면
+  // 4~6시간을 헛돌고 그 사이 계속 요청해 차단을 연장한다. 연속 0단지가 임계를 넘으면 즉시 중단.
+  // (정상 스윕에도 0단지 동은 있지만 연속으로 8개가 이어지지는 않는다.)
+  const ZERO_STREAK_ABORT = 8;
+  let zeroStreak = 0;
   for (const d of dongList) {
     try {
       const found = await enumerateDong(page, d.code, cfg.minHousehold);
       for (const c of found) candidates.push({ ...c, gu: d.gu, dong: d.dong });
-      if (found.length === 0) zeroDongs++;
+      if (found.length === 0) {
+        zeroDongs++;
+        if (++zeroStreak >= ZERO_STREAK_ABORT) {
+          console.error(
+            `[sweep] ⛔ 연속 ${zeroStreak}개 동이 0단지 — 네이버 차단(429)이나 페이지 구조 변경으로 판단해 중단합니다.` +
+              ' 계속 두면 헛돌면서 차단만 길어집니다. 잠시 후 재시도하세요.',
+          );
+          break;
+        }
+      } else {
+        zeroStreak = 0;
+      }
       // region API는 세대수 내림차순 page 0(상위 ~30)만 캡처 → 30 근접 시 하위 소단지 누락 가능(150세대 기준)
       if (found.length >= 30) {
         cappedDongs++;
