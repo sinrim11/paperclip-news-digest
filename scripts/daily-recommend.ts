@@ -19,7 +19,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   const dry = process.argv.includes('--dry');
-  const { asOf, items, stretchPlus, gapTrack, excluded, note } = await buildDailyRecommendations(prisma);
+  const { asOf, quoteAsOf, quoteStaleDays, items, stretchPlus, gapTrack, excluded, note } = await buildDailyRecommendations(prisma);
   console.log(`[daily-reco] ${asOf} — ${note}`);
   // 하방 플래그 제외 사유 로그(2-B) — launchd 로그 파일에 남아 사후 추적 가능
   for (const e of excluded) console.log(`[daily-reco] 🚩 제외: ${e.gu} ${e.dong} ${e.name} — ${e.flags.join(' / ')}`);
@@ -27,7 +27,7 @@ async function main() {
   // 피드백 루프(2026-08-11): 매물 메시지엔 [👍 관심 / 🚫 제외] 버튼 — feedback-bot이 수신·기록
   type Out = { text: string; key?: string; name?: string };
   const messages: Out[] = items.length
-    ? [{ text: header(items.length, asOf) }, ...items.map((r) => ({ text: formatReco(r), key: r.complexKey, name: r.name }))]
+    ? [{ text: header(items.length, asOf, quoteAsOf, quoteStaleDays) }, ...items.map((r) => ({ text: formatReco(r), key: r.complexKey, name: r.name }))]
     : [{ text: emptyMessage(asOf) }];
   // 스트레치+ 트랙(조금 더 보태면 사정권) — 메인 하단 별도 섹션
   if (stretchPlus.length) messages.push({ text: stretchHeader(stretchPlus.length, asOf) }, ...stretchPlus.map((r) => ({ text: formatStretchReco(r), key: r.complexKey, name: r.name })));
@@ -41,7 +41,7 @@ async function main() {
   }
 
   // 산출물 저장(웹/검수용)
-  writeFileSync(join(process.cwd(), 'config', 'recommendations.json'), JSON.stringify({ _comment: 'daily-recommend 자동 생성', asOf, items, stretchPlus, gapTrack, excluded }, null, 2));
+  writeFileSync(join(process.cwd(), 'config', 'recommendations.json'), JSON.stringify({ _comment: 'daily-recommend 자동 생성', asOf, quoteAsOf, quoteStaleDays, items, stretchPlus, gapTrack, excluded }, null, 2));
 
   // 발송 — 매물 메시지엔 피드백 버튼 부착(콜백 해시는 keymap에 사전 등록)
   registerKeys(messages.filter((m): m is Required<Out> => !!m.key).map((m) => ({ complexKey: m.key, name: m.name })));

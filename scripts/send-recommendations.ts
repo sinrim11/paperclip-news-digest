@@ -16,9 +16,9 @@ async function main() {
   const limIdx = args.indexOf('--limit');
   const limit = Math.min(5, limIdx >= 0 ? Number(args[limIdx + 1]) || 5 : 5);
 
-  const cfg = JSON.parse(readFileSync(join(process.cwd(), 'config', 'recommendations.json'), 'utf-8')) as { asOf: string; items: RecoView[] };
+  const cfg = JSON.parse(readFileSync(join(process.cwd(), 'config', 'recommendations.json'), 'utf-8')) as { asOf: string; quoteAsOf?: string | null; quoteStaleDays?: number | null; items: RecoView[] };
   const items = cfg.items.slice(0, limit);
-  const messages = [header(items.length, cfg.asOf), ...items.map(formatReco)];
+  const messages = [header(items.length, cfg.asOf, cfg.quoteAsOf, cfg.quoteStaleDays), ...items.map(formatReco)];
 
   if (dry) {
     for (const m of messages) {

@@ -170,6 +170,9 @@ export async function buildDailyRecommendations(
   now: Date = new Date(),
 ): Promise<{
   asOf: string;
+  /** 호가(네이버 스윕) 수집일. asOf는 '이 추천을 만든 날'이라 호가가 며칠 묵었는지는 알려주지 않는다. */
+  quoteAsOf: string | null;
+  quoteStaleDays: number | null;
   items: DailyReco[];
   stretchPlus: DailyReco[];
   gapTrack: DailyReco[];
@@ -240,7 +243,14 @@ export async function buildDailyRecommendations(
   // 1a) 단지 제원(세대수·용적률) 조인(2026-08-29) — 국토부 실거래엔 없는 정보라
   //     네이버 스윕 결과(ComplexCandidate)에서 gu|dong|정규화 단지명으로 매칭.
   //     미수집 단지는 null → 세대수 게이트는 "아는 경우에만" 적용(신규 편입 지역 전멸 방지).
-  const candidates = await prisma.complexCandidate.findMany({ select: { gu: true, dong: true, name: true, household: true, far: true } });
+  const candidates = await prisma.complexCandidate.findMany({ select: { gu: true, dong: true, name: true, household: true, far: true, sweptAt: true } });
+  // 호가 신선도 — 스윕이 조용히 0단지로 끝나도 추천은 계속 나오므로(2026-08-20~30 11일간 실제로 그랬다)
+  // 며칠 묵은 호가인지를 산출물에 박아 소비처가 표시할 수 있게 한다.
+  const latestSwept = candidates.reduce<Date | null>((m, c) => (!m || c.sweptAt > m ? c.sweptAt : m), null);
+  const quoteAsOf = latestSwept ? latestSwept.toISOString().slice(0, 10) : null;
+  const quoteStaleDays = latestSwept
+    ? Math.floor((now.getTime() - latestSwept.getTime()) / 86_400_000)
+    : null;
   const specByKey = new Map<string, { household: number; far: number | null }>();
   for (const c of candidates) specByKey.set(`${c.gu}|${c.dong}|${normName(c.name)}`, { household: c.household, far: c.far ?? null });
   const specOf = (a: ComplexAgg) => specByKey.get(`${a.gu}|${a.dong}|${normName(a.name)}`) ?? null;
@@ -744,5 +754,5 @@ export async function buildDailyRecommendations(
     ? `${items.length}건 추천 (신규 ${items.filter((x) => x.isNew).length} · 재등장 ${items.filter((x) => !x.isNew).length})${stretchPlus.length ? ` · 스트레치+ ${stretchPlus.length}건` : ''}${gapTrack.length ? ` · 갭투자 트랙 ${gapTrack.length}건` : ''}${gateNote}${flagNote}${fbNote}${smallNote}`
     : `오늘은 규칙을 통과한 신규 후보가 없습니다(최근 14일 추천분 쿨다운). 시장 변화 시 재등장합니다.${gateNote}${flagNote}${fbNote}${smallNote}`;
 
-  return { asOf: todayStr, items, stretchPlus, gapTrack, excluded, note, scanned: aggs.size };
+  return { asOf: todayStr, quoteAsOf, quoteStaleDays, items, stretchPlus, gapTrack, excluded, note, scanned: aggs.size };
 }

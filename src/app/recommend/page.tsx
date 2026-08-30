@@ -226,7 +226,17 @@ export default async function RecommendPage() {
         <h1 className="text-2xl font-bold tracking-tight text-gray-900">⭐ 추천 매물 <span className="text-base font-normal text-gray-500">TOP {top.length}</span></h1>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-gray-500">
           <span>전체 후보 {candidates.length}개 중</span>
-          {sweptAt ? <span>수집 {sweptAt.toISOString().slice(0, 10)}</span> : null}
+          {sweptAt ? (() => {
+            // 호가 신선도 — '수집 08-19'만 적어두면 그게 11일 전인지 어제인지 세어봐야 안다.
+            const days = Math.floor((Date.now() - sweptAt.getTime()) / 86_400_000);
+            return days > 3 ? (
+              <span className="rounded bg-amber-100 px-2 py-0.5 font-semibold text-amber-800">
+                ⚠️ 호가 {sweptAt.toISOString().slice(0, 10)} 수집 · {days}일 경과
+              </span>
+            ) : (
+              <span>호가 {sweptAt.toISOString().slice(0, 10)} 수집</span>
+            );
+          })() : null}
           <Link href="/candidates" className="text-blue-600 hover:underline">전체 후보</Link>
           <Link href="/strategy" className="text-blue-600 hover:underline">전략</Link>
         </div>

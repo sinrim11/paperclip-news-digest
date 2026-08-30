@@ -22,6 +22,7 @@ function loadJson<T>(rel: string): T | null {
   try { return JSON.parse(readFileSync(join(process.cwd(), rel), 'utf-8')) as T; } catch { return null; }
 }
 
+interface RecoFile { asOf: string; quoteAsOf?: string | null; quoteStaleDays?: number | null; items: Reco[] }
 interface Reco { rank: number; name: string; gu: string; dong: string; medianManwon: number; household?: number | null; buildYear?: number | null; reasons: string[]; signalNote?: string }
 interface Afford { asOf: string; budgets: { comfortable: number; stretch: number; parentMax: number }; regions: Array<{ gu: string; isSeoul: boolean; counts: { 자기자본권: number; 스트레치: number; 부모님찬스: number; total: number } }> }
 interface Gosi { date: string; gu: string; title: string; seq: string; grade?: string; facts?: { areaM2?: number } }
@@ -30,7 +31,7 @@ interface CardSet { date: string; series?: string; dir?: string; files: string[]
 const SERIES_LABEL: Record<string, string> = { price6: '6억 이하', price8: '6~8억', price9: '8~9억', price12: '9~12억', briefing: '호재·정책' };
 
 export function HomeRealEstate() {
-  const reco = loadJson<{ asOf: string; items: Reco[] }>('config/recommendations.json');
+  const reco = loadJson<RecoFile>('config/recommendations.json');
   const afford = loadJson<Afford>('config/region-affordability.json');
   const gosi = loadJson<Gosi[]>('config/gosi-hits.json');
   const cards = loadJson<CardSet[]>('output/cardnews/index.json');
@@ -48,6 +49,12 @@ export function HomeRealEstate() {
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-base font-bold sm:text-lg">🏠 내집마련 현황</h2>
         <span className="text-xs text-gray-400">{reco?.asOf ?? afford?.asOf} 기준 · 매일 자동 갱신</span>
+        {reco?.quoteStaleDays != null && reco.quoteStaleDays > 3 && (
+          <span className="w-full rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+            ⚠️ 호가는 <b>{reco.quoteAsOf}</b> 수집분입니다 — {reco.quoteStaleDays}일 경과.
+            네이버 스윕이 멈춰 있어 실제 호가는 달라졌을 수 있습니다(실거래가는 매일 갱신).
+          </span>
+        )}
       </div>
 
       <div className="grid gap-3 lg:grid-cols-3">

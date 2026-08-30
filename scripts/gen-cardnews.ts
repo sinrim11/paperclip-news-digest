@@ -202,6 +202,9 @@ const normName = (s: string) => s.replace(/\s|아파트/g, '');
 
 const W = 1080, H = 1350;
 const today = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
+// 호가 수집일 — 발행일과 별개다. 스윕이 멈춰도 카드뉴스는 계속 나가므로(2026-08-20~30 11일)
+// '오늘 기준'으로 뭉뚱그리면 묵은 호가를 오늘 시세로 읽게 된다.
+let quoteAsOf: string | null = null;
 
 /**
  * 시리즈(3-A·G2-3): --series=price6(기본)|price8|price9|briefing
@@ -546,7 +549,7 @@ function itemHtml(p: SharePick, rank: number, page: number, total: number): stri
              <span style="color:#B45309">· ${p.factor.srcDomain}</span></div>
          </div>`
       : ''}
-    <div class="foot">수도권 ${CAP_LABEL} · 300세대+ 전수 스캔 — 국토교통부 실거래가 공개시스템(rt.molit.go.kr) × 네이버부동산 호가 · ${today} 기준 · 투자 자문 아님 · 현장 확인 필수</div>
+    <div class="foot">수도권 ${CAP_LABEL} · 300세대+ 전수 스캔 — 국토교통부 실거래가(rt.molit.go.kr, ${today} 기준) × 네이버부동산 호가(${quoteAsOf ?? '수집일 미상'} 수집) · 투자 자문 아님 · 현장 확인 필수</div>
   </div>`;
 }
 
@@ -776,6 +779,9 @@ async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
     prisma.aptTrade.findMany({ where: { dealDate: { gte: since } }, select: { lawdCd: true, aptName: true, dealAmount: true, excluUseAr: true, dealDate: true } }),
     prisma.aptRent.findMany({ where: { dealDate: { gte: since }, monthlyRent: 0 }, select: { lawdCd: true, aptName: true, deposit: true } }),
   ]);
+  quoteAsOf = candidates.length
+    ? new Date(Math.max(...candidates.map((c) => c.sweptAt.getTime()))).toISOString().slice(0, 10)
+    : null;
   const med = (a: number[]) => { a.sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; };
   // 정량 강화(2026-08-10): 평단가(만원/3.3㎡)·120일 전후반 추이 — "매물 선택" 판단축 추가
   const midMs = Date.now() - 60 * 86_400_000;

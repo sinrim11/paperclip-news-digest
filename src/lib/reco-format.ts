@@ -74,10 +74,25 @@ function topReasons(reasons: string[], n = 4): string[] {
   return [...hot, ...rest].slice(0, n);
 }
 
-export function header(count: number, asOf: string): string {
+/**
+ * 호가 신선도 경고 — 스윕이 조용히 0단지로 끝나도 추천은 계속 생성된다
+ * (2026-08-20~30 실제로 11일간 그랬고, 묵은 호가가 '오늘의 추천'으로 나갔다).
+ * 스윕은 주 5회 도니 3일을 넘으면 뭔가 잘못된 것이다.
+ */
+export const STALE_QUOTE_DAYS = 3;
+
+export function quoteFreshnessLine(quoteAsOf?: string | null, staleDays?: number | null): string | null {
+  if (!quoteAsOf || staleDays == null) return null;
+  if (staleDays <= STALE_QUOTE_DAYS) return `💬 호가 기준 ${quoteAsOf}`;
+  return `⚠️ 호가 기준 ${quoteAsOf} — <b>${staleDays}일 경과</b>(스윕 중단 중, 실제 호가는 달라졌을 수 있습니다)`;
+}
+
+export function header(count: number, asOf: string, quoteAsOf?: string | null, staleDays?: number | null): string {
+  const fresh = quoteFreshnessLine(quoteAsOf, staleDays);
   return [
     `🏠 오늘의 매물 추천 · ${asOf}`,
     `${count}건 — 투자우선 기준(전세가율·환금성·신축·호재) · 생애최초 예산 프레임`,
+    ...(fresh ? [fresh] : []),
     '매물별로 이어집니다 👇 각 메시지의 👍/🚫 버튼으로 취향을 알려주세요',
   ].join('\n');
 }
