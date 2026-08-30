@@ -78,6 +78,17 @@ function resolveDongs(cfg: SweepConfig, groupName?: string): DongEntry[] {
   return out;
 }
 
+/** new.land /api/regions/complexes 응답 원소 (2026-08-30 프로브로 필드 확인). */
+interface NewLandComplex {
+  complexNo: string;
+  complexName: string;
+  realEstateTypeCode: string; // 'APT' | 'ABYG'(아파트분양권) | 'JGC'(재건축) …
+  totalHouseholdCount?: number;
+  useApproveYmd?: string; // 'YYYYMMDD'
+  latitude?: number;
+  longitude?: number;
+}
+
 interface ComplexInfo {
   complexNumber: number;
   name: string;
@@ -95,53 +106,48 @@ function loadConfig(): SweepConfig {
 }
 
 /**
- * 한 동을 region API로 열거 — household>=min & type A01.
- * 직접 요청은 429로 차단되고 SPA 자체 요청만 route로 가로챌 수 있음.
- * region API는 세대수 내림차순 정렬 → 300세대+ 단지는 전부 첫 페이지(상위 30개)에 포함
- * (검증: 봉천 15/신림 16 모두 30개 이내). 따라서 SPA가 로드하는 page 0 캡처로 충분.
+ * 한 동의 아파트를 열거 — new.land `/api/regions/complexes`.
+ *
+ * 2026-08-20부터 11일간 전 동이 0단지로 끝났다(2026-08-30 프로브로 원인 확정).
+ * 종전 방식은 fin.land SPA(`/regions?si&gun&eup`)를 열고 그 내부 요청
+ * `front-api/v1/complex/region`을 가로채는 것이었는데, 네이버가 그 경로를 폐지했다.
+ * 지금 딥링크는 429가 아니라 200으로 `financial.pstatic.net/404.html`에 떨어지고
+ * SPA는 auth 계열만 호출한다 — 차단이 아니라 라우팅 변경이라 재시도로는 복구되지 않는다.
+ *
+ * 대체 API는 이미 이 저장소가 쓰던 것이다(backfill-coords·backfill-far). 같은 IP에서
+ * 정상 응답하며 필요한 필드를 직접 준다 — SPA 가로채기라는 간접 경로가 사라진 게 오히려 낫다.
+ * 부수 효과: 종전엔 SPA가 로드하는 page 0(상위 30개)만 잡혔는데 이 API는 동 전체를 준다.
  */
 async function enumerateDong(page: Page, code: string, minHousehold: number): Promise<ComplexInfo[]> {
-  const si = code.slice(0, 2) + '00000000'; // 시도 코드 파생(서울 11·경기 41) — 1-B-iii에서 하드코딩 제거
-  // 구·군 코드는 앞 5자리(11XXX/41XXX). 4자리 절단 시 5번째 자리가 0이 아닌 광진(11215)·강북(11305)·금천(11545)이 잘못된 gun으로 조용히 0단지가 됨.
-  const gun = code.slice(0, 5) + '00000';
-  const captured: string[] = [];
-  const pattern = '**/front-api/v1/complex/region**';
-  const handler = async (route: import('playwright').Route) => {
-    try {
-      const r = await route.fetch();
-      const t = await r.text();
-      if (route.request().url().includes(code)) captured.push(t);
-      await route.fulfill({ response: r, body: t });
-    } catch {
-      await route.continue().catch(() => {});
-    }
-  };
-  await page.route(pattern, handler);
-  try {
-    await page
-      .goto(`https://fin.land.naver.com/regions?si=${si}&gun=${gun}&eup=${code}`, {
-        waitUntil: 'domcontentloaded',
-        timeout: 30000,
-      })
-      .catch(() => {});
-    await sleep(6000); // SPA가 region page 0 을 부를 시간
-  } finally {
-    await page.unroute(pattern).catch(() => {});
+  const res = await page.evaluate(async (cortarNo: string) => {
+    const r = await fetch(`/api/regions/complexes?cortarNo=${cortarNo}&realEstateType=APT:ABYG:JGC&order=`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!r.ok) return { ok: false as const, status: r.status };
+    return { ok: true as const, list: ((await r.json())?.complexList ?? []) as NewLandComplex[] };
+  }, code);
+
+  if (!res.ok) {
+    // 상태를 삼키면 "0단지"와 "차단"이 같은 모양이 된다 — 이번 11일 실패가 정확히 그랬다.
+    console.error(`  · 동 ${code}: HTTP ${res.status}`);
+    return [];
   }
 
-  const byNo = new Map<number, ComplexInfo>();
-  for (const text of captured) {
-    try {
-      const j = JSON.parse(text) as { result?: { list?: Array<{ complexInfo: ComplexInfo }> } };
-      for (const x of j?.result?.list ?? []) {
-        const c = x.complexInfo;
-        if (c && c.type === 'A01' && (c.totalHouseholdNumber ?? 0) >= minHousehold) byNo.set(c.complexNumber, c);
-      }
-    } catch {
-      /* skip */
-    }
+  const out: ComplexInfo[] = [];
+  for (const c of res.list) {
+    if (c.realEstateTypeCode !== 'APT') continue;
+    if ((c.totalHouseholdCount ?? 0) < minHousehold) continue;
+    const ymd = c.useApproveYmd ?? null; // 'YYYYMMDD'
+    out.push({
+      complexNumber: Number(c.complexNo),
+      name: c.complexName,
+      type: 'A01',
+      totalHouseholdNumber: c.totalHouseholdCount ?? 0,
+      useApprovalDate: ymd ?? undefined,
+      approvalElapsedYear: ymd ? new Date().getFullYear() - Number(ymd.slice(0, 4)) : undefined,
+    });
   }
-  return [...byNo.values()];
+  return out;
 }
 
 interface AffordableListing {
@@ -197,7 +203,10 @@ async function main() {
   const ceiling = cfg.budgetCeilingManwon;
   const minArea = cfg.minExclusiveAreaM2 ?? 0;
   const groupArg = process.argv.find((a) => a.startsWith('--group='))?.slice('--group='.length);
-  const dongList = resolveDongs(cfg, groupArg);
+  // --limit=N — 구조 변경 후 소규모로 먼저 확인하기 위한 안전장치.
+  // 전량(361동)을 바로 돌리면 실패해도 몇 시간 뒤에 알게 되고 그 사이 계속 요청한다.
+  const limitArg = Number(process.argv.find((a) => a.startsWith('--limit='))?.slice('--limit='.length) ?? 0);
+  const dongList = limitArg > 0 ? resolveDongs(cfg, groupArg).slice(0, limitArg) : resolveDongs(cfg, groupArg);
   console.log(`[sweep] start — 예산상한 ${(ceiling / 10000).toFixed(1)}억, 최소 ${cfg.minHousehold}세대, 전용 ${minArea}㎡+, ${dongList.length}개 동${groupArg ? ` (그룹 ${groupArg})` : ''}`);
   if (process.argv.includes('--plan')) {
     const byGu = new Map<string, number>();
@@ -215,13 +224,14 @@ async function main() {
     window.chrome = window.chrome || { runtime: {} };
   }`);
   const page = await ctx.newPage();
-  await page.goto('https://www.naver.com', { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
-  await sleep(1500);
+  // enumerateDong이 상대경로로 /api/regions/complexes를 부르므로 new.land 오리진에서 시작해야 한다
+  // (쿠키도 여기서 받는다 — backfill-coords·backfill-far와 같은 진입).
+  await page.goto('https://new.land.naver.com/complexes', { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+  await sleep(3000);
 
   // 1) 동별 열거 → minHousehold+ 아파트 후보
   const candidates: Array<ComplexInfo & { gu: string; dong: string }> = [];
   let zeroDongs = 0;
-  let cappedDongs = 0;
   // 조기 중단 가드(2026-08-29) — 차단/구조변경 시 전 동이 0단지가 되는데, 그대로 두면
   // 4~6시간을 헛돌고 그 사이 계속 요청해 차단을 연장한다. 연속 0단지가 임계를 넘으면 즉시 중단.
   // (정상 스윕에도 0단지 동은 있지만 연속으로 8개가 이어지지는 않는다.)
@@ -243,19 +253,14 @@ async function main() {
       } else {
         zeroStreak = 0;
       }
-      // region API는 세대수 내림차순 page 0(상위 ~30)만 캡처 → 30 근접 시 하위 소단지 누락 가능(150세대 기준)
-      if (found.length >= 30) {
-        cappedDongs++;
-        console.log(`[sweep] 열거 ${d.gu} ${d.dong}: ${found.length}단지 ⚠상한(page0) — 하위 소단지 누락 가능`);
-      } else {
-        console.log(`[sweep] 열거 ${d.gu} ${d.dong}: ${found.length}단지(${cfg.minHousehold}세대+)`);
-      }
+      // new.land API는 동 전체를 한 번에 준다 — 종전 SPA 가로채기의 page 0(상위 30) 상한이 사라졌다.
+      console.log(`[sweep] 열거 ${d.gu} ${d.dong}: ${found.length}단지(${cfg.minHousehold}세대+)`);
     } catch (err) {
       console.error(`[sweep] 열거 실패 ${d.dong}:`, err);
     }
     await sleep(jitter(cfg.enumDelayMs));
   }
-  console.log(`[sweep] 열거 요약 — ${dongList.length}개 동 중 0단지 ${zeroDongs}개 / page0 상한 근접 ${cappedDongs}개`);
+  console.log(`[sweep] 열거 요약 — ${dongList.length}개 동 중 0단지 ${zeroDongs}개`);
   // 구 단위 전멸 감지 — 잘못된 지역코드·차단은 개별 동 0이 아니라 구 전체 0으로 나타남(광진·강북·금천 gun 절단 버그의 관측 신호)
   const targetGuSet = new Set(dongList.map((d) => d.gu));
   const foundGuSet = new Set(candidates.map((c) => c.gu));
