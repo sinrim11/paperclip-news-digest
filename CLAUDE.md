@@ -120,10 +120,17 @@ interface NewsItem {
 ## 운영
 - 웹: launchd `com.news-digest.web` → `next start -p 3200` (3000/3100은 타 프로젝트 점유)
 - 데일리: launchd `com.news-digest.daily` → 매일 06:30 `scripts/run-daily-digest.sh`
+- 매물 스윕: launchd `com.news-digest.naver-sweep` → **01:00**(2026-09-01 03:00에서 이동).
+  이유: 회차가 6시간 넘게 걸려 03:00 시작 시 꼬리(gen-listings·persona)가 recommend 08:30·
+  cardnews 09:00 뒤에 끝났다. 넘길 경우 스크립트가 텔레그램에 "이전 회차 호가 기준"을 스스로 알린다.
 - 아침 점검: launchd `com.news-digest.morning-review` → 매일 09:17 `scripts/morning-review.sh`
   사이클 마지막 작업(cardnews 09:00) 직후에 전 단계를 점검해 텔레그램으로 보고한다.
   `claude -p`를 쓰므로 **`.env`의 `CLAUDE_CODE_OAUTH_TOKEN`이 필수** — launchd 프로세스는
   대화형 세션의 OAuth를 물려받지 못해 없으면 "session expired"로 즉사한다.
   권한은 Bash·Read·Grep·Glob만. 무인 실행에서 코드 수정·배포는 하지 않고 제안만 보고한다.
+- 로그: 스크립트는 `>> $LOG` 로 직접 쓴다. **`| tee -a $LOG` 금지** — plist의
+  StandardOutPath가 같은 파일이라 전 라인이 2회 기록된다(2026-09-01 sweep·matching·cardnews에서 제거).
+- 정책 파라미터: `config/policy-params.json`의 `_frozenPaths`에 등록된 키는 레이더 자동 갱신에서
+  제외된다. 검증기가 출처의 급을 보지 않아 언론기사가 국토부 원문을 덮은 사고가 두 번 있었다.
 - 검증: `scripts/verify-e2e.sh` (LM Studio 인증→DB→웹→생성→알림 전 구간)
 - Gen1 Python 파이프라인은 `_legacy/`에 아카이브됨 — 수정·실행 비대상

@@ -22,11 +22,11 @@ if [ -z "$SERIES" ]; then
     *) SERIES="price6" ;;
   esac
 fi
-echo "=== $(date '+%Y-%m-%d %H:%M:%S') gen-cardnews 시작 (시리즈 $SERIES)" | tee -a "$LOG"
-npx tsx scripts/gen-cardnews.ts --series="$SERIES" 2>&1 | tee -a "$LOG"
+echo "=== $(date '+%Y-%m-%d %H:%M:%S') gen-cardnews 시작 (시리즈 $SERIES)" >> "$LOG" 2>&1
+npx tsx scripts/gen-cardnews.ts --series="$SERIES" >> "$LOG" 2>&1
 # 월요일: 주간 호재·정책 브리핑 추가 생성(수동 시리즈 지정 시 생략)
 if [ -z "${1:-}" ] && [ "$DOW" = "1" ]; then
-  echo "--- 월요일 브리핑 시리즈 추가 생성 ---" | tee -a "$LOG"
-  npx tsx scripts/gen-cardnews.ts --series=briefing 2>&1 | tee -a "$LOG"
+  echo "--- 월요일 브리핑 시리즈 추가 생성 ---" >> "$LOG" 2>&1
+  npx tsx scripts/gen-cardnews.ts --series=briefing >> "$LOG" 2>&1
 fi
-echo "=== $(date '+%Y-%m-%d %H:%M:%S') gen-cardnews 종료" | tee -a "$LOG"
+echo "=== $(date '+%Y-%m-%d %H:%M:%S') gen-cardnews 종료" >> "$LOG" 2>&1

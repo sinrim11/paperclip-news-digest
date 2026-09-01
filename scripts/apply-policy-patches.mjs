@@ -67,7 +67,20 @@ const params = JSON.parse(readFileSync(PARAMS_PATH, 'utf8'));
 const patches = Array.isArray(radar.paramPatches) ? radar.paramPatches : [];
 const valid = [];
 const rejected = [];
+const skippedFrozen = [];
+// 동결 경로(2026-09-01) — 사람이 1차 출처로 확정한 값은 자동 갱신에서 제외한다.
+// 이 장치가 없어 같은 역전이 두 번 났다: 7/4 사람이 국토부 근거로 stressAddPctRegulated를
+// 1.5로 교정 → 8/6 자동이 3으로 되돌림(4주간 미발견). stressAddPctOther는 8/26~31에
+// 0.75→3→1.5→3으로 6일간 3회 왕복. 검증기가 형식·범위·드리프트만 보고 '출처의 급'을
+// 안 보기 때문에 언론기사가 국토부 원문을 이길 수 있었다.
+// 동결 위반은 rejected가 아니라 skipped로 분류한다 — 적용 게이트가 all-or-nothing이라
+// rejected에 넣으면 같은 회차의 무관한 정상 패치까지 영구히 막힌다.
+const frozenPaths = new Set(Array.isArray(params._frozenPaths) ? params._frozenPaths : []);
 for (const p of patches) {
+  if (p && typeof p.path === 'string' && frozenPaths.has(p.path)) {
+    skippedFrozen.push(`${p.path} (${p.old ?? '?'}→${p.new ?? '?'}) — 동결됨, 사람 확인 필요`);
+    continue;
+  }
   if (!p || typeof p.path !== 'string' || typeof p.new !== 'number' || !p.sourceUrl) {
     rejected.push(`${p?.path ?? '?'} — 형식 불량`);
     continue;
@@ -112,6 +125,11 @@ if (valid.length > 0 && rejected.length === 0) {
   for (const r of rejected) lines.push(`   · ✗ ${r}`);
 }
 
+if (skippedFrozen.length > 0) {
+  lines.push(`🔒 동결 경로 패치 ${skippedFrozen.length}건 건너뜀 — 1차 출처 확인 후 사람이 갱신:`);
+  for (const f of skippedFrozen) lines.push(`   · ${f}`);
+}
+
 // ── 3. 규제지역 변경 — 자동 적용 금지, 제안 파일 + 알림 ─────────────────────
 const regionChanges = Array.isArray(radar.regionChanges) ? radar.regionChanges : [];
 if (regionChanges.length > 0) {
@@ -142,6 +160,11 @@ checkLog.unshift({
   changed: valid.length > 0 || regionChanges.length > 0,
   applied: valid.length > 0 && rejected.length === 0 ? valid.length : 0,
   regionAlerts: regionChanges.length,
+  // 근거를 남긴다(2026-09-01) — 종전엔 URL을 저장하지 않아 "원문 확인했다"는 주장을
+  // 나중에 검증할 수 없었고, 그래서 어느 회차가 옳았는지 가릴 수 없었다.
+  patches: patches.map((p) => ({ path: p?.path, old: p?.old, new: p?.new, sourceUrl: p?.sourceUrl ?? null })),
+  skippedFrozen,
+  sources: radar.sources ?? [],
   summary: radar.summary ?? '',
   checks: (radar.checks ?? []).map((c) => `${c.item}: ${c.status}`),
 });
