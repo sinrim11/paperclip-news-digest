@@ -68,11 +68,12 @@ const patches = Array.isArray(radar.paramPatches) ? radar.paramPatches : [];
 const valid = [];
 const rejected = [];
 const skippedFrozen = [];
-// 동결 경로(2026-09-01) — 사람이 1차 출처로 확정한 값은 자동 갱신에서 제외한다.
-// 이 장치가 없어 같은 역전이 두 번 났다: 7/4 사람이 국토부 근거로 stressAddPctRegulated를
-// 1.5로 교정 → 8/6 자동이 3으로 되돌림(4주간 미발견). stressAddPctOther는 8/26~31에
-// 0.75→3→1.5→3으로 6일간 3회 왕복. 검증기가 형식·범위·드리프트만 보고 '출처의 급'을
-// 안 보기 때문에 언론기사가 국토부 원문을 이길 수 있었다.
+// 동결 경로(2026-09-01) — 1차 출처로 확정한 값은 자동 갱신에서 제외한다.
+// 두 DSR 키는 두 달간 5번 뒤집혔다(7/4 1.5 · 8/6 3 · 8/26 3 · 8/29 1.5 · 8/31 3).
+// 금융위 원문으로 확인한 결과 3.0이 맞다("스트레스 금리 하한을 수도권·규제지역내 주담대에
+// 한해 3%로 상향", 10·15 대책·10.16 행정지도) — 7/4·8/29의 1.5가 오류였다.
+// 문제는 어느 쪽이 옳았느냐가 아니라, 이력에 근거 URL이 없어 다섯 번의 변경 중 무엇이
+// 맞는지 사후에 가릴 수 없었다는 것이다. 그래서 값을 원문에 고정하고 근거를 남긴다.
 // 동결 위반은 rejected가 아니라 skipped로 분류한다 — 적용 게이트가 all-or-nothing이라
 // rejected에 넣으면 같은 회차의 무관한 정상 패치까지 영구히 막힌다.
 const frozenPaths = new Set(Array.isArray(params._frozenPaths) ? params._frozenPaths : []);
