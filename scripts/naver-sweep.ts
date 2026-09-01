@@ -275,6 +275,7 @@ async function main() {
 
   // 2) 단지별 매물 수집 + 예산 필터
   let saved = 0;
+  let specOnly = 0; // 예산 밖이라 매물은 없지만 세대수·연식을 남긴 단지
   let consecFail = 0;
   for (let i = 0; i < targets.length; i++) {
     const t = targets[i];
@@ -325,7 +326,44 @@ async function main() {
         saved++;
         console.log(`[sweep] ✓ ${t.gu} ${t.dong} ${t.name}(${t.totalHouseholdNumber}세대): 예산내 ${deals.length}건, 최저 ${(min! / 10000).toFixed(1)}억 [${i + 1}/${targets.length}]`);
       } else {
-        console.log(`[sweep] – ${t.gu} ${t.dong} ${t.name}: 예산내 매물 없음(최저 ${min ? (min / 10000).toFixed(1) + '억' : '매물0'}) [${i + 1}/${targets.length}]`);
+        // 예산 밖이어도 스펙(세대수·연식)은 남긴다 — 2026-09-01 확인: 열거 1014단지 중 659개만
+        // 저장돼 355개의 세대수를 잃었고, 추천은 실거래 기반이라 '지금 매물이 없는 단지'도 후보에
+        // 오른다. 그 결과 추천 9건 중 6건이 '👥 세대수 미상'으로 나갔다.
+        // 매물 필드는 0/빈 배열이라 inBudgetCount>0 필터를 쓰는 소비처는 영향받지 않는다.
+        await prisma.complexCandidate.upsert({
+          where: { complexNo: String(t.complexNumber) },
+          create: {
+            complexNo: String(t.complexNumber),
+            name: t.name,
+            gu: t.gu,
+            dong: t.dong,
+            household: t.totalHouseholdNumber,
+            elapsedYear: t.approvalElapsedYear ?? null,
+            approvalDate: t.useApprovalDate ?? null,
+            totalArticles: articles.length,
+            dealArticles: dealCount,
+            inBudgetCount: 0,
+            minDealPrice: min,
+            maxDealPrice: max,
+            budgetCeiling: ceiling,
+            listings: [],
+          },
+          update: {
+            household: t.totalHouseholdNumber,
+            elapsedYear: t.approvalElapsedYear ?? null,
+            approvalDate: t.useApprovalDate ?? null,
+            totalArticles: articles.length,
+            dealArticles: dealCount,
+            inBudgetCount: 0,
+            minDealPrice: min,
+            maxDealPrice: max,
+            budgetCeiling: ceiling,
+            listings: [],
+            sweptAt: new Date(),
+          },
+        });
+        specOnly++;
+        console.log(`[sweep] – ${t.gu} ${t.dong} ${t.name}(${t.totalHouseholdNumber}세대): 예산내 매물 없음(최저 ${min ? (min / 10000).toFixed(1) + '억' : '매물0'}) — 스펙만 저장 [${i + 1}/${targets.length}]`);
       }
     } catch (err) {
       console.error(`[sweep] ${t.name} 수집 오류:`, err);
@@ -340,7 +378,7 @@ async function main() {
   }
 
   await browser.close();
-  console.log(`[sweep] 완료 — 예산 내 매물 있는 단지 ${saved}개 저장`);
+  console.log(`[sweep] 완료 — 예산 내 매물 ${saved}개 저장 · 스펙만 ${specOnly}개(세대수 보존)`);
 }
 
 main()

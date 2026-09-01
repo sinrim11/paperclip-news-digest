@@ -92,7 +92,8 @@ export default async function RecommendPage() {
   const personaRecos = loadPersonaRecos();
 
   const [candidates, trades] = await Promise.all([
-    prisma.complexCandidate.findMany().catch(() => []),
+    // inBudgetCount>0 — 스펙 보존용 행(예산 밖, 매물 0)은 호가 랭킹에서 제외(2026-09-01)
+    prisma.complexCandidate.findMany({ where: { inBudgetCount: { gt: 0 } } }).catch(() => []),
     prisma.aptTrade
       .findMany({
         where: { dealDate: { gte: new Date(Date.now() - 120 * 86_400_000) } },

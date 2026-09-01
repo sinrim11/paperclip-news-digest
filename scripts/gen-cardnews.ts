@@ -775,7 +775,7 @@ ${capLines}
 async function buildPriceSet(prisma: PrismaClient): Promise<SetOut> {
   const since = new Date(Date.now() - 120 * 86_400_000);
   const [candidates, trades, rents] = await Promise.all([
-    prisma.complexCandidate.findMany(),
+    prisma.complexCandidate.findMany({ where: { inBudgetCount: { gt: 0 } } }), // 스펙 보존 행 제외(2026-09-01)
     prisma.aptTrade.findMany({ where: { dealDate: { gte: since } }, select: { lawdCd: true, aptName: true, dealAmount: true, excluUseAr: true, dealDate: true } }),
     prisma.aptRent.findMany({ where: { dealDate: { gte: since }, monthlyRent: 0 }, select: { lawdCd: true, aptName: true, deposit: true } }),
   ]);

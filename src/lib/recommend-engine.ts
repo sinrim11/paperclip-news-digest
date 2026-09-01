@@ -253,7 +253,17 @@ export async function buildDailyRecommendations(
     : null;
   const specByKey = new Map<string, { household: number; far: number | null }>();
   for (const c of candidates) specByKey.set(`${c.gu}|${c.dong}|${normName(c.name)}`, { household: c.household, far: c.far ?? null });
-  const specOf = (a: ComplexAgg) => specByKey.get(`${a.gu}|${a.dong}|${normName(a.name)}`) ?? null;
+  // 별칭 — 국토부와 네이버가 같은 단지를 다르게 부른다('초원부영' vs '초원7단지부영').
+  // 정규화로는 못 잡고 유사도 추론은 오매칭이 나므로 관측된 것만 매핑한다(config/complex-aliases.json).
+  // 이 맵은 spec 조인 전용이며 complexKey(쿨다운 키)는 실거래 원본 이름을 그대로 쓴다.
+  const aliasCfg = loadJson<{ aliases?: Record<string, string> }>('config/complex-aliases.json');
+  const aliases = aliasCfg?.aliases ?? {};
+  const specOf = (a: ComplexAgg) => {
+    const direct = specByKey.get(`${a.gu}|${a.dong}|${normName(a.name)}`);
+    if (direct) return direct;
+    const alias = aliases[`${a.gu}|${a.dong}|${a.name}`];
+    return alias ? specByKey.get(`${a.gu}|${a.dong}|${normName(alias)}`) ?? null : null;
+  };
   /** 최근 실거래 1건(날짜·가격) — "언제 얼마에 팔렸나"는 호가 신뢰도 판단의 기준점. */
   const lastTradeOf = (a: ComplexAgg): { lastTradeDate?: string; lastTradeManwon?: number } => {
     const last = a.recentTrades.reduce<{ price: number; ms: number } | null>((m, t) => (!m || t.ms > m.ms ? t : m), null);
