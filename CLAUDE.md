@@ -130,7 +130,15 @@ interface NewsItem {
   권한은 Bash·Read·Grep·Glob만. 무인 실행에서 코드 수정·배포는 하지 않고 제안만 보고한다.
 - 로그: 스크립트는 `>> $LOG` 로 직접 쓴다. **`| tee -a $LOG` 금지** — plist의
   StandardOutPath가 같은 파일이라 전 라인이 2회 기록된다(2026-09-01 sweep·matching·cardnews에서 제거).
-- 정책 파라미터: `config/policy-params.json`의 `_frozenPaths`에 등록된 키는 레이더 자동 갱신에서
-  제외된다. 검증기가 출처의 급을 보지 않아 언론기사가 국토부 원문을 덮은 사고가 두 번 있었다.
+- 정책 파라미터 — **1차 출처 원칙**(2026-09-01 사용자 지침):
+  · 자동 반영은 정부 원문 근거만 허용. `apply-policy-patches.mjs`의 `PRIMARY_HOSTS`
+    (fsc·molit·korea·nhuf·fss·bok .go.kr/.or.kr) 밖 URL은 검증기가 거부한다.
+    언론기사·은행 설명페이지는 단서로만 쓰고 근거로 삼지 않는다.
+  · `_frozenPaths` 등록 키는 자동 갱신에서 제외(스킵). 거부·스킵도 반드시 텔레그램에 알린다
+    — 레이더가 무언가를 바꾸려 했다는 사실 자체가 신호다.
+  · 값이 바뀌거나 변경 제안이 오면 아침 점검이 WebSearch/WebFetch로 **원문을 직접 열어**
+    인용문과 URL을 보고한다. 무인 실행에서 값을 고치지는 않는다.
+  · 배경: 2026-08~09에 두 DSR 키가 5회 진동했는데 이력에 근거 URL이 없어 사후 판별이
+    불가능했다. 원문 확인 결과 수도권 3.0%가 맞았고 근거는 `_frozenSource`에 있다.
 - 검증: `scripts/verify-e2e.sh` (LM Studio 인증→DB→웹→생성→알림 전 구간)
 - Gen1 Python 파이프라인은 `_legacy/`에 아카이브됨 — 수정·실행 비대상

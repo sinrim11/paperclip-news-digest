@@ -29,10 +29,16 @@ notify() {  # 스크립트 자체가 실패했을 때의 최소 보고 경로
 PROMPT='오늘 아침 사이클(~/news-digest)을 전수 점검하고 결과를 텔레그램으로 보고해줘. 사용자가 명시적으로 요청한 정기 보고이므로 반드시 텔레그램 전송까지 완료할 것. 전송은 `npx tsx`로 `@/lib/telegram`의 sendTelegram을 쓰면 된다(top-level await 불가 — void (async () => {...})() 형태로 감쌀 것).
 
 점검 대상 — 각 단계의 로그와 산출물을 both 확인:
-1. naver-sweep 03:00 (일·화·수·목·토만 실행) — ComplexCandidate.sweptAt 갱신 여부, 동별 0건 스트릭. 2026-08-29에 반복 API 탐침으로 네이버가 IP를 일시 차단한 적이 있으니, 0건이면 차단인지 요일 문제인지 구분할 것.
+1. naver-sweep 01:00 (일·화·수·목·토만 실행) — ComplexCandidate.sweptAt 갱신 여부, 동별 0건 스트릭. 2026-08-29에 반복 API 탐침으로 네이버가 IP를 일시 차단한 적이 있으니, 0건이면 차단인지 요일 문제인지 구분할 것.
 2. collect 06:00 — AptTrade/AptRent 신규 건수
 3. gosi 06:20 — 신규 고시 건수와 등급 분포. 사용자가 "🟡 등급이 필요한지 며칠 지켜보겠다"고 한 관찰 항목이니 🔴 일변도인지 기록
-4. digest 06:30 / policy-refresh 06:45 — config/policy-params.json·policy-loans.json 변경 제안 여부
+4. digest 06:30 / policy-refresh 06:45 — config/policy-params.json·policy-loans.json 변경 제안 여부.
+   ★ 정책값이 바뀌었거나(자동 적용·동결 스킵 모두) 변경 제안이 올라왔다면, 사용자 지침에 따라 **1차 출처를 직접 열어 확인**하고 보고할 것:
+   - 순서: 금융위(fsc.go.kr) → 국토부(molit.go.kr) → 정책브리핑(korea.kr). 언론기사·블로그·은행 설명페이지는 근거로 삼지 말 것(2026-08~09에 기사가 원문 판단을 뒤집어 두 달간 5회 진동한 전례가 있다).
+   - WebSearch로 보도자료를 찾고 WebFetch로 원문 문장을 그대로 인용해 올 것. "확인했다"가 아니라 인용문과 URL을 보고에 포함한다.
+   - 원문과 시스템값이 다르면 값을 고치지 말고 인용문·URL·차이를 보고만 한다(무인 실행에서 예산을 바꾸지 않는다).
+   - 원문을 못 찾으면 "미확인"으로 명시. 추측으로 메우지 말 것.
+   - 참고: dsr 두 키는 config/policy-params.json의 _frozenPaths로 동결돼 있고 확정 근거는 _frozenSource에 있다(수도권 3.0%).
 5. market-research 07:00
 6. recommend 08:30 — 텔레그램 추천 목록, 중복 전송 방지(signalLowManwon·signalTag)가 작동했는지
 7. matching 08:45
@@ -48,7 +54,7 @@ echo "=== $(date '+%Y-%m-%d %H:%M:%S') morning-review 시작 ===" >> "$LOG"
 
 # macOS엔 coreutils의 timeout이 없다 → 워치독 프로세스로 30분 상한을 건다.
 claude -p \
-  --allowedTools Bash Read Grep Glob \
+  --allowedTools Bash Read Grep Glob WebSearch WebFetch \
   --permission-mode acceptEdits \
   "$PROMPT" >> "$LOG" 2>&1 &
 CLAUDE_PID=$!

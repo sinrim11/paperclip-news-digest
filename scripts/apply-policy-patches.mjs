@@ -32,6 +32,19 @@ const RANGES = {
   'landPermitZone.residenceYears': [0, 10],
 };
 
+// 1차 출처 화이트리스트(2026-09-01 사용자 지침) — 파라미터 자동 반영은 정부 원문 근거만 허용.
+// 프롬프트로만 요구하면 지켜진다는 보장이 없어 검증기에서 강제한다. 기사 근거 패치가 원문
+// 근거 값을 뒤집어 두 달간 5회 진동한 전례가 있다(config/policy-params.json _correction20260901).
+const PRIMARY_HOSTS = ['fsc.go.kr', 'molit.go.kr', 'korea.kr', 'nhuf.molit.go.kr', 'fss.or.kr', 'bok.or.kr'];
+function isPrimarySource(url) {
+  try {
+    const h = new URL(url).hostname.replace(/^www\./, '');
+    return PRIMARY_HOSTS.some((d) => h === d || h.endsWith('.' + d));
+  } catch {
+    return false;
+  }
+}
+
 function getPath(obj, path) {
   return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
 }
@@ -95,6 +108,10 @@ for (const p of patches) {
     rejected.push(`${p.path} — old(${p.old})가 현재값(${cur})과 불일치(드리프트 가드)`);
     continue;
   }
+  if (!isPrimarySource(p.sourceUrl)) {
+    rejected.push(`${p.path} — 1차 출처 아님(${p.sourceUrl}) · 허용: ${PRIMARY_HOSTS.join(', ')}`);
+    continue;
+  }
   const range = RANGES[p.path];
   if (range && (p.new < range[0] || p.new > range[1])) {
     rejected.push(`${p.path} — 신규값 ${p.new} 허용범위(${range[0]}~${range[1]}) 밖`);
@@ -121,8 +138,10 @@ if (valid.length > 0 && rejected.length === 0) {
 } else if (valid.length > 0 && rejected.length > 0) {
   lines.push(`⚠️ 패치 ${valid.length}건 유효하나 ${rejected.length}건 검증 실패 → 전체 보류(부분 적용 금지)`);
   for (const r of rejected) lines.push(`   · ✗ ${r}`);
-} else if (patches.length > 0) {
-  lines.push(`⚠️ 제안된 패치 ${patches.length}건 모두 검증 실패 — 적용 안 함`);
+} else if (rejected.length > 0) {
+  // patches.length가 아니라 rejected.length로 판정한다 — 동결 스킵만 있는 회차에
+  // "검증 실패"로 잘못 표시되던 문제(2026-09-01).
+  lines.push(`⚠️ 제안된 패치 ${rejected.length}건 검증 실패 — 적용 안 함`);
   for (const r of rejected) lines.push(`   · ✗ ${r}`);
 }
 
@@ -174,10 +193,17 @@ writeFileSync(CHECK_LOG_PATH, JSON.stringify(checkLog.slice(0, 60), null, 2) + '
 // ── 5. 텔레그램 보고 본문 — 변경 없음이면 1줄(2026-08-11 다이어트), 변경 시에만 상세 ──
 const checks = Array.isArray(radar.checks) ? radar.checks : [];
 const unchanged = checks.filter((c) => c.status === 'unchanged').length;
-if (valid.length > 0 || regionChanges.length > 0 || loanChanges.length > 0) {
+// 거부·동결 스킵도 반드시 알린다(2026-09-01). 종전엔 조건이 valid/region/loan뿐이라
+// 패치가 전부 거부되거나 동결로 스킵되면 "변경 없음" 한 줄만 나가고 사유가 사라졌다 —
+// 레이더가 무언가를 바꾸려 했다는 사실 자체가 사람이 알아야 할 신호다.
+if (valid.length > 0 || regionChanges.length > 0 || loanChanges.length > 0 || rejected.length > 0 || skippedFrozen.length > 0) {
+  const header =
+    valid.length > 0 || regionChanges.length > 0 || loanChanges.length > 0
+      ? `🏛️ 정책 레이더 (${today}) — 변경 감지`
+      : `🏛️ 정책 레이더 (${today}) — 시도된 변경을 막았습니다(적용 0건)`;
   console.log(
     [
-      `🏛️ 정책 레이더 (${today}) — 변경 감지`,
+      header,
       ...(radar.summary ? [`· ${radar.summary}`] : []),
       ...lines,
     ].join('\n'),
