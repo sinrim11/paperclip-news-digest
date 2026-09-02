@@ -120,9 +120,11 @@ interface NewsItem {
 ## 운영
 - 웹: launchd `com.news-digest.web` → `next start -p 3200` (3000/3100은 타 프로젝트 점유)
 - 데일리: launchd `com.news-digest.daily` → 매일 06:30 `scripts/run-daily-digest.sh`
-- 매물 스윕: launchd `com.news-digest.naver-sweep` → **01:00**(2026-09-01 03:00에서 이동).
-  이유: 회차가 6시간 넘게 걸려 03:00 시작 시 꼬리(gen-listings·persona)가 recommend 08:30·
-  cardnews 09:00 뒤에 끝났다. 넘길 경우 스크립트가 텔레그램에 "이전 회차 호가 기준"을 스스로 알린다.
+- 매물 스윕: launchd `com.news-digest.naver-sweep` → **21:00(전날 저녁)**.
+  03:00 → 01:00(9/1) → 21:00(9/2)로 두 번 옮겼다. 실측 소요시간이 gangnam1h 1,014단지
+  6h12m · wed 1,584단지 **10h04m**이라 새벽 시작으로는 recommend 08:30을 맞출 수 없다.
+  21:00 시작이면 wed도 07:00경 끝난다. 반영일은 하루 밀리지만 주 2회 주기는 그대로.
+  08:15~20:00 사이에 끝나면 창을 놓친 것이므로 스크립트가 텔레그램에 스스로 알린다.
 - 아침 점검: launchd `com.news-digest.morning-review` → 매일 09:17 `scripts/morning-review.sh`
   사이클 마지막 작업(cardnews 09:00) 직후에 전 단계를 점검해 텔레그램으로 보고한다.
   `claude -p`를 쓰므로 **`.env`의 `CLAUDE_CODE_OAUTH_TOKEN`이 필수** — launchd 프로세스는
