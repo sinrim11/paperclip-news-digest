@@ -118,7 +118,13 @@ function loadConfig(): SweepConfig {
  * 정상 응답하며 필요한 필드를 직접 준다 — SPA 가로채기라는 간접 경로가 사라진 게 오히려 낫다.
  * 부수 효과: 종전엔 SPA가 로드하는 page 0(상위 30개)만 잡혔는데 이 API는 동 전체를 준다.
  */
-async function enumerateDong(page: Page, code: string, minHousehold: number): Promise<ComplexInfo[]> {
+interface DongResult {
+  complexes: ComplexInfo[];
+  apiOk: boolean; // false = HTTP 오류(차단 의심)
+  rawCount: number; // 필터 전 단지 수 — 0이면 그 동에 등록 아파트가 없다는 뜻
+}
+
+async function enumerateDong(page: Page, code: string, minHousehold: number): Promise<DongResult> {
   const res = await page.evaluate(async (cortarNo: string) => {
     const r = await fetch(`/api/regions/complexes?cortarNo=${cortarNo}&realEstateType=APT:ABYG:JGC&order=`, {
       headers: { Accept: 'application/json' },
@@ -128,9 +134,9 @@ async function enumerateDong(page: Page, code: string, minHousehold: number): Pr
   }, code);
 
   if (!res.ok) {
-    // 상태를 삼키면 "0단지"와 "차단"이 같은 모양이 된다 — 이번 11일 실패가 정확히 그랬다.
+    // 상태를 삼키면 "0단지"와 "차단"이 같은 모양이 된다 — 11일 실패가 정확히 그랬다.
     console.error(`  · 동 ${code}: HTTP ${res.status}`);
-    return [];
+    return { complexes: [], apiOk: false, rawCount: 0 };
   }
 
   const out: ComplexInfo[] = [];
@@ -147,7 +153,7 @@ async function enumerateDong(page: Page, code: string, minHousehold: number): Pr
       approvalElapsedYear: ymd ? new Date().getFullYear() - Number(ymd.slice(0, 4)) : undefined,
     });
   }
-  return out;
+  return { complexes: out, apiOk: true, rawCount: res.list.length };
 }
 
 interface AffordableListing {
@@ -232,35 +238,47 @@ async function main() {
   // 1) 동별 열거 → minHousehold+ 아파트 후보
   const candidates: Array<ComplexInfo & { gu: string; dong: string }> = [];
   let zeroDongs = 0;
-  // 조기 중단 가드(2026-08-29) — 차단/구조변경 시 전 동이 0단지가 되는데, 그대로 두면
-  // 4~6시간을 헛돌고 그 사이 계속 요청해 차단을 연장한다. 연속 0단지가 임계를 넘으면 즉시 중단.
-  // (정상 스윕에도 0단지 동은 있지만 연속으로 8개가 이어지지는 않는다.)
-  const ZERO_STREAK_ABORT = 8;
-  let zeroStreak = 0;
+  let emptyDongs = 0; // 등록 아파트가 아예 없는 동(정상)
+  // 조기 중단 가드 — 차단/구조변경 시 전 동이 0단지가 되는데, 그대로 두면 4~6시간을 헛돌고
+  // 그 사이 계속 요청해 차단을 연장한다.
+  //
+  // 판정 기준 교정(2026-09-02): 종전엔 '연속 0단지'로 판단했는데, 9/2 wed 회차가 종로구
+  // 청운·신교·궁정·효자·창성·통의·적선동에서 오발동해 3분 만에 중단됐다. 서촌 일대라
+  // 실제로 150세대+ 아파트가 없는 동이고, wed 그룹은 하필 이 동들로 시작한다.
+  // 0단지는 '차단'과 '그 동에 아파트가 없음' 둘 다에서 나오므로 신호가 될 수 없다.
+  // 이제 API 응답 자체가 실패한 경우만 센다 — 차단이면 HTTP 오류가 나므로 이쪽이 진짜 신호다.
+  const API_FAIL_ABORT = 5;
+  let apiFailStreak = 0;
   for (const d of dongList) {
     try {
-      const found = await enumerateDong(page, d.code, cfg.minHousehold);
+      const { complexes: found, apiOk, rawCount } = await enumerateDong(page, d.code, cfg.minHousehold);
       for (const c of found) candidates.push({ ...c, gu: d.gu, dong: d.dong });
-      if (found.length === 0) {
-        zeroDongs++;
-        if (++zeroStreak >= ZERO_STREAK_ABORT) {
+
+      if (!apiOk) {
+        if (++apiFailStreak >= API_FAIL_ABORT) {
           console.error(
-            `[sweep] ⛔ 연속 ${zeroStreak}개 동이 0단지 — 네이버 차단(429)이나 페이지 구조 변경으로 판단해 중단합니다.` +
+            `[sweep] ⛔ 연속 ${apiFailStreak}개 동에서 API 응답 실패 — 차단이나 구조 변경으로 판단해 중단합니다.` +
               ' 계속 두면 헛돌면서 차단만 길어집니다. 잠시 후 재시도하세요.',
           );
           break;
         }
       } else {
-        zeroStreak = 0;
+        apiFailStreak = 0;
       }
-      // new.land API는 동 전체를 한 번에 준다 — 종전 SPA 가로채기의 page 0(상위 30) 상한이 사라졌다.
-      console.log(`[sweep] 열거 ${d.gu} ${d.dong}: ${found.length}단지(${cfg.minHousehold}세대+)`);
+
+      if (found.length === 0) zeroDongs++;
+      if (apiOk && rawCount === 0) emptyDongs++;
+      // rawCount를 함께 찍는다 — '필터로 걸러져 0'인지 '동에 아파트가 없어 0'인지 로그만 보고 갈리게.
+      console.log(
+        `[sweep] 열거 ${d.gu} ${d.dong}: ${found.length}단지(${cfg.minHousehold}세대+)` +
+          (found.length === 0 ? ` · 등록 ${rawCount}개${rawCount === 0 ? ' — 아파트 없는 동' : ' 중 규모 미달'}` : ''),
+      );
     } catch (err) {
       console.error(`[sweep] 열거 실패 ${d.dong}:`, err);
     }
     await sleep(jitter(cfg.enumDelayMs));
   }
-  console.log(`[sweep] 열거 요약 — ${dongList.length}개 동 중 0단지 ${zeroDongs}개`);
+  console.log(`[sweep] 열거 요약 — ${dongList.length}개 동 중 0단지 ${zeroDongs}개(그중 아파트 없는 동 ${emptyDongs}개)`);
   // 구 단위 전멸 감지 — 잘못된 지역코드·차단은 개별 동 0이 아니라 구 전체 0으로 나타남(광진·강북·금천 gun 절단 버그의 관측 신호)
   const targetGuSet = new Set(dongList.map((d) => d.gu));
   const foundGuSet = new Set(candidates.map((c) => c.gu));

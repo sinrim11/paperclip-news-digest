@@ -75,7 +75,7 @@ paramPatches의 sourceUrl은 반드시 1차 출처여야 한다: 금융위(fsc.g
 reason에는 원문 문장을 짧게 인용하라(예: "스트레스 금리 하한을 수도권·규제지역내 주담대에 한해 3%로 상향").
 이 규칙이 생긴 이유: 2026-08~09에 기사 근거 패치가 원문 근거 값을 뒤집어 두 달간 5회 진동했고, 이력에 URL이 없어 사후에 무엇이 옳았는지 가릴 수 없었다.
 
-config/policy-params.json의 `_frozenPaths`에 있는 경로는 동결돼 자동 적용되지 않는다. 변경이 필요하다고 판단되면 paramPatches에 넣되(스킵되고 알림만 감) reason에 1차 출처 인용을 반드시 붙여라 — 사람이 그것만 보고 판단한다.
+config/policy-params.json의 _frozenPaths 에 있는 경로는 동결돼 자동 적용되지 않는다. 변경이 필요하다고 판단되면 paramPatches에 넣되(스킵되고 알림만 감) reason에 1차 출처 인용을 반드시 붙여라 — 사람이 그것만 보고 판단한다.
 
 paramPatches는 공식 소스로 확정된 변경만 넣어라(추측·전망 금지 — 발표만 되고 시행 전이면 checks에만 기록).
 old는 반드시 현재 파일의 값과 정확히 일치해야 한다. 변경이 없으면 paramPatches·regionChanges는 빈 배열.
