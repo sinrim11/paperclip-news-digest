@@ -329,8 +329,16 @@ export async function buildDailyRecommendations(
   const dsCfg: DownsideConfig = { ...DEFAULT_DOWNSIDE, ...(rules.downsideFlags ?? {}) };
   // 트랙(메인·스트레치+·갭)별 판정에서 같은 단지가 중복 기록되지 않도록 key 기준 dedup(2026-08-05)
   const excludedByKey = new Map<string, { name: string; gu: string; dong: string; flags: string[] }>();
-  const recordExcluded = (key: string, e: { name: string; gu: string; dong: string; flags: string[] }) => {
+  // 트랙별 제외 사유를 따로 남긴다(2026-09-05). 메인은 aggs(≤stretch), 스트레치+/갭트랙은
+  // aggsWide(≤spCeiling)로 서로 다른 거래 표본을 쓰기 때문에 같은 단지의 하방 플래그 판정이
+  // 갈릴 수 있다 — 실제로 도봉 창동 동아청솔이 메인 med 8.0억(플래그 2: 거래량 급감·전세가율
+  // 50%)과 스트레치+ med 8.5억(플래그 1: 전세가율 47%)으로 갈려 제외 목록과 추천에 동시
+  // 등장했다. 표본이 다르니 판정이 다른 건 설계상 자연스럽지만, 트랙 표시 없이 합쳐 보여주면
+  // 모순으로 읽힌다.
+  const excludedTracks = new Map<string, Set<string>>();
+  const recordExcluded = (key: string, e: { name: string; gu: string; dong: string; flags: string[] }, track: string) => {
     if (!excludedByKey.has(key)) excludedByKey.set(key, e);
+    (excludedTracks.get(key) ?? excludedTracks.set(key, new Set()).get(key)!).add(track);
   };
   const flagsOf = (a: ComplexAgg, jeonseRatioPct: number | null, jeonseSamples: number) => {
     const flags = downsideFlags(
@@ -425,7 +433,7 @@ export async function buildDailyRecommendations(
     // 하방 경고 플래그(2-B) — 임계 이상이면 제외+사유 기록, 1개면 유의점으로 통과
     const dFlags = flagsOf(a, jeonseArr && jeonseArr.length >= rentMinSamples ? jeonseRatioPct : null, jeonseArr?.length ?? 0);
     if (dFlags.length >= dsCfg.excludeThreshold) {
-      recordExcluded(a.key, { name: a.name, gu: a.gu, dong: a.dong, flags: dFlags.map((f) => f.label) });
+      recordExcluded(a.key, { name: a.name, gu: a.gu, dong: a.dong, flags: dFlags.map((f) => f.label) }, '메인');
       continue;
     }
 
@@ -570,7 +578,7 @@ export async function buildDailyRecommendations(
       // 하방 경고 플래그(2-B) — 스트레치+에도 동일 적용
       const dFlags = flagsOf(a, jArr && jArr.length >= rentMinSamples ? jeonseRatioPct : null, jArr?.length ?? 0);
       if (dFlags.length >= dsCfg.excludeThreshold) {
-        recordExcluded(a.key, { name: a.name, gu: a.gu, dong: a.dong, flags: dFlags.map((f) => f.label) });
+        recordExcluded(a.key, { name: a.name, gu: a.gu, dong: a.dong, flags: dFlags.map((f) => f.label) }, '스트레치+');
         continue;
       }
       const score = Math.round((tier * rules.weights.tierMultiplier + liq + fresh.score + heat + jeonsePts + (fbLike.has(a.key) ? 5 : 0)) * 10) / 10;
@@ -600,6 +608,13 @@ export async function buildDailyRecommendations(
       if (monthsToReach == null) cautions.push('월 매수펀드 적립액 미설정 — 조달 개월 판정 불가(/settings에서 입력)');
       if (a.buildYear != null && nowYear - a.buildYear >= 33) cautions.push('노후 단지 — 재건축 기대가 호가 선반영/분담금 리스크 확인');
       for (const f of dFlags) cautions.push(`🚩 하방 신호(${dFlags.length}/${dsCfg.excludeThreshold}): ${f.label}`);
+      // 메인 트랙(예산 내 거래만)에서 하방 플래그로 걸린 단지면 알린다 — 스트레치+는 고가 거래까지
+      // 포함한 넓은 표본을 보므로 같은 플래그가 희석돼 통과할 수 있다(동아청솔: 메인 med 8.0억
+      // 플래그 2 → 스트레치+ med 8.5억 플래그 1). 통과 자체가 틀린 건 아니지만, 예산 가격대에서
+      // 거래가 말랐다는 사실은 매수자가 알아야 한다.
+      if (excludedTracks.get(a.key)?.has('메인')) {
+        cautions.push(`🚩 예산 내 가격대(≤${eok(stretch)}) 거래만 보면 제외 대상 — ${(excludedByKey.get(a.key)?.flags ?? []).join(' · ')}`);
+      }
 
       spScored.push({
         rank: 0,
@@ -689,7 +704,7 @@ export async function buildDailyRecommendations(
       // 하방 경고 플래그(2-B) — 갭 트랙에도 동일 적용(전세가율 필터로 weak-jeonse는 사실상 미발동, 거래 급감 감지용)
       const gFlags = flagsOf(a, ratioPct, jArr.length);
       if (gFlags.length >= dsCfg.excludeThreshold) {
-        recordExcluded(a.key, { name: a.name, gu: a.gu, dong: a.dong, flags: gFlags.map((f) => f.label) });
+        recordExcluded(a.key, { name: a.name, gu: a.gu, dong: a.dong, flags: gFlags.map((f) => f.label) }, '갭트랙');
         continue;
       }
       const coverable = gap <= usableManwon;
@@ -753,7 +768,10 @@ export async function buildDailyRecommendations(
     });
   }
 
-  const excluded = [...excludedByKey.values()];
+  const excluded = [...excludedByKey.entries()].map(([key, e]) => ({
+    ...e,
+    tracks: [...(excludedTracks.get(key) ?? [])],
+  }));
   const gateNote = skippedUnverifiedGu.size
     ? ` · ⛔ 규제 미검증 지역 제외: ${[...skippedUnverifiedGu].join(', ')}(config/region-regulation.json 검증 후 편입)`
     : '';
