@@ -1,42 +1,45 @@
 {
-  "asOf": "2026-08-11",
+  "asOf": "2026-09-01",
   "regions": [
     {
       "region": "남양주시",
       "unsold": {
-        "count": null,
-        "trend": "미상",
-        "asOfMonth": null
+        "count": 322,
+        "trend": "감소",
+        "asOfMonth": "2026-06"
       },
       "supply12m": {
         "units": null,
-        "note": "확정치 없음(자료 상충). LH 3기 신도시 왕숙 A1(629세대)·A24(592세대, 합 약1,221세대)는 2027년3월 입주 목표로 보도됐으나 순연 가능성 언급 있음. 반면 민간 입주캘린더(아파트써처)는 2026~2027년 남양주 입주단지가 없고 2028년부터(덕소역라온프라이빗리버포레 999세대·오남역서희스타힐스 2개단지 2,364세대 등) 집중된다고 집계 — 두 자료가 상충해 12개월 확정 물량 산정 불가"
+        "note": "12개월(2026-09~2027-08) 총량 집계는 확인 안 됨. 확인된 개별 단지: 왕숙 A1(629세대, 당초 2026-12→2028-03로 연기), 왕숙2 A6(468세대, 2028-07), 왕숙아테라(812세대, 2026-08 완판·입주시기 미확인), 덕소역 라온프라이빗리버포레(999세대, 2028-03) — 3기 신도시 물량 대부분이 2028년 이후로 지연되어 조사기간 내 확정된 대형 입주는 확인되지 않음"
       },
-      "riskLevel": "mid",
-      "note": "미분양 가구수는 경기부동산포털(gris.gg.go.kr)·경기도청 미분양정보 게시판을 직접 확인했으나 최신 시군별 수치가 게시되어 있지 않아 미확인. 2026년 7·8월 HUG 미분양관리지역(인천 영종구·경기 이천·양주·강원 강릉)에는 남양주가 미포함되어 단기 급성 리스크 신호는 없으나, 3기 신도시 왕숙(약 6.6만가구 규모) 대량 공급 파이프라인이 진행 중이고 2026년에도 신규 분양(진접 서한이다음 512세대 등)이 이어지고 있어 중기 공급 부담을 보수적으로 반영해 mid로 판정",
+      "riskLevel": "low",
+      "note": "미분양 322건(2026-06)이 6개월 연속 감소 추세이고 HUG 미분양관리지역에도 미지정됨(요건: 1,000가구+재고 2% 이상, 남양주는 크게 미달). 입주물량은 대형 단지가 대부분 2028년 이후로 밀려 12개월 내 부담 신호 없음. 다만 미분양 수치는 3자 집계(부동산지인) 기준으로 원자료(stat.molit.go.kr·gris.gg.go.kr) 직접 대조가 필요하고, 2026-07 이후 수치와 12개월 총 입주 집계는 확인 안 됨.",
       "sourceUrls": [
-        "https://www.apartsearcher.ai/move-in/%EA%B2%BD%EA%B8%B0%EB%8F%84",
-        "https://seemsinfo.com/entry/2025%EB%85%84-%EC%9D%B4%ED%9B%84-%EB%82%A8%EC%96%91%EC%A3%BC-%EC%B2%AD%EC%95%BD-%EC%9D%BC%EC%A0%95-%EB%B6%84%EC%96%91-%EC%98%88%EC%A0%95-%EC%95%84%ED%8C%8C%ED%8A%B8",
-        "https://edaily.co.kr/News/Read?mediaCodeNo=257&newsId=03693286645544696"
+        "https://aptgin.com/home/gin04/gin0403/loc/4136000000",
+        "https://www.fnnews.com/news/202607031527113351",
+        "https://www.hankyung.com/article/2025052667071",
+        "https://www.fnnews.com/news/202608190958138514",
+        "https://kbthink.com/realestate/issue/hosing-251229.html"
       ]
     },
     {
       "region": "안양시",
       "unsold": {
-        "count": null,
-        "trend": "미상",
-        "asOfMonth": null
+        "count": 65,
+        "trend": "감소",
+        "asOfMonth": "2026-06"
       },
       "supply12m": {
         "units": 458,
-        "note": "민간 입주캘린더(아파트써처) 기준 확인된 최소치. e편한세상평촌어반밸리(동안구 호계동) 458세대, 2026년10월 입주예정 1개 단지만 12개월 창(2026.08~2027.08) 내 확인됨. 대단지 평촌자이퍼스니티(2,737세대)는 2027년12월 입주로 12개월 창 밖. 2025~2027년 3개년 누적 입주는 7,696가구로 직전 3개년(2022~2024, 16,873가구) 대비 약 54% 급감(경기도 평균 감소율 34.86%를 상회)"
+        "note": "확인된 것은 e편한세상평촌어반밸리(호계동, 458세대, 2026-10 입주) 1건뿐. 평촌자이퍼스니티(비산동, 2,723~2,737세대)는 2027-12 입주로 조사기간(~2027-08) 밖. 2025~2027년 3년 누적 입주가 7,696세대로 직전 3년(2022~2024, 16,873세대) 대비 약 54% 감소한 '입주절벽' 국면이라는 지역 언론 분석 있음"
       },
       "riskLevel": "low",
-      "note": "미분양 가구수 자체는 시군별 공식 통계 미확인이나, 2026년 7·8월 HUG 미분양관리지역 목록에 안양 미포함, 향후 12개월 확인된 입주물량이 458세대로 매우 제한적이며 최근 3년간 입주물량이 큰 폭으로 감소해 공급과잉 우려가 낮다는 정성적 근거로 low 판정",
+      "note": "미분양 65건(2026-06)으로 전월(69건) 대비 감소, HUG 미분양관리지역 미지정. 12개월 내 확정 입주는 458세대뿐이고 중기적으로도 입주물량이 급감하는 추세여서 공급 과잉 위험은 낮음. 미분양 수치는 3자 집계(부동산지인) 기준이라 원자료 직접 대조가 필요하며, 458세대는 검색으로 확인된 최소치로 실제 총량은 더 클 수 있음.",
       "sourceUrls": [
-        "https://www.apartsearcher.ai/move-in/%EA%B2%BD%EA%B8%B0%EB%8F%84",
+        "https://aptgin.com/home/gin04/gin0403/loc/4117000000",
         "https://magazine.hankyung.com/business/article/202511116397b",
-        "https://edaily.co.kr/News/Read?mediaCodeNo=257&newsId=03693286645544696"
+        "https://www.fnnews.com/news/202607031527113351",
+        "https://www.housingherald.co.kr/news/articleView.html?idxno=50273"
       ]
     },
     {
@@ -48,49 +51,80 @@
       },
       "supply12m": {
         "units": 733,
-        "note": "의왕센트라인데시앙(오전동 재개발, 5개동 733세대 중 민간임대 532세대 포함), 2026년11월 입주예정 — 12개월 창 내 확인된 유일한 단지. 직전인 2026년6월 인덕원퍼스비엘(2,180세대, 일반분양 586세대)이 입주해 12개월 창 밖이지만 시장 소화 부담의 배경으로 참고. 2027년11~12월 예정된 의왕월암 신혼희망타운·대방디에트르레이크파크(합 1,377세대)는 12개월 창 밖이라 제외"
+        "note": "의왕센트라인데시앙(오전동 재개발, 5개동 733세대, 2026-11 준공목표) 확인. 인덕원퍼스비엘(내손동, 2,180세대)은 준공목표가 2026-06으로 조사기간 시작 전이지만 실제 입주가 지연·분산될 가능성 배제 못함. 부곡다구역(915세대 재건축)·오전다구역은 사업 초기 단계로 입주시기 미정"
       },
       "riskLevel": "mid",
-      "note": "미분양 가구수는 미확인. 2026년 7·8월 HUG 미분양관리지역 목록에는 의왕 미포함(긍정적 신호)이나, 일부 자료에서 2025년경 의왕이 미분양관리지역 후보로 언급된 바 있어(출처 불명확, 미확인) 신뢰도 낮게 참고만 함. 직전 대단지(인덕원퍼스비엘) 준공 직후 소화 부담과 12개월 내 733세대 추가 공급을 근거로 보수적으로 mid 판정",
+      "note": "시군 단위 미분양 공식 수치는 확인 안 됨(3자 집계는 0으로 표시되나 원자료 gris.gg.go.kr·stat.molit.go.kr 직접 대조 실패). 2026-07 '의왕역 SK뷰' 1순위 청약이 384가구 모집에 278명 신청으로 미달돼 수요 둔화 신호가 있고, 12개월 내 확정 733세대에 더해 대규모 인덕원퍼스비엘 입주 시점이 창과 겹칠 가능성도 있어 데이터 공백을 이유로 low를 주기 어려움. 조정대상지역·투기과열지구·토지거래허가구역 중복 지정 상태도 변수. 확인 안 된 항목이 많아 보수적으로 mid 판정.",
       "sourceUrls": [
-        "https://www.apartsearcher.ai/move-in/%EA%B2%BD%EA%B8%B0%EB%8F%84",
-        "https://www.ilyoeconomy.com/news/articleView.html?idxno=62539",
-        "https://www.kcenews.kr/9152"
+        "https://www.straightnews.co.kr/news/articleView.html?idxno=307408",
+        "https://mhb-blog.com/euiwang-station-sk-view-unranked-subscription-guide/",
+        "https://www.housingherald.co.kr/news/articleView.html?idxno=60387",
+        "https://pheo.co.kr/phnews/152872",
+        "https://www.hankookilbo.com/News/Read/A2025102115280000491",
+        "https://aptgin.com/home/gin04/gin0403/loc/4143000000"
       ]
     }
   ],
   "sources": [
     {
-      "title": "미분양 다시 증가세…악성 미분양 3만가구 눈앞 (파이낸셜뉴스, 2026-07-31)",
-      "url": "https://www.fnnews.com/news/202607310600589911"
+      "title": "경기 남양주시 | 지인빅데이터-미분양 (부동산지인, 국토교통부 통계누리 재가공)",
+      "url": "https://aptgin.com/home/gin04/gin0403/loc/4136000000"
     },
     {
-      "title": "7월 미분양관리지역 인천 영종구·이천·양주·강릉 4곳 (이데일리, 2026-07)",
-      "url": "https://edaily.co.kr/News/Read?mediaCodeNo=257&newsId=03693286645544696"
+      "title": "경기 안양시 | 지인빅데이터-미분양 (부동산지인)",
+      "url": "https://aptgin.com/home/gin04/gin0403/loc/4117000000"
     },
     {
-      "title": "HUG, '26년 8월 미분양관리지역 4곳 유지…부산 사상구 빠지고 강릉 편입 (대한건설경제, 2026-08)",
-      "url": "https://www.kcenews.kr/9152"
+      "title": "경기 의왕시 | 지인빅데이터-미분양 (부동산지인)",
+      "url": "https://aptgin.com/home/gin04/gin0403/loc/4143000000"
     },
     {
-      "title": "2026 경기도 입주 예정 아파트 · 지역별 입주 물량 정리 (아파트써처)",
-      "url": "https://www.apartsearcher.ai/move-in/%EA%B2%BD%EA%B8%B0%EB%8F%84"
+      "title": "수도권 미분양 1만9459가구…1년6개월 만에 최대 (한국경제, 2026-08-31)",
+      "url": "https://www.hankyung.com/article/202608312314i"
     },
     {
-      "title": "신축 아파트 희소성 커진 안양시… 안양자이 헤리티온 11월 분양 눈길 (매거진한경, 2025-11)",
+      "title": "HUG, 7월 미분양관리지역 4곳 지정...양주시 재지정 (파이낸셜뉴스, 2026-07-03)",
+      "url": "https://www.fnnews.com/news/202607031527113351"
+    },
+    {
+      "title": "사업비 32% 뛴 남양주 왕숙…이대론 3년내 입주 못해 (한국경제, 2025-05-26)",
+      "url": "https://www.hankyung.com/article/2025052667071"
+    },
+    {
+      "title": "남양주왕숙2지구 첫 본청약 '왕숙아테라' 812가구 '완판' (파이낸셜뉴스, 2026-08-19)",
+      "url": "https://www.fnnews.com/news/202608190958138514"
+    },
+    {
+      "title": "2026년 전국 입주 캘린더 | 주요 입주 단지 미리보기 | KB의 생각 (2025-12-29)",
+      "url": "https://kbthink.com/realestate/issue/hosing-251229.html"
+    },
+    {
+      "title": "신축 아파트 희소성 커진 안양시… '안양자이 헤리티온' 11월 분양 (매거진한경, 2025-11-11)",
       "url": "https://magazine.hankyung.com/business/article/202511116397b"
     },
     {
-      "title": "[르포: 분양현장] 의왕 랜드마크 노리는 '인덕원 퍼스비엘', 미분양 한파 뚫고 완판 도전 (일요경제)",
-      "url": "https://www.ilyoeconomy.com/news/articleView.html?idxno=62539"
+      "title": "경기도 재개발·재건축 현황과 전망(1)-안양시 (하우징헤럴드)",
+      "url": "https://www.housingherald.co.kr/news/articleView.html?idxno=50273"
     },
     {
-      "title": "2025년 이후 남양주 청약 일정, 분양 예정 아파트 (daily info)",
-      "url": "https://seemsinfo.com/entry/2025%EB%85%84-%EC%9D%B4%ED%9B%84-%EB%82%A8%EC%96%91%EC%A3%BC-%EC%B2%AD%EC%95%BD-%EC%9D%BC%EC%A0%95-%EB%B6%84%EC%96%91-%EC%98%88%EC%A0%95-%EC%95%84%ED%8C%8C%ED%8A%B8"
+      "title": "'의왕역 SK뷰' 1순위서 10채 중 4채 미달 (스트레이트뉴스, 2026-07-22)",
+      "url": "https://www.straightnews.co.kr/news/articleView.html?idxno=307408"
     },
     {
-      "title": "2026년 경기도 주거종합계획 (경기도, 2026-04)",
-      "url": "https://www.gg.go.kr/uploads/CONTENTS/site/gg/2026%EB%85%84+%EA%B2%BD%EA%B8%B0%EB%8F%84+%EC%A3%BC%EA%B1%B0%EC%A2%85%ED%95%A9%EA%B3%84%ED%9A%8D_v20260513.pdf"
+      "title": "의왕역 SK VIEW 무순위 17세대 안내 (2026-09-02 접수)",
+      "url": "https://mhb-blog.com/euiwang-station-sk-view-unranked-subscription-guide/"
+    },
+    {
+      "title": "경기도 재개발·재건축 현황과 전망(8)-의왕시 (하우징헤럴드)",
+      "url": "https://www.housingherald.co.kr/news/articleView.html?idxno=60387"
+    },
+    {
+      "title": "2025년 6월 미분양관리지역 5곳 지정 - 수도권 2곳",
+      "url": "https://pheo.co.kr/phnews/152872"
+    },
+    {
+      "title": "의왕시, 정부 부동산 규제지역 지정 재검토 요청 (한국일보, 2025-10-21)",
+      "url": "https://www.hankookilbo.com/News/Read/A2025102115280000491"
     }
   ]
 }

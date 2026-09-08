@@ -69,15 +69,24 @@ ${DATA}
 if echo "$PROMPT" | claude -p --model sonnet > "$OUT" 2>>"$LOG" && [ -s "$OUT" ]; then
   echo "[$(ts)] deep-dive 완료 → $OUT ($(wc -c < "$OUT" | tr -d ' ') bytes)" >> "$LOG"
   if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
-    HEAD=$(head -c 3000 "$OUT")
-    python3 - "$HEAD" "$OUT" <<'PYEOF' 2>>"$LOG"
+    # 종전엔 `head -c 3000`으로 셸에서 잘라 넘겼는데, 바이트 단위라 한글(UTF-8 3바이트)이
+    # 중간에서 깨져 텔레그램이 400을 반환했다(2026-08-16부터 4주 연속 실패). 리포트 생성
+    # 자체는 매주 성공했고 알림만 실패한 것이라 조용히 넘어갔다.
+    # 파이썬이 파일을 직접 읽어 '문자' 단위로 자른다.
+    python3 - "$OUT" <<'PYEOF' 2>>"$LOG"
 import json, os, sys, urllib.request
-text = f"📚 주간 딥다이브 리포트\n\n{sys.argv[1]}\n\n(전문: {sys.argv[2]})"
+body = open(sys.argv[1], encoding='utf-8').read()[:3000]
+text = f"📚 주간 딥다이브 리포트\n\n{body}\n\n(전문: {sys.argv[1]})"
 req = urllib.request.Request(
     f"https://api.telegram.org/bot{os.environ['TELEGRAM_BOT_TOKEN']}/sendMessage",
-    data=json.dumps({"chat_id": os.environ["TELEGRAM_CHAT_ID"], "text": text[:4000]}).encode(),
+    data=json.dumps({"chat_id": os.environ["TELEGRAM_CHAT_ID"], "text": text[:4000]}).encode('utf-8'),
     headers={"Content-Type": "application/json"})
-urllib.request.urlopen(req, timeout=10)
+try:
+    urllib.request.urlopen(req, timeout=15)
+except urllib.error.HTTPError as e:
+    # 응답 본문을 남긴다 — 종전엔 스택트레이스만 찍혀 400의 사유를 알 수 없었다.
+    print(f"telegram {e.code}: {e.read().decode('utf-8', 'replace')[:300]}", file=sys.stderr)
+    raise
 PYEOF
   fi
 else
