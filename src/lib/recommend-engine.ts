@@ -123,8 +123,22 @@ interface ComplexAgg {
   areas: number[];
   buildYear: number | null;
   latestTradeMs: number;
-  recentTrades: Array<{ price: number; ms: number }>;
+  recentTrades: Array<{ price: number; ms: number; ar: number | null }>;
 }
+
+/**
+ * 평형 밴드(2026-09-09) — 신저가·신고가를 같은 평형 안에서만 비교하기 위한 구간.
+ * 경계는 전용 59/84/101/114가 주력인 국내 아파트 시장 구분을 따른다.
+ *
+ * 왜 필요한가: 종전엔 단지 전체의 min/max와 전체 중간값을 썼다. 평형이 섞인 단지(전체의 39%)
+ * 에서는 작은 평형 거래가 늘 급락, 큰 평형 거래가 늘 급등으로 잡힌다. 실제로 9/8~9/9에
+ * 국제산장이 "신저가 4.20억 급매"(59.94㎡) 다음날 "신고가 5.90억 추격매수 주의"(84.15㎡)로
+ * 상반된 신호를 냈다.
+ * 실측(9/9 데이터): 신저가 137→74건(오탐 63건 제거), 신고가 95→113건(큰 평형 최고가에
+ * 가려 있던 작은 평형 신호가 살아남), 같은 단지 신저가·신고가 동시 성립 8→3건.
+ */
+const areaBand = (ar: number | null): string =>
+  ar == null ? '면적미상' : ar < 60 ? '~59㎡' : ar < 85 ? '60~84㎡' : ar < 102 ? '85~101㎡' : '102㎡~';
 
 /** 전세 조인용 단지명 정규화 — 공백·'아파트' 접미 제거 (매매/전세 표기 흔들림 흡수). */
 const normName = (s: string) => s.replace(/\s|아파트/g, '');
@@ -232,7 +246,7 @@ export async function buildDailyRecommendations(
       a.buildYear = r.buildYear ?? a.buildYear;
       const ms = r.dealDate.getTime();
       if (ms > a.latestTradeMs) a.latestTradeMs = ms;
-      a.recentTrades.push({ price: r.dealAmount, ms });
+      a.recentTrades.push({ price: r.dealAmount, ms, ar: r.excluUseAr ?? null });
       m.set(key, a);
     }
     return m;
@@ -299,8 +313,10 @@ export async function buildDailyRecommendations(
   const lastSentStretch = new Map<string, { medianManwon: number; sentDate: string }>();
   // 쿨다운 내 이미 알린 신호 수준 — 같은 수준의 신호(같은 저가·같은 거래량·같은 신고가)로 매일 재발동하는 것을 차단
   const notifiedLowByKey = new Map<string, number>();
-  const notifiedVolByKey = new Map<string, number>(); // "vol:<건수>" 태그 최대값
-  const notifiedHighByKey = new Map<string, number>(); // "high:<만원>" 태그 최대값
+  // 저가·고가 멱등은 밴드 단위(2026-09-09) — 키 `${complexKey}|${band}`.
+  // 단지 단위로 두면 큰 평형 가격이 항상 커서 작은 평형 신호가 영구히 묻힌다.
+  const notifiedVolByKey = new Map<string, number>(); // "vol:<건수>" — 거래량은 단지 단위 신호라 밴드 무관
+  const notifiedHighByKey = new Map<string, number>(); // "high:<밴드>:<만원>" (구 형식 "high:<만원>" 호환)
   const spCooldownSince = kstDateStr(new Date(now.getTime() - spCooldownDays * 86_400_000));
   for (const s of recentSent) {
     if (s.scenario === '스트레치+') {
@@ -308,15 +324,23 @@ export async function buildDailyRecommendations(
     } else if (s.sentDate >= cooldownSince) {
       if (!lastSentByKey.has(s.complexKey)) lastSentByKey.set(s.complexKey, s);
       if (s.signalLowManwon != null) {
-        const prev = notifiedLowByKey.get(s.complexKey);
-        if (prev == null || s.signalLowManwon < prev) notifiedLowByKey.set(s.complexKey, s.signalLowManwon);
+        // signalLowManwon은 숫자 컬럼이라 밴드를 못 담는다 → 밴드는 signalTag("low:<밴드>:<만원>")에서 읽고
+        // 옛 기록(태그 없음)은 '(전체)'로 넣어 하위호환을 지킨다.
+        const lb = s.signalTag?.startsWith('low:') ? s.signalTag.slice(4, s.signalTag.lastIndexOf(':')) : '(전체)';
+        const k = `${s.complexKey}|${lb}`;
+        const prev = notifiedLowByKey.get(k);
+        if (prev == null || s.signalLowManwon < prev) notifiedLowByKey.set(k, s.signalLowManwon);
       }
       if (s.signalTag?.startsWith('vol:')) {
         const v = Number(s.signalTag.slice(4));
         if (Number.isFinite(v) && v > (notifiedVolByKey.get(s.complexKey) ?? 0)) notifiedVolByKey.set(s.complexKey, v);
       } else if (s.signalTag?.startsWith('high:')) {
-        const v = Number(s.signalTag.slice(5));
-        if (Number.isFinite(v) && v > (notifiedHighByKey.get(s.complexKey) ?? 0)) notifiedHighByKey.set(s.complexKey, v);
+        const rest = s.signalTag.slice(5);
+        const i = rest.lastIndexOf(':');
+        const bandPart = i >= 0 ? rest.slice(0, i) : '(전체)'; // 밴드 없는 옛 태그
+        const v = Number(i >= 0 ? rest.slice(i + 1) : rest);
+        const k = `${s.complexKey}|${bandPart}`;
+        if (Number.isFinite(v) && v > (notifiedHighByKey.get(k) ?? 0)) notifiedHighByKey.set(k, v);
       }
     }
   }
@@ -379,10 +403,29 @@ export async function buildDailyRecommendations(
       const nowMs = now.getTime();
       const wMs = newSignalWindowMs;
       const wDays = rules.newSignal.recentTradeWindowDays;
-      // ① 신저가
-      const recentLow = Math.min(...a.recentTrades.filter((t) => nowMs - t.ms <= wMs).map((t) => t.price), Infinity);
-      const dropPct = ((last.medianManwon - recentLow) / last.medianManwon) * 100;
-      const alreadyLow = notifiedLowByKey.get(a.key);
+      // ① 신저가 — 같은 평형 밴드 안에서만 비교(2026-09-09).
+      //    종전엔 단지 전체 최저가를 '직전 발송 중간값'과 견줬는데, 평형이 섞이면 작은 평형
+      //    거래가 늘 급락으로 잡힌다(실측 137건 중 63건이 이 오탐).
+      const recentByBand = new Map<string, Array<{ price: number; ms: number; ar: number | null }>>();
+      const olderByBand = new Map<string, Array<{ price: number; ms: number; ar: number | null }>>();
+      for (const t of a.recentTrades) {
+        const b = areaBand(t.ar);
+        const m = nowMs - t.ms <= wMs ? recentByBand : olderByBand;
+        (m.get(b) ?? m.set(b, []).get(b)!).push(t);
+      }
+      let recentLow = Infinity;
+      let dropPct = 0;
+      let lowBand = '';
+      for (const [b, rs] of recentByBand) {
+        const os = olderByBand.get(b);
+        if (!os || os.length < 3) continue; // 그 평형의 과거 표본이 얇으면 판정하지 않는다
+        const baseline = median([...os.map((t) => t.price)].sort((x, y) => x - y));
+        const lo = Math.min(...rs.map((t) => t.price));
+        const d = ((baseline - lo) / baseline) * 100;
+        const already = notifiedLowByKey.get(`${a.key}|${b}`);
+        if (d > dropPct && (already == null || lo < already)) { dropPct = d; recentLow = lo; lowBand = b; }
+      }
+      const alreadyLow = lowBand ? notifiedLowByKey.get(`${a.key}|${lowBand}`) : undefined;
       // ② 거래량 급증 — 최근 30일은 신고 미완이라 확정 구간(30일 이전)끼리 비교
       const lagMs = 30 * 86_400_000;
       const recVol = a.recentTrades.filter((t) => t.ms > nowMs - lagMs - wMs && t.ms <= nowMs - lagMs).length;
@@ -390,21 +433,33 @@ export async function buildDailyRecommendations(
       const alreadyVol = notifiedVolByKey.get(a.key) ?? 0;
       // ③ 신고가 — 단지 "자신의 이전 최고가"(window 밖 거래)를 실제로 넘어야 함.
       //    발송 중간값과 비교하면 큰 평형 거래가 항상 '상승'으로 오탐(+71% 같은 허수)된다.
-      const olderTrades = a.recentTrades.filter((t) => nowMs - t.ms > wMs);
-      const prevMax = olderTrades.length >= 3 ? Math.max(...olderTrades.map((t) => t.price)) : Infinity;
-      const recentHigh = Math.max(...a.recentTrades.filter((t) => nowMs - t.ms <= wMs).map((t) => t.price), 0);
-      const risePct = prevMax !== Infinity ? ((recentHigh - prevMax) / prevMax) * 100 : 0;
-      const alreadyHigh = notifiedHighByKey.get(a.key) ?? 0;
+      //    밴드별로 '그 평형의 이전 최고가'와 비교한다. 단지 전체 최고가와 견주면 작은 평형은
+      //    영원히 신고가가 될 수 없어 신호가 묻힌다(실측 95→113건으로 회복).
+      let prevMax = Infinity;
+      let recentHigh = 0;
+      let risePct = 0;
+      let highBand = '';
+      for (const [b, rs] of recentByBand) {
+        const os = olderByBand.get(b);
+        if (!os || os.length < 3) continue;
+        const pm = Math.max(...os.map((t) => t.price));
+        const rh = Math.max(...rs.map((t) => t.price));
+        const r = ((rh - pm) / pm) * 100;
+        const already = notifiedHighByKey.get(`${a.key}|${b}`) ?? 0;
+        if (rh > pm && r > risePct && rh > already) { prevMax = pm; recentHigh = rh; risePct = r; highBand = b; }
+      }
+      const alreadyHigh = highBand ? (notifiedHighByKey.get(`${a.key}|${highBand}`) ?? 0) : 0;
 
       if (recentLow !== Infinity && dropPct >= rules.newSignal.priceDropPct && (alreadyLow == null || recentLow < alreadyLow)) {
-        signalNote = `🔻 ${last.sentDate} 이후 신저가 ${eok(recentLow)}(직전 중간 대비 ${dropPct.toFixed(1)}%↓) — 급매 신호`;
+        signalNote = `🔻 신저가 ${eok(recentLow)} · 전용 ${lowBand}(같은 평형 중간 대비 ${dropPct.toFixed(1)}%↓) — 급매 신호`;
         signalLowManwon = recentLow;
+        signalTag = `low:${lowBand}:${recentLow}`;
       } else if (recVol >= 4 && recVol >= 2 * Math.max(1, priorVol) && recVol > alreadyVol) {
         signalNote = `📈 거래량 급증 — 신고확정 기준 직전 ${wDays}일 ${priorVol}건 → 최근 ${wDays}일 ${recVol}건 (매수세 유입)`;
         signalTag = `vol:${recVol}`;
       } else if (prevMax !== Infinity && recentHigh > prevMax && risePct >= 1 && recentHigh > alreadyHigh) {
-        signalNote = `📈 ${rules.filters.lookbackDays}일 내 신고가 경신 ${eok(recentHigh)}(직전 최고 ${eok(prevMax)} 대비 +${risePct.toFixed(1)}%) — 상승 모멘텀·추격매수 주의`;
-        signalTag = `high:${recentHigh}`;
+        signalNote = `📈 신고가 경신 ${eok(recentHigh)} · 전용 ${highBand}(같은 평형 직전 최고 ${eok(prevMax)} 대비 +${risePct.toFixed(1)}%) — 상승 모멘텀·추격매수 주의`;
+        signalTag = `high:${highBand}:${recentHigh}`;
       } else {
         continue; // 쿨다운 — 새 신호 없음
       }
