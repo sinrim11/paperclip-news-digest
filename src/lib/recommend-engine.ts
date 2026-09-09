@@ -176,7 +176,7 @@ export async function buildDailyRecommendations(
   items: DailyReco[];
   stretchPlus: DailyReco[];
   gapTrack: DailyReco[];
-  excluded: Array<{ name: string; gu: string; dong: string; flags: string[] }>;
+  excluded: Array<{ complexKey: string; name: string; gu: string; dong: string; flags: string[]; tracks: string[] }>;
   note: string;
   scanned: number;
 }> {
@@ -768,7 +768,11 @@ export async function buildDailyRecommendations(
     });
   }
 
+  // complexKey를 함께 싣는다(2026-09-09) — 이름만으로 추천 목록과 대조하면 동명 단지가
+  // 오탐을 낸다. 9/9에 '벽산'(구로 고척·노원 하계 제외 / 금천 시흥 추천)이 교집합으로
+  // 잡혔는데 셋 다 다른 단지였다.
   const excluded = [...excludedByKey.entries()].map(([key, e]) => ({
+    complexKey: key,
     ...e,
     tracks: [...(excludedTracks.get(key) ?? [])],
   }));
