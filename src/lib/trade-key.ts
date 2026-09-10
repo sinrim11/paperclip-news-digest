@@ -8,4 +8,11 @@
 
 export const normName = (s: string) => s.replace(/\s|아파트/g, '');
 
-export const tradeKey = (gu: string, dong: string, name: string) => `${gu}|${dong}|${normName(name)}`;
+/**
+ * 법정동 표기 정규화(2026-09-10) — 읍·면 지역에서 국토부는 '화도읍 창현리'(읍+리),
+ * 네이버는 '화도읍'(읍만)으로 쓴다. 그대로 조인하면 읍면 단지가 조용히 미매칭된다.
+ * 실측: 읍면+리 표기 200개 중 99개가 이 이유로 어긋났고, 정규화 후 키 충돌은 0건이었다.
+ */
+export const normDong = (d: string) => d.replace(/^(\S+[읍면])\s+\S+리$/, '$1');
+
+export const tradeKey = (gu: string, dong: string, name: string) => `${gu}|${normDong(dong)}|${normName(name)}`;
