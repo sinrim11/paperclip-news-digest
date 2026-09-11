@@ -49,3 +49,7 @@ config/persona-recos.json
 config/reco-feedback.json
 config/gosi-seen.json
 config/gosi-hits.json
+
+# API 수집 캐시 — 재생성 가능하고 크다(2026-09-12)
+config/kapt-cache.json
+config/public-price-cache.json
