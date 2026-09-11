@@ -17,6 +17,7 @@ import { PrismaClient } from '@prisma/client';
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { dongCodeOf } from '../src/lib/legal-dongs';
+import { kaptOf } from '../src/lib/monthly-cost';
 import { normName, normDong, loosName } from '../src/lib/trade-key';
 
 const KEY = process.env.VWORLD_API_KEY;
@@ -82,7 +83,18 @@ async function fetchPrice(pnu: string, year: string): Promise<PriceRow[]> {
   for (const c of cands) {
     if (cache[c.complexNo]) { skipped++; continue; }
     const bjd = dongCodeOf(c.gu, c.dong);
-    // 정확 → 느슨 → 부분포함 순으로 내려간다. 지번을 못 찾으면 공시가격 조회 자체가 불가능하다.
+
+    // ① K-apt 주소에서 지번을 직접 뽑는다(2026-09-12) — 가장 정확하다.
+    //    "서울특별시 관악구 신림동 1693 국제산장아파트"처럼 법정동 뒤에 지번이 온다.
+    //    실거래 이름 매칭을 거치지 않으므로 표기 차이에 영향받지 않는다.
+    const addr = kaptOf(c.complexNo)?.kaptAddr ?? null;
+    let jibunFromAddr: string | null = null;
+    if (addr) {
+      const m = addr.match(/(?:동|읍|면|리|가)\s+(\d+(?:-\d+)?)(?:\s|$)/);
+      if (m) jibunFromAddr = m[1];
+    }
+
+    // ② 없으면 실거래에서 — 정확 → 느슨 → 부분포함 순.
     const dk = normDong(c.dong);
     let jm = jibunOf.get(`${dk}|${normName(c.name)}`) ?? jibunOf.get(`~${dk}|${loosName(c.name)}`);
     if (!jm) {
@@ -94,9 +106,8 @@ async function fetchPrice(pnu: string, year: string): Promise<PriceRow[]> {
       });
       if (key) jm = jibunOf.get(key);
     }
-    if (!bjd || !jm?.size) { miss++; continue; }
-    // 최빈 지번
-    const jibun = [...jm.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    if (!bjd || (!jibunFromAddr && !jm?.size)) { miss++; continue; }
+    const jibun = jibunFromAddr ?? [...jm!.entries()].sort((a, b) => b[1] - a[1])[0][0];
     const [bon, bu] = jibun.split('-');
     const pnu = `${bjd}1${String(bon).padStart(4, '0')}${String(bu ?? '0').padStart(4, '0')}`;
 

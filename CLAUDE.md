@@ -130,6 +130,14 @@ interface NewsItem {
   `claude -p`를 쓰므로 **`.env`의 `CLAUDE_CODE_OAUTH_TOKEN`이 필수** — launchd 프로세스는
   대화형 세션의 OAuth를 물려받지 못해 없으면 "session expired"로 즉사한다.
   권한은 Bash·Read·Grep·Glob만. 무인 실행에서 코드 수정·배포는 하지 않고 제안만 보고한다.
+- 외부 API 캐시: `config/kapt-cache.json`(관리비·주차·지하철) · `config/public-price-cache.json`
+  (공시가격). 스윕 꼬리에서 증분 수집하며 gitignore 대상이다. 재생성은 `scripts/collect-kapt.ts`·
+  `scripts/collect-public-price.ts`.
+  · K-apt kaptCode는 **시군구 단위**로 받는다(법정동 단위는 읍·면이 0건).
+  · 이름 매칭 후 **세대수 15% 대조**로 오매칭을 거른다.
+  · 이 API들은 금액을 문자열로 준다 — 숫자 변환 필수.
+  · vworld(공시가격)는 **Referer 헤더 필수**, 조회 단위는 PNU(법정동코드10+1+본번4+부번4).
+    지번은 K-apt 주소에서 뽑는 게 가장 정확하다.
 - 로그: 스크립트는 `>> $LOG` 로 직접 쓴다. **`| tee -a $LOG` 금지** — plist의
   StandardOutPath가 같은 파일이라 전 라인이 2회 기록된다(2026-09-01 sweep·matching·cardnews에서 제거).
 - 정책 파라미터 — **1차 출처 원칙**(2026-09-01 사용자 지침):

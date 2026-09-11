@@ -35,6 +35,13 @@ echo "--- 전체매물 분석 재생성(gen-listings — /listings 즉시 반영
 npx tsx scripts/gen-listings.ts >> "$LOG" 2>&1
 echo "--- 페르소나별 사전 추천 재생성(gen-persona-recos — /recommend, G3) ---" >> "$LOG" 2>&1
 npx tsx scripts/gen-persona-recos.ts >> "$LOG" 2>&1
+# K-apt·공시가격 증분 수집(2026-09-12) — 신규 단지만 채운다(캐시에 있으면 건너뜀).
+# 스윕 꼬리에 두는 이유: 새로 잡힌 단지가 있을 때만 할 일이 생기고, 스윕이 그 시점을 안다.
+echo "--- K-apt 관리비·주차 증분 수집 ---" >> "$LOG" 2>&1
+npx tsx scripts/collect-kapt.ts >> "$LOG" 2>&1 || true
+echo "--- 공시가격 증분 수집(재산세용) ---" >> "$LOG" 2>&1
+npx tsx scripts/collect-public-price.ts >> "$LOG" 2>&1 || true
+
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') naver-sweep 종료 ===" >> "$LOG" 2>&1
 
 # 창(window) 경고 — 스윕이 recommend 08:30을 넘겨 끝나면 그날 추천·카드뉴스는 이전 회차
