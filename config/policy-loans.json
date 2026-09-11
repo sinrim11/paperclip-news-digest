@@ -42,6 +42,36 @@
       "eligibility": "2년 내 출산(2023.1.1 이후 출생아) · 부부합산 1.3억(맞벌이 2억) 이하",
       "termYears": 30,
       "eligibilityShort": "2년 내 출산 · 소득 1.3억↓"
+    },
+    {
+      "id": "didimdol_general",
+      "label": "디딤돌 (일반 무주택)",
+      "ratePctMin": 2.85,
+      "ratePctMax": 4.15,
+      "rateTypicalPct": 3.8,
+      "capManwon": 20000,
+      "_capNote": "생애최초가 아닌 일반 무주택 한도 2억(생애최초 2.4억·신혼/2자녀 3.2억).",
+      "maxPriceManwon": 50000,
+      "ltv": 0.4,
+      "_ltvNote": "생애최초 LTV 예외(70%)를 못 받으므로 규제지역 일반 무주택 40%를 적용.",
+      "eligibility": "부부합산 소득 6천만원 이하 · 무주택 세대주 · 주택가 5억 이하",
+      "termYears": 30,
+      "eligibilityShort": "소득 6천↓ · 주택가 5억↓"
+    },
+    {
+      "id": "didimdol_newlywed",
+      "label": "디딤돌 (신혼·2자녀)",
+      "ratePctMin": 2.85,
+      "ratePctMax": 4.15,
+      "rateTypicalPct": 3.6,
+      "capManwon": 32000,
+      "_capNote": "신혼부부·2자녀 이상 한도 3.2억.",
+      "maxPriceManwon": 60000,
+      "_maxPriceNote": "신혼·2자녀는 담보주택 평가액 6억 이하.",
+      "ltv": 0.7,
+      "eligibility": "부부합산 소득 8.5천만원 이하 · 혼인 7년 이내 또는 2자녀 이상 · 주택가 6억 이하",
+      "termYears": 30,
+      "eligibilityShort": "소득 8.5천↓ · 주택가 6억↓"
     }
   ],
   "bank": {
@@ -55,5 +85,43 @@
     "termYears": 30,
     "eligibilityShort": "소득·출산 요건 없음 · DSR 40%"
   },
-  "_shortNote": "eligibilityShort는 카드 렌더용 축약(카드 높이 제약). 전체 조건은 eligibility."
+  "_shortNote": "eligibilityShort는 카드 렌더용 축약(카드 높이 제약). 전체 조건은 eligibility.",
+  "buyerTypes": [
+    {
+      "id": "firstTime",
+      "label": "생애최초 무주택",
+      "ltv": 0.7,
+      "policyProductId": "didimdol",
+      "note": "규제지역 LTV 70% 예외 적용(6.27 대책)"
+    },
+    {
+      "id": "noHouse",
+      "label": "무주택 (생애최초 아님)",
+      "ltv": 0.4,
+      "policyProductId": "didimdol_general",
+      "note": "생애최초 예외를 못 받아 규제지역 LTV 40%"
+    },
+    {
+      "id": "newlywed",
+      "label": "신혼·2자녀",
+      "ltv": 0.7,
+      "policyProductId": "didimdol_newlywed",
+      "note": "한도·주택가 상한이 생애최초보다 높다"
+    },
+    {
+      "id": "newborn",
+      "label": "신생아 특례",
+      "ltv": 0.7,
+      "policyProductId": "newborn",
+      "note": "2년 내 출산 — 금리·한도가 가장 유리"
+    },
+    {
+      "id": "moveUp",
+      "label": "1주택 갈아타기",
+      "ltv": 0.4,
+      "policyProductId": null,
+      "note": "정책대출 대상 아님. 기존 주택 처분조건부로 실행되며 처분 기한 미이행 시 대출 회수"
+    }
+  ],
+  "_buyerTypesNote": "2026-09-12 신설. 종전엔 전 파이프라인이 생애최초 하나로만 계산돼, 생애최초가 아닌 매수자는 자기 조건과 다른 숫자를 보고 있었다. LTV·정책대출 한도가 유형마다 달라 필요 현금이 억 단위로 갈린다. 수치 근거는 policy-params.json(LTV)과 주택도시기금 공식 안내(한도·소득요건)."
 }

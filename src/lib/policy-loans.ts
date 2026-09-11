@@ -15,7 +15,14 @@ interface LoanProduct {
   ratePctTypical?: number; capManwon: number; maxPriceManwon?: number; ltv: number;
   eligibility: string; eligibilityShort?: string; termYears?: number;
 }
-interface PolicyLoans { products: LoanProduct[]; bank: LoanProduct }
+export interface BuyerType {
+  id: string;
+  label: string;
+  ltv: number;
+  policyProductId: string | null;
+  note?: string;
+}
+interface PolicyLoans { products: LoanProduct[]; bank: LoanProduct; buyerTypes?: BuyerType[] }
 
 export interface LoanPath {
   id: string; label: string; loan: number; cash: number; monthly: number;
@@ -44,19 +51,42 @@ function pathOf(priceManwon: number, p: LoanProduct): LoanPath {
   };
 }
 
-/** 가격에 적용 가능한 경로. policy는 주택가 상한 이내일 때만(초과 시 blockedBy 사유). */
-export function loanRoutes(priceManwon: number): {
-  policy: LoanPath | null; policyBlockedBy: string | null; bank: LoanPath | null;
+/** 구매자 유형 목록 — 화면의 선택 축. 없으면 생애최초 하나로 폴백. */
+export function buyerTypes(): BuyerType[] {
+  return load()?.buyerTypes ?? [{ id: 'firstTime', label: '생애최초 무주택', ltv: 0.7, policyProductId: 'didimdol' }];
+}
+
+export const DEFAULT_BUYER_TYPE = 'firstTime';
+
+/**
+ * 가격에 적용 가능한 경로. policy는 주택가 상한 이내일 때만(초과 시 blockedBy 사유).
+ *
+ * buyerTypeId(2026-09-12) — 종전엔 생애최초 하나로만 계산해, 생애최초가 아닌 사람은
+ * 자기 조건과 다른 숫자를 보고 있었다. LTV가 70%냐 40%냐로 필요 현금이 억 단위로 갈린다.
+ */
+export function loanRoutes(priceManwon: number, buyerTypeId: string = DEFAULT_BUYER_TYPE): {
+  policy: LoanPath | null; policyBlockedBy: string | null; bank: LoanPath | null; buyerType: BuyerType;
 } {
   const cfg = load();
-  if (!cfg) return { policy: null, policyBlockedBy: null, bank: null };
-  const didim = cfg.products.find((p) => p.id === 'didimdol');
-  const ok = didim && priceManwon <= (didim.maxPriceManwon ?? Infinity);
+  const bt = buyerTypes().find((b) => b.id === buyerTypeId) ?? buyerTypes()[0];
+  if (!cfg) return { policy: null, policyBlockedBy: null, bank: null, buyerType: bt };
+
+  const prod = bt.policyProductId ? cfg.products.find((p) => p.id === bt.policyProductId) : undefined;
   const eok = (m: number) => (m / 10000).toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + '억';
+  const overPrice = prod ? priceManwon > (prod.maxPriceManwon ?? Infinity) : false;
+
+  // 은행 경로는 유형의 LTV를 따른다 — 생애최초 예외(70%)를 못 받으면 40%로 계산해야 맞다.
+  const bank = pathOf(priceManwon, { ...cfg.bank, ltv: bt.ltv });
+
   return {
-    policy: ok ? pathOf(priceManwon, didim!) : null,
-    policyBlockedBy: !ok && didim ? `주택가 ${eok(didim.maxPriceManwon!)} 초과` : null,
-    bank: pathOf(priceManwon, cfg.bank),
+    policy: prod && !overPrice ? pathOf(priceManwon, prod) : null,
+    policyBlockedBy: !prod
+      ? '이 유형은 정책대출 대상이 아닙니다'
+      : overPrice
+        ? `주택가 ${eok(prod.maxPriceManwon!)} 초과`
+        : null,
+    bank,
+    buyerType: bt,
   };
 }
 
@@ -65,8 +95,8 @@ export function loanRoutes(priceManwon: number): {
  * 월 상환만 보면 디딤돌 한도(2.4억)에 걸린 매물이 전부 같은 값이라 비교가 안 된다.
  * 가격차가 그대로 드러나는 '필요 현금'을 함께 돌려준다.
  */
-export function bestRoute(priceManwon: number): { monthly: number; cash: number; via: string } | null {
-  const r = loanRoutes(priceManwon);
+export function bestRoute(priceManwon: number, buyerTypeId: string = DEFAULT_BUYER_TYPE): { monthly: number; cash: number; via: string } | null {
+  const r = loanRoutes(priceManwon, buyerTypeId);
   const p = r.policy ?? r.bank;
-  return p ? { monthly: p.monthly, cash: p.cash, via: r.policy ? '디딤돌' : '은행' } : null;
+  return p ? { monthly: p.monthly, cash: p.cash, via: r.policy ? (r.policy.label.split(' ')[0] ?? '정책') : '은행' } : null;
 }

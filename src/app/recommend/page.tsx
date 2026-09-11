@@ -80,7 +80,28 @@ interface Listing {
   price: number;
   exclusiveArea: number | null;
   floor: string | null;
+  direction: string | null; // 향 코드(E/W/S/N 조합)
+  occupancy: 'vacant' | 'tenant' | 'owner' | null;
+  feature: string | null;
 }
+
+/** 향 코드(EW/WS…)를 한국어로. 네이버는 방위 조합을 알파벳으로 준다. */
+const DIRECTION_KO: Record<string, string> = {
+  E: '동', W: '서', S: '남', N: '북',
+  ES: '남동', SE: '남동', WS: '남서', SW: '남서',
+  EN: '북동', NE: '북동', WN: '북서', NW: '북서',
+};
+const dirKo = (d: string | null) => (d ? DIRECTION_KO[d] ?? d : null);
+
+/**
+ * 점유 상태 — 실입주 목적이면 '언제 들어갈 수 있나'가 가격만큼 중요하다(2026-09-12).
+ * 네이버가 구조화해 주지 않아 중개사 설명에서 읽은 값이라, 표시도 단정 대신 참고로 둔다.
+ */
+const OCCUPANCY: Record<string, { label: string; cls: string }> = {
+  vacant: { label: '즉시입주', cls: 'bg-emerald-50 text-emerald-700' },
+  tenant: { label: '세 낀 매물', cls: 'bg-amber-50 text-amber-800' },
+  owner: { label: '주인거주', cls: 'bg-sky-50 text-sky-700' },
+};
 
 export default async function RecommendPage() {
   const params = loadPolicyParams();
@@ -205,14 +226,39 @@ export default async function RecommendPage() {
                 </div>
 
                 {listings.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5 border-t pt-2">
-                    {listings.map((l, j) => (
-                      <span key={j} className="rounded bg-gray-50 px-2.5 py-1.5 text-[13px] tabular-nums text-gray-700">
-                        {formatKRW(l.price * 10_000)}
-                        {l.exclusiveArea ? ` · ${l.exclusiveArea.toFixed(0)}㎡` : ''}
-                        {l.floor ? ` · ${l.floor}` : ''}
-                      </span>
-                    ))}
+                  <div className="mt-2 border-t pt-2">
+                    {/* 점유 요약 — 같은 값이면 매물마다 반복하지 않고 한 줄로 */}
+                    {(() => {
+                      const cnt = listings.reduce<Record<string, number>>((m, l) => {
+                        if (l.occupancy) m[l.occupancy] = (m[l.occupancy] ?? 0) + 1;
+                        return m;
+                      }, {});
+                      const keys = Object.keys(cnt);
+                      if (!keys.length) return null;
+                      return (
+                        <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+                          <span className="text-gray-400">입주 가능성</span>
+                          {keys.map((k) => (
+                            <span key={k} className={`rounded px-1.5 py-0.5 font-medium ${OCCUPANCY[k].cls}`}>
+                              {OCCUPANCY[k].label} {cnt[k]}건
+                            </span>
+                          ))}
+                          <span className="text-gray-400">· 중개사 설명 기준(참고)</span>
+                        </div>
+                      );
+                    })()}
+                    <div className="flex flex-wrap gap-1.5">
+                      {listings.map((l, j) => (
+                        <span key={j} className="rounded bg-gray-50 px-2.5 py-1.5 text-[13px] tabular-nums text-gray-700">
+                          {formatKRW(l.price * 10_000)}
+                          {l.exclusiveArea ? ` · ${l.exclusiveArea.toFixed(0)}㎡` : ''}
+                          {l.floor ? ` · ${l.floor}` : ''}
+                          {dirKo(l.direction) ? ` · ${dirKo(l.direction)}향` : ''}
+                          {l.occupancy === 'vacant' ? <span className="ml-1 text-emerald-600">즉시</span> : null}
+                          {l.occupancy === 'tenant' ? <span className="ml-1 text-amber-600">세</span> : null}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
               </li>

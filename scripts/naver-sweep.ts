@@ -165,6 +165,28 @@ interface AffordableListing {
   confirmDate: string | null; // 매물 확인/등록일(YYYY-MM-DD)
   direction: string | null; // 향 코드(E/W/S/N 조합)
   articleNo: number | null; // 네이버 매물 번호 — fin.land.naver.com/articles/{articleNo} 딥링크용
+  // 점유 상태(2026-09-12) — 실입주 목적 매수자에게는 '언제 들어갈 수 있나'가 가격만큼 중요하다.
+  // 네이버는 이걸 구조화 필드로 주지 않고 중개사 설명 텍스트에만 담는다.
+  occupancy: 'vacant' | 'tenant' | 'owner' | null; // 공실·즉시입주 / 세입자 / 집주인 거주 / 미상
+  feature: string | null; // 중개사 설명 원문(앞 60자) — 분류 근거를 사람이 확인할 수 있게
+  hugSafeLessor: boolean | null; // HUG 안심임대인 등록 여부(전세 낀 매물의 보증금 안전 참고)
+}
+
+/**
+ * 점유 상태 분류 — 중개사 설명의 관용 표현에서 읽는다.
+ * 구조화 데이터가 아니므로 **명확한 표현만** 잡고 나머지는 null(미상)로 둔다.
+ * 틀린 점유 상태는 미상보다 나쁘다 — "즉시입주"인 줄 알고 갔다가 세입자 만기가 1년 남았으면
+ * 계약 자체가 틀어진다.
+ */
+function classifyOccupancy(desc: string | null): AffordableListing['occupancy'] {
+  if (!desc) return null;
+  const d = desc.replace(/\s/g, '');
+  // 부정형이 섞이면 판단하지 않는다("즉시입주불가", "세안고아님")
+  if (/(즉시입주|입주)(불가|어려움)/.test(d)) return null;
+  if (/(세|전세|월세)(안고|낀)|임대중|세입자|만기|계약기간/.test(d)) return 'tenant';
+  if (/주인거주|집주인거주|자가거주/.test(d)) return 'owner';
+  if (/즉시입주|즉시계약|공실|입주매물|빈집/.test(d)) return 'vacant';
+  return null;
 }
 
 function extractAffordable(articles: unknown[], ceiling: number, minArea: number): { deals: AffordableListing[]; dealCount: number; min: number | null; max: number | null } {
@@ -180,7 +202,10 @@ function extractAffordable(articles: unknown[], ceiling: number, minArea: number
     if (minArea > 0 && (space === null || space < minArea)) continue;
     dealPrices.push(price);
     if (price <= ceiling) {
-      const detail = (rep as { articleDetail?: { floorInfo?: string; direction?: string } }).articleDetail;
+      const detail = (rep as {
+        articleDetail?: { floorInfo?: string; direction?: string; articleFeatureDescription?: string; isSafeLessorOfHug?: boolean };
+      }).articleDetail;
+      const feature = detail?.articleFeatureDescription ?? null;
       const floor = detail?.floorInfo ?? (rep as { floorInfo?: string }).floorInfo ?? null;
       const confirmDate = (rep as { verificationInfo?: { articleConfirmDate?: string } }).verificationInfo?.articleConfirmDate ?? null;
       affordable.push({
@@ -192,6 +217,9 @@ function extractAffordable(articles: unknown[], ceiling: number, minArea: number
         confirmDate,
         direction: detail?.direction ?? null,
         articleNo: (rep as { articleNumber?: number }).articleNumber ?? null,
+        occupancy: classifyOccupancy(feature),
+        feature: feature ? feature.slice(0, 60) : null,
+        hugSafeLessor: detail?.isSafeLessorOfHug ?? null,
       });
     }
   }
