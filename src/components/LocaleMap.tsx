@@ -10,21 +10,30 @@ import type { NearbyPlace } from '@/lib/nearby';
 
 const S = 260; // 지도 한 변(px)
 const C = S / 2;
-const MAX_M = 1600; // 가장자리 = 1.6km
-const px = (m: number) => (m / MAX_M) * (C - 26);
+const LIMIT_M = 1600; // 이보다 먼 시설은 표시하지 않는다
 
 export function LocaleMap({ lat, lng, places }: { lat: number; lng: number; places: NearbyPlace[] }) {
-  const near = places.filter((n) => n.distance <= MAX_M);
+  const near = places.filter((n) => n.distance <= LIMIT_M);
   if (!near.length) return null;
+
+  // 스케일은 고정이 아니라 가장 먼 시설에 맞춘다(2026-09-11). 1.6km 고정이면 POI가 7~568m에
+  // 몰린 단지(역세권일수록 그렇다)의 아이콘이 중심에 겹쳐 '단지' 라벨까지 가린다.
+  const farthest = Math.max(...near.map((n) => n.distance));
+  const maxM = Math.max(400, Math.ceil((farthest * 1.15) / 200) * 200);
+  const px = (m: number) => (m / maxM) * (C - 26);
+  const ringM = [Math.round(maxM / 3 / 50) * 50, Math.round((maxM * 2) / 3 / 50) * 50, maxM];
 
   const latRad = (lat * Math.PI) / 180;
   const used: number[] = [];
   const dots = near.map((n) => {
     const dx = (n.lng - lng) * Math.cos(latRad) * 111_320;
     const dy = (n.lat - lat) * 110_540;
-    const r = px(Math.min(Math.max(1, Math.hypot(dx, dy)), MAX_M));
+    // 중심 마커와 '단지' 라벨을 피하는 최소 반지름
+    const r = Math.max(42, px(Math.min(Math.max(1, Math.hypot(dx, dy)), maxM)));
     let ang = Math.atan2(dy, dx);
-    while (used.some((u) => Math.abs(((ang - u + Math.PI) % (2 * Math.PI)) - Math.PI) < 0.52)) ang += 0.6;
+    // 각도가 아니라 실제 픽셀 거리로 겹침을 본다 — 안쪽 아이콘은 각도만 벌려선 안 떨어진다
+    let guard = 0;
+    while (guard++ < 24 && used.some((u) => Math.hypot((Math.cos(ang) - Math.cos(u)) * r, (Math.sin(ang) - Math.sin(u)) * r) < 30)) ang += 0.5;
     used.push(ang);
     return { n, x: C + Math.cos(ang) * r, y: C - Math.sin(ang) * r }; // SVG는 y축이 아래로 증가
   });
@@ -33,7 +42,7 @@ export function LocaleMap({ lat, lng, places }: { lat: number; lng: number; plac
     <section className="rounded-xl border border-gray-200 bg-white p-4">
       <h2 className="text-base font-bold">🗺 걸어서 닿는 거리</h2>
       <p className="mt-0.5 text-xs text-gray-500">
-        점선은 안쪽부터 반경 400m(도보 5분)·800m(10분·진한 선)·1.2km · 아이콘 위치는 단지 기준 실제 방위입니다.
+        {`점선은 안쪽부터 반경 ${ringM[0]}m·${ringM[1]}m(진한 선)·${ringM[2]}m`} · 아이콘 위치는 단지 기준 실제 방위입니다.
       </p>
       <div className="mt-3 flex flex-col items-center gap-5 sm:flex-row sm:items-center">
         <svg
@@ -44,15 +53,15 @@ export function LocaleMap({ lat, lng, places }: { lat: number; lng: number; plac
           role="img"
           aria-label={`단지 반경 입지도 — ${near.map((n) => `${n.kind} ${n.name} ${n.distance}m`).join(', ')}`}
         >
-          {[400, 800, 1200].map((m) => (
+          {ringM.map((m) => (
             <circle
               key={m}
               cx={C}
               cy={C}
               r={px(m)}
               fill="none"
-              stroke={m === 800 ? '#94A3B8' : '#CBD5E1'}
-              strokeWidth={m === 800 ? 1.5 : 1}
+              stroke={m === ringM[1] ? '#94A3B8' : '#CBD5E1'}
+              strokeWidth={m === ringM[1] ? 1.5 : 1}
               strokeDasharray="5 5"
             />
           ))}

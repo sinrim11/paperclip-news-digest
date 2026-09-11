@@ -81,13 +81,22 @@ function kakaoOf(complexNo: string): KakaoCtx | null {
   return _kakaoCache?.[complexNo] ?? null;
 }
 
-/** 동심원 입지도 — 반경 400m(도보 5분)·800m(10분) 링에 실제 방위대로 시설을 찍는다. */
+/**
+ * 동심원 입지도 — 실제 방위·거리대로 시설을 찍는다.
+ *
+ * 스케일은 고정이 아니라 POI 최대 거리에 맞춘다(2026-09-11). 종전엔 가장자리를 1.6km로
+ * 고정해, 금천롯데캐슬골드파크3차처럼 POI가 7~568m에 몰린 단지는 아이콘 4개가 반지름
+ * 0.5~37px 안에 겹쳐 '단지' 라벨까지 가렸다 — 생활편의가 좋은 단지일수록 지도가 망가지는
+ * 역설이었다. 24° 충돌 회피도 r≈6px에서는 호 길이가 2.5px라 무력했다.
+ */
 function localeMapHtml(p: SharePick): string {
   const places = (p.nearby ?? []).filter((n) => n.distance <= 1600);
   if (!places.length || p.lat == null || p.lng == null) return localeBarHtml(p.complexNo);
   const S = 250; // 지도 한 변(px)
   const c = S / 2;
-  const MAX_M = 1600; // 지도 가장자리 = 1.6km
+  // 가장 먼 POI가 가장자리 근처에 오도록 200m 단위로 올림(최소 400m — 너무 확대하면 오차가 과장된다)
+  const farthest = Math.max(...places.map((n) => n.distance));
+  const MAX_M = Math.max(400, Math.ceil((farthest * 1.15) / 200) * 200);
   const px = (m: number) => (m / MAX_M) * (c - 26);
   const latRad = (p.lat * Math.PI) / 180;
   const used: number[] = [];
@@ -95,16 +104,27 @@ function localeMapHtml(p: SharePick): string {
     const dx = (n.lng - p.lng!) * Math.cos(latRad) * 111_320;
     const dy = (n.lat - p.lat!) * 110_540;
     const dist = Math.max(1, Math.hypot(dx, dy));
-    const r = px(Math.min(dist, MAX_M));
+    // 중심 마커(r=13)와 그 아래 '단지' 라벨(y=c+24~c+40)을 모두 피하는 최소 반지름.
+    // 26으로 뒀더니 아래쪽 아이콘이 라벨을 덮었다.
+    const r = Math.max(42, px(Math.min(dist, MAX_M)));
     let ang = Math.atan2(dy, dx);
-    // 같은 방향(20° 이내)에 이미 아이콘이 있으면 겹치므로 24°씩 벌린다 — 거리는 유지
-    while (used.some((u) => Math.abs(((ang - u + Math.PI) % (2 * Math.PI)) - Math.PI) < 0.35)) ang += 0.42;
+    // 겹침 판정을 거리 기준으로 — 각도만 보면 안쪽 아이콘은 벌려도 여전히 붙는다
+    const minGapPx = 30;
+    let guard = 0;
+    while (
+      guard++ < 24 &&
+      used.some((u) => Math.hypot(Math.cos(ang) * r - Math.cos(u) * r, Math.sin(ang) * r - Math.sin(u) * r) < minGapPx)
+    ) {
+      ang += 0.5;
+    }
     used.push(ang);
     const x = c + Math.cos(ang) * r;
     const y = c - Math.sin(ang) * r; // SVG y축 반전
-    return `<text x="${x.toFixed(0)}" y="${(y + 10).toFixed(0)}" font-size="30" text-anchor="middle">${n.icon}</text>`;
+    return `<text x="${x.toFixed(0)}" y="${(y + 8).toFixed(0)}" font-size="24" text-anchor="middle">${n.icon}</text>`;
   }).join('');
-  const rings = [400, 800, 1200].map((m) =>
+  // 링도 스케일에 맞춰 1/3·2/3·3/3 지점에 — 고정 400/800/1200은 확대 시 화면 밖으로 나간다
+  const ringM = [Math.round(MAX_M / 3 / 50) * 50, Math.round((MAX_M * 2) / 3 / 50) * 50, MAX_M];
+  const rings = ringM.map((m) =>
     `<circle cx="${c}" cy="${c}" r="${px(m).toFixed(0)}" fill="none" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="6 6"/>`).join('');
   const list = places.map((n) => {
     const walk = Math.max(1, Math.round(n.distance / 80));
@@ -121,13 +141,13 @@ function localeMapHtml(p: SharePick): string {
       <circle cx="${c}" cy="${c}" r="13" fill="#2563EB"/>
       <text x="${c}" y="${c + 34}" font-size="19" text-anchor="middle" fill="#1D4ED8" font-weight="700">단지</text>
       ${dot}
-      <text x="${c}" y="${(c - px(800) - 6).toFixed(0)}" font-size="17" text-anchor="middle" fill="#94A3B8">800m</text>
-      <text x="${c}" y="${(c - px(400) - 6).toFixed(0)}" font-size="17" text-anchor="middle" fill="#94A3B8">400m</text>
+      <text x="${c}" y="${(c - px(ringM[1]) - 6).toFixed(0)}" font-size="17" text-anchor="middle" fill="#94A3B8">${ringM[1]}m</text>
+      <text x="${c}" y="${(c - px(ringM[0]) - 6).toFixed(0)}" font-size="17" text-anchor="middle" fill="#94A3B8">${ringM[0]}m</text>
     </svg>
     <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">
       <div style="font-size:23px;font-weight:800;color:#475569">🗺 걸어서 닿는 거리</div>
       ${list}
-      <div style="font-size:19px;color:#94A3B8;margin-top:2px">점선 = 반경 400m(도보 5분)·800m(10분)·1.2km · 실제 방위 기준</div>
+      <div style="font-size:19px;color:#94A3B8;margin-top:2px">점선 = 반경 ${ringM[0]}m·${ringM[1]}m·${ringM[2]}m · 실제 방위 기준</div>
     </div>
   </div>`;
 }
