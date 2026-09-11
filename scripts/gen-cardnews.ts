@@ -180,7 +180,7 @@ function localeBarHtml(complexNo: string): string {
 }
 
 /** 매물 가격에 적용 가능한 경로들. policy=디딤돌(주택가 상한 내일 때만), newborn=신생아특례 배지용. */
-function loanRoutes(price: number): { policy: LoanPath | null; policyBlockedBy: string | null; bank: LoanPath; newborn: LoanPath | null } {
+function loanRoutes(price: number): { policy: LoanPath | null; policyBlockedBy: string | null; bank: LoanPath; newborn: LoanPath | null; general?: LoanPath } {
   const cfg = loadPolicyLoans();
   if (!cfg) {
     const f = fundingOf(price);
@@ -189,11 +189,18 @@ function loanRoutes(price: number): { policy: LoanPath | null; policyBlockedBy: 
   const didim = cfg.products.find((p) => p.id === 'didimdol');
   const newbornP = cfg.products.find((p) => p.id === 'newborn');
   const policyOk = didim && price <= (didim.maxPriceManwon ?? Infinity);
+  // 생애최초가 아닌 무주택자 — LTV 예외(70%)를 못 받아 40%다. 카드에는 이 차액만 한 줄로 싣는다
+  // (2026-09-12): 전면 유형표는 1080×1350에 안 들어가고, 웹 상세에 이미 있다.
+  const generalP = cfg.products.find((p) => p.id === 'didimdol_general');
+  const generalBest = generalP && price <= (generalP.maxPriceManwon ?? Infinity)
+    ? pathOf(price, generalP)
+    : pathOf(price, { ...cfg.bank, ltv: 0.4 });
   return {
     policy: policyOk ? pathOf(price, didim!) : null,
     policyBlockedBy: !policyOk && didim ? `주택가 ${eok(didim.maxPriceManwon!)} 초과` : null,
     bank: pathOf(price, cfg.bank),
     newborn: newbornP && price <= (newbornP.maxPriceManwon ?? 0) ? pathOf(price, newbornP) : null,
+    general: generalBest,
   };
 }
 
@@ -558,7 +565,8 @@ function itemHtml(p: SharePick, rank: number, page: number, total: number): stri
         ${r.policy ? row(r.policy, '#15803D', r.policy.eligibility) : blocked}
         ${row(r.bank, '#1D4ED8', r.bank.eligibility)}
         ${r.newborn ? `<div style="margin-top:10px;font-size:21px;color:#B45309">🍼 신생아 특례 ${r.newborn.rateText} · 대출 ${eok(r.newborn.loan)} · 월 ${r.newborn.monthly}만 (2년 내 출산)</div>` : ''}
-        <div style="margin-top:8px;font-size:19px;color:#94A3B8">LTV 70%(수도권) · 30년 원리금균등 · 취득세·중개보수 별도 — 금리·한도는 소득에 따라 달라집니다</div>
+        ${r.general ? `<div style="margin-top:10px;font-size:21px;color:#6D28D9">🏠 생애최초가 아닌 무주택이면 LTV 40% — 필요 현금 <b>${eok(r.general.cash)}</b>(월 ${r.general.monthly}만)</div>` : ''}
+        <div style="margin-top:8px;font-size:19px;color:#94A3B8">LTV 70%(수도권 생애최초) · 30년 원리금균등 · 취득세·중개보수 별도 — 유형·소득에 따라 달라집니다</div>
       </div>`;
     })()}
     ${localeMapHtml(p)}
