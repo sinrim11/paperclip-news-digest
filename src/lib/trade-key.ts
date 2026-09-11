@@ -15,4 +15,11 @@ export const normName = (s: string) => s.replace(/\s|아파트/g, '');
  */
 export const normDong = (d: string) => d.replace(/^(\S+[읍면])\s+\S+리$/, '$1');
 
+/**
+ * 외부 데이터셋 조인용 공격적 정규화(2026-09-12) — 하이픈·점·괄호를 지우고 소문자화.
+ * 출처마다 '중흥S-클래스'/'중흥S클래스', '동아.삼익.풍림'/'동아삼익풍림'처럼 쓴다.
+ * 실거래↔후보 조인(normName)에 같은 규칙을 쓰면 기존 매칭이 흔들리므로 분리해 둔다.
+ */
+export const loosName = (s: string) => normName(s).replace(/[-–—·.,()[\]/]/g, '').toLowerCase();
+
 export const tradeKey = (gu: string, dong: string, name: string) => `${gu}|${normDong(dong)}|${normName(name)}`;

@@ -10,6 +10,8 @@ import { loadPolicyParams, loadReaderFinances, computeBudget, formatKRW } from '
 import { rankCandidates, GRADE_CUTS, type Recommendation } from '@/lib/recommend';
 import { tradeKey } from '@/lib/trade-key';
 import { LoanRoutes } from '@/components/LoanRoutes';
+import { kaptOf } from '@/lib/monthly-cost';
+import { publicPriceOf } from '@/lib/public-price';
 import { LAWD_GU } from '@/lib/tiers';
 
 /** daily-recommend가 생성한 스트레치+ 트랙(config/recommendations.json) — 없으면 섹션 미노출 */
@@ -201,6 +203,23 @@ export default async function RecommendPage() {
                   <span>{r.household.toLocaleString()}세대</span>
                   <span>{r.elapsedYear != null ? `${r.elapsedYear}년차` : '연식미상'}</span>
                   <span>예산 내 {r.inBudgetCount}건</span>
+                  {(() => {
+                    // 주차·지하철(2026-09-12) — K-apt. 세대수·연식과 같은 단지 속성이라 이 줄에 붙인다.
+                    const k = r.complexNo ? kaptOf(r.complexNo) : null;
+                    if (!k) return null;
+                    return (
+                      <>
+                        {k.parkingPerHousehold != null && (
+                          <span className={k.parkingPerHousehold < 1 ? 'text-amber-700' : undefined}>
+                            주차 {k.parkingPerHousehold}대/세대
+                          </span>
+                        )}
+                        {k.subwayLine && k.subwayWalkMin && (
+                          <span>{k.subwayLine}{k.subwayStation ? ` ${k.subwayStation}` : ''} {k.subwayWalkMin}</span>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {/* 근거 수치 스트립 — 점수의 원천 데이터를 카드에서 바로 확인 */}
@@ -214,7 +233,13 @@ export default async function RecommendPage() {
                   </span>
                 </div>
 
-                {r.minDealPrice ? <LoanRoutes priceManwon={r.minDealPrice} /> : null}
+                {r.minDealPrice ? (
+                  <LoanRoutes
+                    priceManwon={r.minDealPrice}
+                    complexNo={r.complexNo}
+                    publicPriceWon={publicPriceOf(r.complexNo, listings[0]?.exclusiveArea ?? null)}
+                  />
+                ) : null}
 
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {r.reasons.map((reason, j) => (
