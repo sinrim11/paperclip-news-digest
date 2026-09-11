@@ -20,10 +20,23 @@
     "jeonseRatioMax": 6
   },
   "jeonseRatioByPct": [
-    { "minPct": 85, "score": 6, "_note": "전세수요 매우 강함 — 임대전환 최용이·재투자 갭 최소·투자수익 최상" },
-    { "minPct": 75, "score": 4 },
-    { "minPct": 65, "score": 2 },
-    { "minPct": 0, "score": 0 }
+    {
+      "minPct": 85,
+      "score": 6,
+      "_note": "전세수요 매우 강함 — 임대전환 최용이·재투자 갭 최소·투자수익 최상"
+    },
+    {
+      "minPct": 75,
+      "score": 4
+    },
+    {
+      "minPct": 65,
+      "score": 2
+    },
+    {
+      "minPct": 0,
+      "score": 0
+    }
   ],
   "diversity": {
     "maxPerGu": 2,
@@ -37,12 +50,33 @@
     "stretchCeilingManwon": 78000
   },
   "freshnessByAge": [
-    { "maxAge": 5, "score": 12, "_note": "신축 — 감가방어·환금성·임대선호 최상(투자 프리미엄)" },
-    { "maxAge": 10, "score": 9, "_note": "준신축 — 시세방어·임대선호 우수" },
-    { "maxAge": 15, "score": 6 },
-    { "maxAge": 20, "score": 3 },
-    { "maxAge": 30, "score": 1 },
-    { "maxAge": 999, "score": 1, "_note": "30년+ 재건축 연한 — 투자 상방 있으나 분담금·거주부적합·임대전환 열위로 최소 가점" }
+    {
+      "maxAge": 5,
+      "score": 12,
+      "_note": "신축 — 감가방어·환금성·임대선호 최상(투자 프리미엄)"
+    },
+    {
+      "maxAge": 10,
+      "score": 9,
+      "_note": "준신축 — 시세방어·임대선호 우수"
+    },
+    {
+      "maxAge": 15,
+      "score": 6
+    },
+    {
+      "maxAge": 20,
+      "score": 3
+    },
+    {
+      "maxAge": 30,
+      "score": 1
+    },
+    {
+      "maxAge": 999,
+      "score": 1,
+      "_note": "30년+ 재건축 연한 — 투자 상방 있으나 분담금·거주부적합·임대전환 열위로 최소 가점"
+    }
   ],
   "dailyLimit": 5,
   "downsideFlags": {
@@ -51,7 +85,8 @@
     "excludeThreshold": 2,
     "tradeDropPct": 50,
     "minPriorTrades": 6,
-    "weakJeonsePct": 55
+    "weakJeonsePct": 45,
+    "_weakJeonseNote": "2026-09-12: 55→45. 55%는 수도권 전세가율 중앙값(56%) 바로 아래라 단지의 47%가 상시 해당돼 변별력이 없었다 — 제외 44건이 전부 \"거래량 급감+전세가율\" 동일 조합이었고, 사실상 거래량 단일 기준으로 동작했다. 45%는 하위 22%(25분위 46%)를 잡아 \"실거주 수요 약함\"이라는 문구와 의미가 맞는다. 효과: 제외 16→7건, 거래량 급감만 있는 36→45건은 제외가 아니라 유의점으로 표시된다."
   },
   "stretchPlus": {
     "_note": "스트레치+ 트랙 — comfortable 초과 ~ 상한 구간을 메인 5건과 분리된 섹션으로 노출(점수·로테이션 오염 금지, 쿨다운도 트랙별 분리). 상한은 엔진이 동적 계산: max(ceilingManwon, stretch + 부모님찬스 3억) — 2026-08-10부터 reader-profile contingencySupport.가족지원 반영. ceilingManwon은 프로필 부재 시 폴백. 표기 필수: '+X 더 보태면' + 월 상환 증가분 + 조달 판정.",
