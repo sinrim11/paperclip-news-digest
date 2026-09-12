@@ -328,9 +328,14 @@ export async function buildDailyRecommendations(
         // signalLowManwon은 숫자 컬럼이라 밴드를 못 담는다 → 밴드는 signalTag("low:<밴드>:<만원>")에서 읽고
         // 옛 기록(태그 없음)은 '(전체)'로 넣어 하위호환을 지킨다.
         const lb = s.signalTag?.startsWith('low:') ? s.signalTag.slice(4, s.signalTag.lastIndexOf(':')) : '(전체)';
-        const k = `${s.complexKey}|${lb}`;
-        const prev = notifiedLowByKey.get(k);
-        if (prev == null || s.signalLowManwon < prev) notifiedLowByKey.set(k, s.signalLowManwon);
+        for (const k of [`${s.complexKey}|${lb}`, `${s.complexKey}|*`]) {
+          // `|*`는 밴드 무관 최저가(2026-09-12). 9/9 밴드 전환 때 옛 기록은 '(전체)' 밴드로만
+          // 들어가 새 밴드 키와 매칭되지 않았고, 그 결과 안양씨엘포레자이가 9/8·9/12에 같은
+          // 6.4억으로 두 번 나갔다 — 이 프로젝트가 처음 고쳤던 반복 전송의 재발이다.
+          // 밴드가 달라도 "이 단지에서 이미 알린 저가"보다 낮아야 새 신호로 본다.
+          const prev = notifiedLowByKey.get(k);
+          if (prev == null || s.signalLowManwon < prev) notifiedLowByKey.set(k, s.signalLowManwon);
+        }
       }
       if (s.signalTag?.startsWith('vol:')) {
         const v = Number(s.signalTag.slice(4));
@@ -340,8 +345,9 @@ export async function buildDailyRecommendations(
         const i = rest.lastIndexOf(':');
         const bandPart = i >= 0 ? rest.slice(0, i) : '(전체)'; // 밴드 없는 옛 태그
         const v = Number(i >= 0 ? rest.slice(i + 1) : rest);
-        const k = `${s.complexKey}|${bandPart}`;
-        if (Number.isFinite(v) && v > (notifiedHighByKey.get(k) ?? 0)) notifiedHighByKey.set(k, v);
+        for (const k of [`${s.complexKey}|${bandPart}`, `${s.complexKey}|*`]) {
+          if (Number.isFinite(v) && v > (notifiedHighByKey.get(k) ?? 0)) notifiedHighByKey.set(k, v);
+        }
       }
     }
   }
@@ -423,10 +429,16 @@ export async function buildDailyRecommendations(
         const baseline = median([...os.map((t) => t.price)].sort((x, y) => x - y));
         const lo = Math.min(...rs.map((t) => t.price));
         const d = ((baseline - lo) / baseline) * 100;
-        const already = notifiedLowByKey.get(`${a.key}|${b}`);
-        if (d > dropPct && (already == null || lo < already)) { dropPct = d; recentLow = lo; lowBand = b; }
+        // 밴드별 기록과 단지 전체 기록을 모두 넘어야 새 신호다
+        const already = Math.min(
+          notifiedLowByKey.get(`${a.key}|${b}`) ?? Infinity,
+          notifiedLowByKey.get(`${a.key}|*`) ?? Infinity,
+        );
+        if (d > dropPct && lo < already) { dropPct = d; recentLow = lo; lowBand = b; }
       }
-      const alreadyLow = lowBand ? notifiedLowByKey.get(`${a.key}|${lowBand}`) : undefined;
+      const alreadyLow = lowBand
+        ? Math.min(notifiedLowByKey.get(`${a.key}|${lowBand}`) ?? Infinity, notifiedLowByKey.get(`${a.key}|*`) ?? Infinity)
+        : undefined;
       // ② 거래량 급증 — 최근 30일은 신고 미완이라 확정 구간(30일 이전)끼리 비교
       const lagMs = 30 * 86_400_000;
       const recVol = a.recentTrades.filter((t) => t.ms > nowMs - lagMs - wMs && t.ms <= nowMs - lagMs).length;
@@ -446,10 +458,12 @@ export async function buildDailyRecommendations(
         const pm = Math.max(...os.map((t) => t.price));
         const rh = Math.max(...rs.map((t) => t.price));
         const r = ((rh - pm) / pm) * 100;
-        const already = notifiedHighByKey.get(`${a.key}|${b}`) ?? 0;
+        const already = Math.max(notifiedHighByKey.get(`${a.key}|${b}`) ?? 0, notifiedHighByKey.get(`${a.key}|*`) ?? 0);
         if (rh > pm && r > risePct && rh > already) { prevMax = pm; recentHigh = rh; risePct = r; highBand = b; }
       }
-      const alreadyHigh = highBand ? (notifiedHighByKey.get(`${a.key}|${highBand}`) ?? 0) : 0;
+      const alreadyHigh = highBand
+        ? Math.max(notifiedHighByKey.get(`${a.key}|${highBand}`) ?? 0, notifiedHighByKey.get(`${a.key}|*`) ?? 0)
+        : 0;
 
       if (recentLow !== Infinity && dropPct >= rules.newSignal.priceDropPct && (alreadyLow == null || recentLow < alreadyLow)) {
         signalNote = `🔻 신저가 ${eok(recentLow)} · 전용 ${lowBand}(같은 평형 중간 대비 ${dropPct.toFixed(1)}%↓) — 급매 신호`;
