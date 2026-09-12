@@ -83,7 +83,7 @@ interface Listing {
   exclusiveArea: number | null;
   floor: string | null;
   direction: string | null; // 향 코드(E/W/S/N 조합)
-  occupancy: 'vacant' | 'tenant' | 'owner' | null;
+  occupancy: 'vacant' | 'tenant' | 'owner' | 'negotiable' | null;
   feature: string | null;
 }
 
@@ -103,6 +103,8 @@ const OCCUPANCY: Record<string, { label: string; cls: string }> = {
   vacant: { label: '즉시입주', cls: 'bg-emerald-50 text-emerald-700' },
   tenant: { label: '세 낀 매물', cls: 'bg-amber-50 text-amber-800' },
   owner: { label: '주인거주', cls: 'bg-sky-50 text-sky-700' },
+  // 점유자가 누구인지는 모르지만 즉시입주가 아니라는 건 확실하다(2026-09-13)
+  negotiable: { label: '입주 협의', cls: 'bg-slate-100 text-slate-700' },
 };
 
 export default async function RecommendPage() {
@@ -289,6 +291,7 @@ export default async function RecommendPage() {
                           {dirKo(l.direction) ? ` · ${dirKo(l.direction)}향` : ''}
                           {l.occupancy === 'vacant' ? <span className="ml-1 text-emerald-600">즉시</span> : null}
                           {l.occupancy === 'tenant' ? <span className="ml-1 text-amber-600">세</span> : null}
+                          {l.occupancy === 'negotiable' ? <span className="ml-1 text-slate-500">협의</span> : null}
                         </span>
                       ))}
                     </div>

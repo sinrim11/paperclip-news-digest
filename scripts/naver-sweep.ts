@@ -167,7 +167,7 @@ interface AffordableListing {
   articleNo: number | null; // 네이버 매물 번호 — fin.land.naver.com/articles/{articleNo} 딥링크용
   // 점유 상태(2026-09-12) — 실입주 목적 매수자에게는 '언제 들어갈 수 있나'가 가격만큼 중요하다.
   // 네이버는 이걸 구조화 필드로 주지 않고 중개사 설명 텍스트에만 담는다.
-  occupancy: 'vacant' | 'tenant' | 'owner' | null; // 공실·즉시입주 / 세입자 / 집주인 거주 / 미상
+  occupancy: 'vacant' | 'tenant' | 'owner' | 'negotiable' | null; // 즉시입주 / 세입자 / 집주인 / 협의 / 미상
   feature: string | null; // 중개사 설명 원문(앞 60자) — 분류 근거를 사람이 확인할 수 있게
   hugSafeLessor: boolean | null; // HUG 안심임대인 등록 여부(전세 낀 매물의 보증금 안전 참고)
 }
@@ -186,6 +186,10 @@ function classifyOccupancy(desc: string | null): AffordableListing['occupancy'] 
   if (/(세|전세|월세)(안고|낀)|임대중|세입자|만기|계약기간/.test(d)) return 'tenant';
   if (/주인거주|집주인거주|자가거주/.test(d)) return 'owner';
   if (/즉시입주|즉시계약|공실|입주매물|빈집/.test(d)) return 'vacant';
+  // '입주협의'(2026-09-13) — 첫 수집에서 미상 5,467건 중 1,223건이 이 표현이었다.
+  // 점유자가 세입자인지 집주인인지는 알 수 없지만 **즉시입주가 아니라는 사실은 확실**하다.
+  // 실입주 목적 매수자에게는 그것만으로도 정보다. 억지로 tenant/owner로 찍으면 틀린다.
+  if (/입주일?협의|협의입주|입주가능일|입주\d{2}년/.test(d)) return 'negotiable';
   return null;
 }
 
