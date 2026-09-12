@@ -10,7 +10,7 @@ import { loadPolicyParams, loadReaderFinances, computeBudget, formatKRW } from '
 import { rankCandidates, GRADE_CUTS, type Recommendation } from '@/lib/recommend';
 import { tradeKey } from '@/lib/trade-key';
 import { LoanRoutes } from '@/components/LoanRoutes';
-import { kaptOf } from '@/lib/monthly-cost';
+import { kaptOf, monthlyBreakdown } from '@/lib/monthly-cost';
 import { publicPriceOf } from '@/lib/public-price';
 import { LAWD_GU } from '@/lib/tiers';
 
@@ -173,7 +173,15 @@ export default async function RecommendPage() {
       complexNo: r.complexNo, rank: i + 1, name: r.name, gu: r.gu, dong: r.dong,
       minPrice: r.minDealPrice ?? null, tradeMedian: tm, gapPct: gap,
       household: r.household, elapsedYear: r.elapsedYear, tradeCount: cnt,
-      monthly: r.minDealPrice ? bestRoute(r.minDealPrice)?.monthly ?? null : null,
+      // 비교표도 상세와 같은 '월 부담'을 쓴다(2026-09-12) — 표는 원리금, 카드는 총액이면 어긋난다
+      monthly: r.minDealPrice
+        ? (() => {
+            const m = bestRoute(r.minDealPrice)?.monthly;
+            if (m == null) return null;
+            const b = monthlyBreakdown(m, kaptOf(r.complexNo), publicPriceOf(r.complexNo, null));
+            return Math.round(b.totalWon / 10_000);
+          })()
+        : null,
       cash: r.minDealPrice ? bestRoute(r.minDealPrice)?.cash ?? null : null,
       evidence: ev.label,
     };

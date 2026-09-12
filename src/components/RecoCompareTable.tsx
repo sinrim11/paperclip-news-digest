@@ -73,7 +73,7 @@ export function RecoCompareTable({ rows }: { rows: CompareRow[] }) {
                 </td>
                 <td className="py-2.5 px-2 text-right tabular-nums">
                   <span className="font-semibold text-indigo-700">{r.cash ? eok(r.cash) : '—'}</span>
-                  {r.monthly ? <span className="block text-xs text-gray-400">월 {r.monthly}만</span> : null}
+                  {r.monthly ? <span className="block text-xs text-gray-400">월 부담 {r.monthly}만</span> : null}
                 </td>
                 <td className="hidden py-2.5 px-2 text-right text-xs tabular-nums text-gray-500 sm:table-cell">
                   {r.household ? `${r.household.toLocaleString()}세대` : '—'}
@@ -92,7 +92,7 @@ export function RecoCompareTable({ rows }: { rows: CompareRow[] }) {
       </div>
       <p className="mt-2.5 text-xs leading-relaxed text-gray-500">
         · <b className="text-emerald-600">갭 마이너스</b> = 호가가 최근 실거래보다 낮음 → 급매 가능성(층·향·동 확인 필수)
-        &nbsp;·&nbsp; <b className="text-indigo-700">필요 현금*</b>은 무주택 생애최초 대출 후 남는 자기자본(5억 이하 디딤돌 한도 2.4억, 초과는 시중은행 LTV 70%·30년) — 취득세·중개보수 별도
+        &nbsp;·&nbsp; <b className="text-indigo-700">필요 현금*</b>은 무주택 생애최초 대출 후 남는 자기자본이며 월 부담은 원리금+관리비+재산세(5억 이하 디딤돌 한도 2.4억, 초과는 시중은행 LTV 70%·30년) — 취득세·중개보수 별도
         &nbsp;·&nbsp; <b>근거</b>는 실거래 표본 수와 갭으로 판정
       </p>
     </section>

@@ -4,6 +4,9 @@
  *   · 통근·상권(카카오 실데이터) · 3단 투자분석(활성 프로필 기준) · 10년 집vs주식 · 정성 팩트·출처.
  */
 import Link from 'next/link';
+import { LoanRoutes } from '@/components/LoanRoutes';
+import { kaptOf } from '@/lib/monthly-cost';
+import { publicPriceOf } from '@/lib/public-price';
 import { regulationOf } from '@/lib/region-regulation';
 import { rightsSignals, BASE_RIGHTS_CHECK } from '@/lib/rights-signals';
 import { LocaleMap } from '@/components/LocaleMap';
@@ -185,6 +188,21 @@ export default async function ComplexPage({ params }: { params: Promise<{ comple
           <span>· {c.household.toLocaleString()}세대</span>
           {c.elapsedYear != null && <span>· {c.elapsedYear}년차{c.approvalDate ? `(${c.approvalDate.slice(0, 4)}년 준공)` : ''}</span>}
           {c.far != null && <span>· 용적률 <b className={c.far <= 180 ? 'text-emerald-600' : 'text-gray-800'}>{Math.round(c.far)}%</b></span>}
+          {(() => {
+            // 주차·지하철(K-apt) — 추천 카드에 있는 정보가 상세에 없으면 이상하다(2026-09-12)
+            const k = kaptOf(c.complexNo);
+            if (!k) return null;
+            return (
+              <>
+                {k.parkingPerHousehold != null && (
+                  <span className={k.parkingPerHousehold < 1 ? 'text-amber-700' : undefined}>
+                    · 주차 {k.parkingPerHousehold}대/세대
+                  </span>
+                )}
+                {k.subwayLine && k.subwayWalkMin && <span>· {k.subwayLine}{k.subwayStation ? ` ${k.subwayStation}` : ''} {k.subwayWalkMin}</span>}
+              </>
+            );
+          })()}
           <a href={`https://fin.land.naver.com/complexes/${c.complexNo}?tab=article`} target="_blank" rel="noreferrer" className="font-medium text-blue-600 hover:underline">네이버 ↗</a>
           {c.lat != null && <a href={`https://map.kakao.com/link/map/${encodeURIComponent(c.name)},${c.lat},${c.lng}`} target="_blank" rel="noreferrer" className="font-medium text-blue-600 hover:underline">카카오맵 ↗</a>}
         </div>
@@ -370,6 +388,19 @@ export default async function ComplexPage({ params }: { params: Promise<{ comple
           <LocaleMap lat={c.lat} lng={c.lng} places={nearby} />
         </div>
       )}
+
+      {/* ── 구매자 유형별 자금계획(2026-09-12) ── 추천 카드에는 있는데 정작 '전체 근거'를
+           보러 오는 이 페이지에 없었다. 상세가 요약보다 정보가 적으면 안 된다. ── */}
+      {c.minDealPrice ? (
+        <section className="mb-6 rounded-xl border border-indigo-200 bg-white p-4">
+          <h2 className="text-lg font-bold text-indigo-900">💳 자금계획 <span className="text-sm font-normal text-gray-400">유형별 필요 현금·월 부담</span></h2>
+          <LoanRoutes
+            priceManwon={c.minDealPrice}
+            complexNo={c.complexNo}
+            publicPriceWon={publicPriceOf(c.complexNo, listings[0]?.exclusiveArea ?? null)}
+          />
+        </section>
+      ) : null}
 
       {/* ── 권리·계약 확인(2026-09-12) ── 위 리스크가 '가격·수요' 관점이라면 이쪽은 '계약 안전'이다.
            등기부는 공공 API가 없어 우리가 대신 보지 못한다 → 무엇을 볼지만 좁혀 준다. ── */}
