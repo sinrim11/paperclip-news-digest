@@ -170,6 +170,26 @@ if (loanChanges.length > 0) {
   for (const c of loanChanges) lines.push(`   · ${c.item}: ${c.current ?? '?'} → ${c.latest ?? '?'}\n     └ ${c.sourceUrl ?? ''}`);
 }
 
+// ── 3c. 토허 지정기한 만료 임박(2026-09-12) ─────────────────────────────────
+// region-regulation.json은 자동 적용을 금지해 두었는데, 그 결과 2026-07-08 이후 두 달 넘게
+// 아무도 손대지 않았다. 기한이 지나면 해제든 연장이든 추천 로직이 바뀌므로(해제 시 갭투자
+// 가능) 조용히 틀린 정보가 되기 전에 매일 알린다. 자동 적용 금지는 안전장치지 방치 허가가 아니다.
+try {
+  const regRaw = JSON.parse(readFileSync('config/region-regulation.json', 'utf8'));
+  const now = Date.now();
+  const soon = (regRaw.groups ?? [])
+    .map((g) => ({ name: g.name, until: g.regulation?.landPermitUntil, n: (g.regions ?? []).length }))
+    .filter((g) => g.until)
+    .map((g) => ({ ...g, d: Math.ceil((new Date(`${g.until}T23:59:59+09:00`).getTime() - now) / 86400000) }))
+    .filter((g) => g.d <= 90)
+    .sort((a, b) => a.d - b.d);
+  if (soon.length) {
+    lines.push(`⏳ 토지거래허가 지정기한 임박 ${soon.length}건 — 해제·연장 어느 쪽이든 추천 로직이 바뀝니다:`);
+    for (const g of soon) lines.push(`   · ${g.name} — ${g.until} (D-${g.d}) · ${g.n}곳`);
+    lines.push('   확인 후 config/region-regulation.json 갱신 필요(자동 반영 안 됨)');
+  }
+} catch { /* 파일 없으면 건너뜀 */ }
+
 // ── 4. 점검 이력 기록 ───────────────────────────────────────────────────────
 let checkLog = [];
 if (existsSync(CHECK_LOG_PATH)) {
@@ -196,11 +216,14 @@ const unchanged = checks.filter((c) => c.status === 'unchanged').length;
 // 거부·동결 스킵도 반드시 알린다(2026-09-01). 종전엔 조건이 valid/region/loan뿐이라
 // 패치가 전부 거부되거나 동결로 스킵되면 "변경 없음" 한 줄만 나가고 사유가 사라졌다 —
 // 레이더가 무언가를 바꾸려 했다는 사실 자체가 사람이 알아야 할 신호다.
-if (valid.length > 0 || regionChanges.length > 0 || loanChanges.length > 0 || rejected.length > 0 || skippedFrozen.length > 0) {
+const hasExpiryWarn = lines.some((l) => l.startsWith('⏳'));
+if (valid.length > 0 || regionChanges.length > 0 || loanChanges.length > 0 || rejected.length > 0 || skippedFrozen.length > 0 || hasExpiryWarn) {
   const header =
     valid.length > 0 || regionChanges.length > 0 || loanChanges.length > 0
       ? `🏛️ 정책 레이더 (${today}) — 변경 감지`
-      : `🏛️ 정책 레이더 (${today}) — 시도된 변경을 막았습니다(적용 0건)`;
+      : rejected.length > 0 || skippedFrozen.length > 0
+        ? `🏛️ 정책 레이더 (${today}) — 시도된 변경을 막았습니다(적용 0건)`
+        : `🏛️ 정책 레이더 (${today}) — 변경 없음, 확인 필요 항목 있음`;
   console.log(
     [
       header,
