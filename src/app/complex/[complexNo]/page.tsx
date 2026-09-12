@@ -4,6 +4,8 @@
  *   · 통근·상권(카카오 실데이터) · 3단 투자분석(활성 프로필 기준) · 10년 집vs주식 · 정성 팩트·출처.
  */
 import Link from 'next/link';
+import { regulationOf } from '@/lib/region-regulation';
+import { rightsSignals, BASE_RIGHTS_CHECK } from '@/lib/rights-signals';
 import { LocaleMap } from '@/components/LocaleMap';
 import { fetchNearby } from '@/lib/nearby';
 import { readFileSync } from 'fs';
@@ -368,6 +370,58 @@ export default async function ComplexPage({ params }: { params: Promise<{ comple
           <LocaleMap lat={c.lat} lng={c.lng} places={nearby} />
         </div>
       )}
+
+      {/* ── 권리·계약 확인(2026-09-12) ── 위 리스크가 '가격·수요' 관점이라면 이쪽은 '계약 안전'이다.
+           등기부는 공공 API가 없어 우리가 대신 보지 못한다 → 무엇을 볼지만 좁혀 준다. ── */}
+      {(() => {
+        const ls = ((c.listings as unknown as Array<{ occupancy?: string | null; hugSafeLessor?: boolean | null }>) ?? []);
+        const occ = { vacant: 0, tenant: 0, owner: 0 };
+        let hug: boolean | null = null;
+        for (const l of ls) {
+          if (l.occupancy && l.occupancy in occ) occ[l.occupancy as keyof typeof occ]++;
+          if (l.hugSafeLessor) hug = true;
+        }
+        const reg = regulationOf(c.gu);
+        const sigs = rightsSignals({
+          jeonseRatioPct, gapPct, tradeCount: trades.length,
+          occupancy: occ, hugSafeLessor: hug,
+          landPermitZone: reg.status === 'regulated',
+          elapsedYear: c.elapsedYear,
+        });
+        return (
+          <section className="mb-6 rounded-xl border border-slate-300 bg-slate-50/60 p-4">
+            <h2 className="text-lg font-bold text-slate-800">
+              📑 권리·계약 확인 <span className="text-sm font-normal text-slate-500">등기부에서 무엇을 볼지</span>
+            </h2>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+              등기부등본은 공개 API가 없어 <b>저희가 대신 조회해 드리지 못합니다.</b> 아래는 수집 데이터로 감지한
+              신호와, 그에 맞춰 <b>직접 열람하실 때 볼 항목</b>입니다. 발급은 인터넷등기소(건당 700원).
+            </p>
+            {sigs.length > 0 && (
+              <ul className="mt-2.5 space-y-2">
+                {sigs.map((s, i) => (
+                  <li key={i} className="rounded-lg border border-slate-200 bg-white p-2.5">
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <span className={`rounded px-1.5 py-0.5 text-[11px] font-bold ${s.level === 'high' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}`}>
+                        {s.level === 'high' ? '주의' : '확인'}
+                      </span>
+                      <span className="text-[13px] font-semibold text-gray-900">{s.label}</span>
+                      <span className="text-xs text-gray-500">{s.why}</span>
+                    </div>
+                    <div className="mt-1 text-[13px] leading-relaxed text-slate-700">→ {s.check}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-2.5 rounded-lg bg-white/70 p-2.5">
+              <div className="text-xs font-semibold text-slate-600">신호와 무관하게 매번 볼 것</div>
+              <ul className="mt-1 space-y-1 text-[13px] leading-relaxed text-slate-700">
+                {BASE_RIGHTS_CHECK.map((t, i) => <li key={i}>· {t}</li>)}
+              </ul>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* ── 통근·상권 ── */}
       {(cm || am) && (

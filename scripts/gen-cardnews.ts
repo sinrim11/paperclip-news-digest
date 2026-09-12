@@ -636,8 +636,8 @@ function checklistHtml(top: SharePick[], page: number, total: number): string {
   const tailored: string[] = [];
   if (avgYear != null && avgYear >= 22) tailored.push(`오늘 목록은 <b>평균 ${Math.round(avgYear)}년차 구축</b> — 누수·결로 흔적, 배관·샷시 교체 이력, 주차 대수를 우선 확인`);
   if (avgYear != null && avgYear <= 12) tailored.push(`오늘 목록은 <b>준신축 위주</b> — 하자보수 이력, 커뮤니티 운영·관리비 수준을 확인`);
-  if (hasBargain) tailored.push('<b>급매(호가 &lt; 실거래)</b>가 포함 — 싼 데는 이유가 있습니다. 저층·북향·소송·특수관계 거래 여부 확인');
-  if (highJeonse) tailored.push('<b>전세가율 높은 단지</b> 포함 — 전세 낀 매물이면 임차인 퇴거일·보증금 승계 조건을 계약서에 명시');
+  if (hasBargain) tailored.push('<b>급매(호가 &lt; 실거래)</b>가 포함 — 층·향으로 설명되지 않는 저가는 권리 문제일 수 있습니다. 갑구 소유권 이전 이력·을구 가압류·경매개시결정 확인');
+  if (highJeonse) tailored.push('<b>전세가율 높은 단지</b> 포함 — 전입일이 근저당 설정일보다 빠른 임차인은 <b>대항력</b>이 있어 매수인이 보증금을 떠안습니다. 전입신고일·확정일자 확인');
   if (lowLiquidity) tailored.push('<b>거래 적은 단지</b> 포함 — 시세 표본이 얇아 호가 신뢰도가 낮습니다. 인근 단지 시세와 교차 확인');
   const tailoredHtml = tailored.slice(0, 3)
     .map((t) => `<div style="display:flex;gap:12px;font-size:26px;line-height:1.5;color:#78350F"><span>▸</span><span>${t}</span></div>`)
@@ -656,7 +656,7 @@ function checklistHtml(top: SharePick[], page: number, total: number): string {
     <div style="font-size:58px;font-weight:800;margin-top:44px">임장 갈 때, 이것만은</div>
     <div style="font-size:26px;color:#64748B;margin-top:12px;line-height:1.5">저장해두고 현장에서 하나씩 지워보세요</div>
     <div style="display:flex;gap:16px;margin-top:34px">
-      ${col('📄', '서류 3종', ['등기부등본 — 근저당·가압류', '건축물대장 — 위반건축물 여부', '토지이용계획 — 개발·규제'], '#F8FAFC')}
+      ${col('📄', '서류 3종', ['등기부 <b>갑구</b> — 소유자 = 매도인 확인', '등기부 <b>을구</b> — 근저당 채권최고액·말소 특약', '건축물대장 — 위반건축물(대출 거절 사유)'], '#F8FAFC')}
       ${col('🏠', '현장 5개', ['수압 — 최고층 물 틀어보기', '누수·결로 — 베란다·창틀', '소음 — 층간·도로·철도', '채광 — 향·앞동 간격', '관리비 — 최근 3개월'], '#F0FDF4')}
     </div>
     <div style="display:flex;gap:16px;margin-top:16px">
@@ -666,7 +666,7 @@ function checklistHtml(top: SharePick[], page: number, total: number): string {
         <div style="margin-top:16px;display:flex;flex-direction:column;gap:12px">${tailoredHtml || '<div style="font-size:25px;color:#B45309">특이 사항 없음 — 기본 항목대로 확인하세요</div>'}</div>
       </div>
     </div>
-    <div class="foot">온라인 발품(실거래·평면도·세대수)을 먼저 끝내고 현장에서는 '눈으로만 확인되는 것'에 집중 — 계약 전 서류는 반드시 본인이 직접 열람</div>
+    <div class="foot">온라인 발품(실거래·평면도·세대수)을 먼저 끝내고 현장에서는 '눈으로만 확인되는 것'에 집중 — 등기부는 인터넷등기소에서 본인이 직접 열람(건당 700원), 계약 당일 재열람 권장</div>
   </div>`;
 }
 
