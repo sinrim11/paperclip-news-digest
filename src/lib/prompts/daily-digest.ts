@@ -43,7 +43,14 @@ function readerProfileBlock(categoryLabel: string): string {
   const key = CATEGORY_LABEL_TO_KEY[categoryLabel] ?? categoryLabel;
   const focus = profile.focusCategories?.[key];
   if (!focus) return '';
-  return `\n\n## 독자 프로필 (큐레이션 우선순위에 반영)\n${profile.summary ?? ''}\n${focus}\n단, 관심사와 무관해도 그 자체로 중대한 뉴스는 정상 포함하고, 기사에 없는 내용을 지어내지 마세요.`;
+  return `\n\n## 독자 프로필 (큐레이션·긴급도·액션 모두에 반영)
+${profile.summary ?? ''}
+${focus}
+단, 관심사와 무관해도 그 자체로 중대한 뉴스는 정상 포함하고, 기사에 없는 내용을 지어내지 마세요.
+
+**이 독자 기준으로 판단하세요.** urgency와 action은 "세상에 중요한가"가 아니라 "이 독자가
+당장 무엇을 해야 하는가"로 정합니다. 이 독자가 실행할 수 없는 액션(기업 운영·해운 물류·
+기관 투자 등)은 쓰지 마세요 — 그런 뉴스는 note로 두고 action에 '배경지식'이라고 적으세요.`;
 }
 
 // ─── Stage 1: Market data collection ─────────────────────────────────────────
@@ -171,7 +178,15 @@ ${articlesText}${githubSection}
 - source_count >= 2이면 fact 앞에 "[N곳 공통 보도]" 접두사를 붙이세요.
 - 단일 출처이면 consensusFacts는 null, conflictingFacts는 null.
 - 최대 10건 출력. 반드시 위에 수집된 기사만 사용하세요. 기사가 10건 미만이면 있는 만큼만 출력하고, 절대 기사에 없는 뉴스를 지어내지 마세요.
-- urgency "breaking"은 카테고리당 최대 2건.
+- **urgency 정의 — 개수보다 정의가 먼저입니다.**
+  · breaking = 독자가 **오늘~이번 주 안에 행동을 바꿔야** 하는 것(금리·대출규제 확정, 청약 일정,
+    보유·관심 지역 규제 변경 등). "역사적으로 중대한 사건"이 아니라 **독자의 의사결정 변경**이 기준입니다.
+  · watch = 1~2주 내 결과가 나와 모니터링이 필요한 것(발표 예정·심사 중·법안 계류).
+  · note = 알아두면 좋은 배경지식. **해외 분쟁·타국 정치·기업 내부 갈등은 대부분 여기입니다.**
+- breaking은 **카테고리당 최대 1건**. 해당 없으면 0건이 정상입니다 — 매일 채울 필요 없습니다.
+  등급을 올려서 중요해 보이게 하지 마세요. 매일 9건이 breaking이면 독자는 등급을 무시하게 됩니다.
+- 제목은 한국어로 자연스럽게 다듬으세요. 영어 단어를 그대로 섞지 말고(convicted → 유죄 판결),
+  매체의 클릭베이트 표현("해도 해도 너무하네", "비명", "충격")은 사실 중심으로 바꾸세요.
 
 출력 형식 (순수 JSON):
 {
