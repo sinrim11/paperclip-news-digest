@@ -51,8 +51,9 @@ ${CURRENT_REGIONS}
 3. 스트레스 DSR 단계·가산금리(규제 1.5%p·기타 0.75%p)와 DSR 40% 규칙이 유지되는가
 4. 주담대 신규취급 금리(한국은행 「금융기관 가중평균금리」) — dsr.assumedBaseRatePct와의 괴리.
    **주의: 이 값은 기준금리가 아니라 DSR 심사용 주담대 명목금리다.** 기준금리를 그대로 대입하자고
-   제안하지 말 것(한도가 과대 계산돼 예산이 부풀려진다). 현재 4.5%는 실측 4.2~4.27%보다 보수적으로
-   잡은 것이며 동결돼 있다. 주담대 금리가 4.5%를 넘어섰을 때만 changed로 보고할 것.
+   제안하지 말 것(한도가 과대 계산돼 예산이 부풀려진다). 현재값은 위 현재 파라미터의 dsr.assumedBaseRatePct
+   (2026-10-08 한국은행 8월 주담대 신규취급 4.66% 반영, 동결). 한국은행이 **새 월분을 공표했고** 그 주담대
+   신규취급 금리가 현재값과 다를 때만 changed로 보고하라. 새 공표가 없으면 unchanged — 값을 추정·반올림하지 마라.
 5. 토지거래허가구역: 전입의무 4개월·실거주 2년이 유지되는가, 지정 기한 연장·해제 발표 여부
 6. 규제지역·토허구역 목록 변경(신규 지정/해제) — 특히 서울 25구, 경기(안양 동안/만안·의왕·남양주 등)
 7. 생애최초·신생아특례 등 정책대출 조건 변경, 세제개편 등 새 대책 발표 여부
@@ -68,14 +69,14 @@ ${CURRENT_REGIONS}
   "changed": true|false,
   "summary": "오늘 점검 결과 한 줄 요약",
   "checks": [{"item": "점검 항목명", "current": "시스템 현재값", "latest": "확인된 최신 사실", "status": "unchanged|changed|unverifiable", "sourceUrl": "근거 URL"}],
-  "paramPatches": [{"path": "dsr.assumedBaseRatePct", "old": 4.5, "new": 4.75, "reason": "변경 사유", "sourceUrl": "근거 URL"}],
+  "paramPatches": [{"path": "점검 대상 경로", "old": <현재값 숫자>, "new": <원문에 적힌 숫자>, "reason": "변경 사유", "sourceUrl": "근거 URL", "quote": "new 숫자가 그대로 들어 있는 원문 문장"}],
   "regionChanges": [{"region": "지역명", "from": "regulated|non-regulated", "to": "regulated|non-regulated", "reason": "사유", "sourceUrl": "근거 URL"}],
   "sources": [{"title": "매체/기관 '제목' (날짜)", "url": "실제 URL"}]
 }
 **출처 등급(2026-09-01 사용자 지침 — 위반 시 그 패치는 무효)**
 paramPatches의 sourceUrl은 반드시 1차 출처여야 한다: 금융위(fsc.go.kr) · 국토부(molit.go.kr) · 주택도시기금(nhuf.molit.go.kr) · 정책브리핑(korea.kr)의 보도자료/공식 안내 원문.
 언론기사·은행 설명페이지·블로그는 **찾는 단서로만** 쓰고 근거로 삼지 마라. 기사만 있고 원문을 못 찾았으면 paramPatches에 넣지 말고 checks에 status=unverifiable로 남겨라.
-reason에는 원문 문장을 짧게 인용하라(예: "스트레스 금리 하한을 수도권·규제지역내 주담대에 한해 3%로 상향").
+quote는 필수다 — new 숫자가 글자 그대로 들어 있는 원문 문장. 없거나 숫자가 안 들어 있으면 패치는 거부된다(2026-10-05 근거 없는 4.75 제안 재발 방지 — 옛 스키마 예시값을 그대로 베꼈다). reason에는 원문 문장을 짧게 인용하라(예: "스트레스 금리 하한을 수도권·규제지역내 주담대에 한해 3%로 상향").
 이 규칙이 생긴 이유: 2026-08~09에 기사 근거 패치가 원문 근거 값을 뒤집어 두 달간 5회 진동했고, 이력에 URL이 없어 사후에 무엇이 옳았는지 가릴 수 없었다.
 
 config/policy-params.json의 _frozenPaths 에 있는 경로는 동결돼 자동 적용되지 않는다. 변경이 필요하다고 판단되면 paramPatches에 넣되(스킵되고 알림만 감) reason에 1차 출처 인용을 반드시 붙여라 — 사람이 그것만 보고 판단한다.

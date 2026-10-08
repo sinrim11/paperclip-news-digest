@@ -84,7 +84,7 @@ export function LoanRoutes({
                       <span className="text-emerald-700">{r.policy.label} {r.policy.rateText}</span>
                     ) : (
                       <span>
-                        시중은행 4.5%
+                        시중은행 {r.bank?.rateText ?? '—'}
                         {r.policyBlockedBy && <span className="text-gray-400"> · 정책대출 {r.policyBlockedBy}</span>}
                       </span>
                     )}

@@ -25,10 +25,10 @@
       "maxPriceManwon": 50000,
       "_maxPriceNote": "담보주택 평가액 5억 이하(신혼·2자녀 6억 이하).",
       "ltv": 0.7,
-      "eligibility": "부부합산 소득 6천만원 이하 · 무주택 세대주 · 주택가 5억 이하",
+      "eligibility": "부부합산 소득 7천만원 이하(생애최초) · 무주택 세대주 · 주택가 5억 이하",
       "termYears": 30,
-      "eligibilityShort": "소득 6천↓ · 주택가 5억↓",
-      "_eligibilityNote": "2026-09-13 교정: 소득요건을 7천만원으로 적어 뒀으나 마이홈포털 원문은 생애최초도 일반과 같은 \"연간 6천만원 이하\"다. 8.5천만원은 신혼가구, 7천만원은 2자녀 이상 기준이라 혼선이 있었다."
+      "eligibilityShort": "소득 7천↓ · 주택가 5억↓",
+      "_eligibilityNote": "2026-10-08 재교정: 생애최초는 7천만원 이하가 맞다. 9/13 교정(7천→6천)이 오독이었다 — 원문 괄호 \"(생애최초 주택구입자, 2자녀이상 가구는 연소득 7천만원, …)\"는 생애최초와 2자녀 이상이 함께 7천이라는 뜻이다. 일반(didimdol_general)만 6천. 근거는 _eligibilitySource(주택도시기금 원문)."
     },
     {
       "id": "newborn",
@@ -79,7 +79,8 @@
   "bank": {
     "id": "bank",
     "label": "시중은행 (생애최초)",
-    "ratePctTypical": 4.5,
+    "ratePctTypical": 4.66,
+    "_rateNote": "2026-10-08: 한국은행 「2026년 8월 금융기관 가중평균금리」 예금은행 신규취급 주택담보대출 4.66%(잠정). policy-params.json dsr.assumedBaseRatePct와 같은 근거·같은 값 — 카드 계산·각주가 이 값 하나를 읽는다.",
     "capManwon": 60000,
     "_capNote": "수도권 주담대 정책한도 6억(15억 이하 주택). policy-params.json loanCapByPrice와 동일.",
     "ltv": 0.7,
@@ -127,9 +128,10 @@
   ],
   "_buyerTypesNote": "2026-09-12 신설. 종전엔 전 파이프라인이 생애최초 하나로만 계산돼, 생애최초가 아닌 매수자는 자기 조건과 다른 숫자를 보고 있었다. LTV·정책대출 한도가 유형마다 달라 필요 현금이 억 단위로 갈린다. 수치 근거는 policy-params.json(LTV)과 주택도시기금 공식 안내(한도·소득요건).",
   "_eligibilitySource": {
-    "title": "마이홈포털 「내집마련 디딤돌대출」",
-    "url": "https://www.myhome.go.kr/hws/portal/cont/selectSteppingStoneLoanView.do",
-    "quote": "일반·생애최초 연간 6천만원 이하 / 신혼가구 8.5천만원 이하 / 2자녀 이상 7천만원",
-    "verifiedAt": "2026-09-13"
+    "title": "주택도시기금 「내집마련 디딤돌대출」 대출대상",
+    "url": "https://nhuf.molit.go.kr/FP/FP05/FP0503/FP05030103.jsp",
+    "quote": "대출대상 부부합산 연소득 6천만원 이하(생애최초 주택구입자, 2자녀이상 가구는 연소득 7천만원, 신혼가구는 연소득 8.5천만원 이하), 순자산가액 5.11억원 이하 무주택 세대주",
+    "verifiedAt": "2026-10-08",
+    "_history": "2026-09-13 저장된 quote(\"일반·생애최초 연간 6천만원 이하 / …\", myhome.go.kr)는 해당 페이지에 존재하지 않는 문장이었다(2026-10-02 원문 대조). 마이홈포털 원문도 \"(생애최초주택구입자, 다자녀가구, 2자녀 가구는 연간 7천만원 …)\"로 7천이다."
   }
 }

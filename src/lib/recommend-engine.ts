@@ -180,6 +180,16 @@ function freshnessScore(rules: Rules, buildYear: number | null, nowYear: number)
   return { score: 1, label: null };
 }
 
+/**
+ * 거래량 신호 재발동 하한 — 이미 알린 건수보다 "의미 있게" 늘어야 새 신호다.
+ * 2026-10-08: 종전 `recVol > alreadyVol`은 +1건에도 재발동해 진접삼부르네상스더퍼스트가
+ * vol:4 → vol:5로 6일 새 3회 나갔다. +50%와 +2건 중 큰 쪽을 요구한다(4→6, 6→9, 10→15).
+ */
+export function volReentryFloor(alreadyVol: number): number {
+  if (alreadyVol <= 0) return 0;
+  return Math.max(alreadyVol + 2, Math.ceil(alreadyVol * 1.5));
+}
+
 export async function buildDailyRecommendations(
   prisma: PrismaClient,
   now: Date = new Date(),
@@ -322,6 +332,9 @@ export async function buildDailyRecommendations(
   for (const s of recentSent) {
     if (s.scenario === '스트레치+') {
       if (s.sentDate >= spCooldownSince && !lastSentStretch.has(s.complexKey)) lastSentStretch.set(s.complexKey, s);
+      // 2026-10-08: 쿨다운은 트랙 무관 단지 단위(사용자 결정). 종전엔 스트레치+ 발송이 메인·갭 쿨다운에
+      // 안 보여, 트랙만 바꿔 새 신호 없이 재발송됐다(비산파크뷰 9/25 메인 → 10/08 스트레치+ 등 4일 연속).
+      if (s.sentDate >= cooldownSince && !lastSentByKey.has(s.complexKey)) lastSentByKey.set(s.complexKey, s);
     } else if (s.sentDate >= cooldownSince) {
       if (!lastSentByKey.has(s.complexKey)) lastSentByKey.set(s.complexKey, s);
       if (s.signalLowManwon != null) {
@@ -469,7 +482,7 @@ export async function buildDailyRecommendations(
         signalNote = `🔻 신저가 ${eok(recentLow)} · 전용 ${lowBand}(같은 평형 중간 대비 ${dropPct.toFixed(1)}%↓) — 급매 신호`;
         signalLowManwon = recentLow;
         signalTag = `low:${lowBand}:${recentLow}`;
-      } else if (recVol >= 4 && recVol >= 2 * Math.max(1, priorVol) && recVol > alreadyVol) {
+      } else if (recVol >= 4 && recVol >= 2 * Math.max(1, priorVol) && recVol >= volReentryFloor(alreadyVol)) {
         signalNote = `📈 거래량 급증 — 신고확정 기준 직전 ${wDays}일 ${priorVol}건 → 최근 ${wDays}일 ${recVol}건 (매수세 유입)`;
         signalTag = `vol:${recVol}`;
       } else if (prevMax !== Infinity && recentHigh > prevMax && risePct >= 1 && recentHigh > alreadyHigh) {
@@ -628,7 +641,7 @@ export async function buildDailyRecommendations(
         continue;
       }
       if (mainKeys.has(a.key)) continue; // 메인 추천과 중복 제외
-      if (lastSentStretch.has(a.key)) continue; // 스트레치+ 자체 쿨다운
+      if (lastSentStretch.has(a.key) || lastSentByKey.has(a.key)) continue; // 쿨다운 — 스트레치+ 자체 + 메인·갭 발송 이력(트랙 무관)
       a.prices.sort((x, y) => x - y);
       const med = median(a.prices);
       if (med <= comfortable || med > spDynamicCeiling) continue;

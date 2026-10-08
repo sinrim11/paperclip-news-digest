@@ -24,9 +24,18 @@ import { monthlyPaymentPerWon } from '../src/lib/tracker';
 
 /**
  * 자금 계획(공개 프레임, 2026-08-11) — 첫 내집마련자의 1번 질문 "현금 얼마·월 얼마?"에 답한다.
- * 특정 개인이 아닌 생애최초 무주택 일반 가정: LTV 70%·수도권 한도 6억·금리 4.5%·30년 원리금균등.
+ * 특정 개인이 아닌 생애최초 무주택 일반 가정: LTV 70%·수도권 한도 6억·금리 BANK_RATE(설정값)·30년 원리금균등.
  */
-const FUND = { ltv: 0.7, capManwon: 60000, ratePct: 4.5, termYears: 30 };
+// 금리는 config/policy-loans.json bank.ratePctTypical 하나에서 읽는다(2026-10-08). 종전엔 4.5가
+// 코드 5곳에 하드코딩돼, 실측 금리가 바뀌어도 카드 계산·각주가 따라오지 않았다.
+const BANK_RATE: number = (() => {
+  try {
+    const j = JSON.parse(readFileSync(join(process.cwd(), 'config', 'policy-loans.json'), 'utf-8'));
+    const r = Number(j?.bank?.ratePctTypical);
+    return Number.isFinite(r) && r > 0 ? r : 4.5;
+  } catch { return 4.5; }
+})();
+const FUND = { ltv: 0.7, capManwon: 60000, ratePct: BANK_RATE, termYears: 30 };
 function fundingOf(priceManwon: number): { loan: number; cash: number; monthly: number } {
   const loan = Math.min(Math.floor(priceManwon * FUND.ltv), FUND.capManwon);
   return { loan, cash: priceManwon - loan, monthly: Math.round(loan * monthlyPaymentPerWon(FUND.ratePct, FUND.termYears)) };
@@ -54,7 +63,7 @@ function loadPolicyLoans(): PolicyLoans | null {
 
 interface LoanPath { label: string; loan: number; cash: number; monthly: number; rateText: string; eligibility: string }
 function pathOf(price: number, p: LoanProduct): LoanPath {
-  const rate = p.rateTypicalPct ?? p.ratePctTypical ?? 4.5;
+  const rate = p.rateTypicalPct ?? p.ratePctTypical ?? BANK_RATE;
   const loan = Math.min(Math.floor(price * p.ltv), p.capManwon);
   return {
     label: p.label,
@@ -184,7 +193,7 @@ function loanRoutes(price: number): { policy: LoanPath | null; policyBlockedBy: 
   const cfg = loadPolicyLoans();
   if (!cfg) {
     const f = fundingOf(price);
-    return { policy: null, policyBlockedBy: null, bank: { label: '시중은행', ...f, rateText: '4.5%', eligibility: '' }, newborn: null };
+    return { policy: null, policyBlockedBy: null, bank: { label: '시중은행', ...f, rateText: `${BANK_RATE}%`, eligibility: '' }, newborn: null };
   }
   const didim = cfg.products.find((p) => p.id === 'didimdol');
   const newbornP = cfg.products.find((p) => p.id === 'newborn');
@@ -500,7 +509,7 @@ function compareHtml(top: SharePick[], page: number, total: number): string {
     ${rows}
     <div style="margin-top:34px;display:flex;flex-direction:column;gap:10px;font-size:24px;color:#475569;line-height:1.5">
       <div>· <b style="color:#16A34A">갭 마이너스</b> = 호가가 최근 실거래보다 낮음 → 급매 가능성(층·향·동 확인 필수)</div>
-      <div>· <b style="color:#1D4ED8">월 상환*</b> = 생애최초 가정(LTV 70%·한도 6억·금리 4.5%·30년) — 소득·DSR 따라 달라짐</div>
+      <div>· <b style="color:#1D4ED8">월 상환*</b> = 생애최초 가정(LTV 70%·한도 6억·금리 ${BANK_RATE}%·30년) — 소득·DSR 따라 달라짐</div>
       <div>· <b>추이</b> = 120일 전반 vs 후반 실거래 중간값 변화(<span style="color:#16A34A">▼하락</span>·<span style="color:#DC2626">▲상승</span>)</div>
     </div>
     <div class="foot">국토교통부 실거래가 × 네이버부동산 호가 · ${CAP_LABEL} · 300세대+ — 투자 자문 아님</div>
@@ -617,7 +626,7 @@ function totalCashHtml(top: SharePick[], page: number, total: number): string {
       <div>· <b>취득세</b> 6억↓ 1.1% · 6~9억 누진 · 9억↑ 3.3% — <b style="color:#16A34A">생애최초 최대 200만원 감면 반영</b>(12억 이하)</div>
       <div>· <b>중개보수</b>는 법정 <b>상한</b> 요율 — 협의로 낮출 수 있고 부가세는 별도입니다</div>
     </div>
-    <div class="foot">전용 85㎡ 이하·1주택 기준 · 대출은 LTV 70%·한도 6억·금리 4.5%·30년 가정 — 실제 세액은 취득 시점 기준으로 확인하세요</div>
+    <div class="foot">전용 85㎡ 이하·1주택 기준 · 대출은 LTV 70%·한도 6억·금리 ${BANK_RATE}%·30년 가정 — 실제 세액은 취득 시점 기준으로 확인하세요</div>
   </div>`;
 }
 

@@ -8,6 +8,16 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 type CtxSource = string | { title?: string; url?: string };
+/** DSR 가정 금리 — config/policy-params.json에서 읽는다(2026-10-08: 4.5%·스트레스 6%가 하드코딩돼 실제 계산과 어긋나 있었다). */
+function loadDsr(): { base: number; stress: number } | null {
+  try {
+    const p = JSON.parse(readFileSync(join(process.cwd(), 'config', 'policy-params.json'), 'utf-8'));
+    const base = Number(p?.dsr?.assumedBaseRatePct);
+    const add = Number(p?.dsr?.stressAddPctRegulated);
+    return Number.isFinite(base) && Number.isFinite(add) ? { base, stress: Math.round((base + add) * 100) / 100 } : null;
+  } catch { return null; }
+}
+
 function loadCtxSources(): { asOf: string | null; sources: CtxSource[] } {
   try {
     const m = JSON.parse(readFileSync(join(process.cwd(), 'config', 'market-context.json'), 'utf-8'));
@@ -43,6 +53,7 @@ const MENUS: { href: string; name: string; shows: string }[] = [
 
 export default function MethodologyNote({ current }: { current: '/listings' | '/matching' }) {
   const ctx = loadCtxSources();
+  const dsr = loadDsr();
   return (
     <details className="mb-4 rounded-lg border border-gray-200 bg-white open:shadow-sm">
       <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm font-semibold text-gray-700">
@@ -87,7 +98,7 @@ export default function MethodologyNote({ current }: { current: '/listings' | '/
         <div>
           <div className="mb-1 font-bold text-gray-800">공통 가정</div>
           <p className="leading-relaxed">
-            생애최초 <b>LTV 70%</b> · <b>DSR 40%</b>(스트레스 금리 6%, 마통 해지 전제) · 주담대 <b>6억 상한</b> · 대출금리 <b>4.5%</b>(30년 원리금균등) ·
+            생애최초 <b>LTV 70%</b> · <b>DSR 40%</b>(스트레스 금리 {dsr ? `${dsr.stress}%` : '—'}, 마통 해지 전제) · 주담대 <b>6억 상한</b> · 대출금리 <b>{dsr ? `${dsr.base}%` : '—'}</b>(30년 원리금균등) ·
             집값상승은 <b>지역 열기(regionHeat)</b>로 매물마다 차등(2~5%/년, 보수 −3%p·낙관 +2%p) ·
             대안투자 <b>S&amp;P500 지수 ETF 세전 8%</b>(차익 22%·배당 15.4% 과세 후 비교)·채권 4%(이자세 후) · 취득세 1.1%(생애최초 감면) · 2년 실거주 후 전세/월세 전환.
             통근·상권은 <b>카카오 지도 API 실데이터</b>(최근접역 실거리·자차 실경로·반경 내 편의점/마트/음식점/병원/학원 실측 개수) + 지하철 환승은 좌표 기반 근사.

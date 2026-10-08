@@ -35,6 +35,18 @@ const RANGES = {
 // 1차 출처 화이트리스트(2026-09-01 사용자 지침) — 파라미터 자동 반영은 정부 원문 근거만 허용.
 // 프롬프트로만 요구하면 지켜진다는 보장이 없어 검증기에서 강제한다. 기사 근거 패치가 원문
 // 근거 값을 뒤집어 두 달간 5회 진동한 전례가 있다(config/policy-params.json _correction20260901).
+// 2026-10-08: 패치값이 근거 문장에 실제로 있어야 한다. 10/05 레이더가 어떤 원문에도 없는 4.75를
+// 제안했다(프롬프트 스키마 예시값을 베낌). 동결 경로라 막혔지만 동결이 아니었다면 적용됐다.
+function quoteHasNumber(p) {
+  if (typeof p?.quote !== 'string' || !p.quote.trim()) return false;
+  const n = String(p.new);
+  const v = Number(p.new);
+  const variants = [n, n.includes('.') ? n : `${n}.0`, v.toLocaleString('en-US')];
+  if (v >= 10000) variants.push(`${v / 10000}억`); // loanCapByPrice는 만원 단위, 원문은 "6억"
+  if (v > 0 && v < 1) variants.push(`${Math.round(v * 1000) / 10}%`); // LTV 0.4 ↔ 원문 "40%"
+  return variants.some((v) => p.quote.includes(v));
+}
+
 const PRIMARY_HOSTS = ['fsc.go.kr', 'molit.go.kr', 'korea.kr', 'nhuf.molit.go.kr', 'fss.or.kr', 'bok.or.kr'];
 function isPrimarySource(url) {
   try {
@@ -92,7 +104,7 @@ const skippedFrozen = [];
 const frozenPaths = new Set(Array.isArray(params._frozenPaths) ? params._frozenPaths : []);
 for (const p of patches) {
   if (p && typeof p.path === 'string' && frozenPaths.has(p.path)) {
-    skippedFrozen.push(`${p.path} (${p.old ?? '?'}→${p.new ?? '?'}) — 동결됨, 사람 확인 필요`);
+    skippedFrozen.push(`${p.path} (${p.old ?? '?'}→${p.new ?? '?'}) — 동결됨, 사람 확인 필요${quoteHasNumber(p) ? '' : ' · ⚠️ quote에 제안값 없음(근거 불명)'}`);
     continue;
   }
   if (!p || typeof p.path !== 'string' || typeof p.new !== 'number' || !p.sourceUrl) {
@@ -106,6 +118,10 @@ for (const p of patches) {
   }
   if (typeof p.old === 'number' && Math.abs(cur - p.old) > 1e-9) {
     rejected.push(`${p.path} — old(${p.old})가 현재값(${cur})과 불일치(드리프트 가드)`);
+    continue;
+  }
+  if (!quoteHasNumber(p)) {
+    rejected.push(`${p.path} — quote에 제안값 ${p.new}이 없음(원문 인용 필수)`);
     continue;
   }
   if (!isPrimarySource(p.sourceUrl)) {
