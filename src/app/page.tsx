@@ -8,6 +8,7 @@ import { ContextMap, type ContextMapItem } from '@/components/ContextMap';
 import { GenerateButton } from '@/components/GenerateButton';
 import { ProgressPoller } from '@/components/ProgressPoller';
 import { HomeRealEstate } from '@/components/HomeRealEstate';
+import { EconCalendar } from '@/components/EconCalendar';
 
 export const dynamic = 'force-dynamic';
 
@@ -208,6 +209,9 @@ export default async function HomePage({
         <>
           {/* 부동산 요약 — 이 대시보드의 실사용 목적(2026-08-29). 증시·뉴스보다 위에 온다. */}
           <HomeRealEstate />
+
+          {/* 오늘 발표 예정 지표 — 금리 방향의 선행 신호라 접지 않고 노출한다(없는 날은 렌더 안 됨) */}
+          <EconCalendar />
 
           {/* 이하 뉴스 브리핑 — 부차 정보로 강등, 시장 지표는 접어둔다 */}
           <details className="rounded-xl border border-gray-200 bg-white">

@@ -14,6 +14,7 @@ import { generateDailyDigest } from '@/lib/generate-digest';
 import { sendSlack } from '@/lib/slack';
 import { sendTelegram } from '@/lib/telegram';
 import { detectTriggers } from '@/lib/tracker';
+import { renderEconCalendarText } from '@/lib/econ-calendar';
 
 function verifyCronSecret(req: Request): boolean {
   const cronSecret = process.env.CRON_SECRET;
@@ -79,6 +80,8 @@ export async function POST(req: Request) {
       marketLine,
       top3Lines || '다이제스트 생성 완료',
       triggerSection ? `${triggerSection}\n📊 트래커: ${baseUrl}/tracker` : '',
+      // 오늘 발표 예정 지표 — 캐시가 오늘자가 아니면 빈 문자열이라 .filter(Boolean)이 걸러낸다
+      renderEconCalendarText(),
       `📎 ${baseUrl}`,
     ]
       .filter(Boolean)

@@ -1,13 +1,14 @@
 /**
  * Multi-source news collector (CMP-131 / CMP-142).
  *
- * Per-category source strategy:
- *   글로벌  — overseas RSS (BBC / Guardian / Reuters / AP / Al Jazeera)
- *   증권    — overseas RSS (Bloomberg / Reuters / CNBC / FT / MarketWatch)
- *   AI      — overseas RSS + HackerNews + Reddit r/ML + r/LocalLLaMA
- *              + ArXiv cs.AI/cs.CL/cs.LG + GitHub Trending + AI company blogs
- *   정치    — Korean RSS (연합 / KBS / 조선 / 한겨레 / 경향 / MBC)
- *   부동산  — Korean RSS (매경 / 한경 / 연합 / 이데일리 / 뉴스핌)
+ * Per-category source strategy (2026-09-14 전수 점검 후 — 죽은 소스 교체분 반영):
+ *   글로벌  — BBC / Guardian / Al Jazeera + 구글뉴스 경유 Reuters·AP
+ *              (둘 다 공식 RSS가 폐지·차단돼 집계 피드가 유일한 무료 경로)
+ *   증권    — Bloomberg / CNBC / MarketWatch / FT / WSJ + investing.com(TradingAgents 캐시)
+ *   AI      — overseas RSS + HackerNews + Reddit r/ML + r/LocalLLaMA(.rss)
+ *              + ArXiv + HF Daily Papers + GitHub Trending + AI 자사 발표(AI_BLOG_SOURCES)
+ *   정치    — 연합 / 조선 / 한겨레 / 경향 / SBS
+ *   부동산  — 매경 / 한경 / 아시아경제
  *
  * Clustering: 3-signal composite similarity
  *   titleJaccard × 0.40 + entityOverlap × 0.35 + bigramSim × 0.25 ≥ 0.55
@@ -20,6 +21,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { CategoryKey, RawArticle, RawCluster } from './types';
 import { collectRss, fetchFeed, type RssSource } from './collectors/rss';
+import { collectInvesting } from './collectors/investing';
 import { collectHN } from './collectors/hn';
 import { collectArxiv } from './collectors/arxiv';
 import { collectPwC } from './collectors/pwc';
@@ -36,38 +38,69 @@ function loadSources(): RssSource[] {
 
 // ─── Reddit (not a formal collector type — kept inline) ───────────────────────
 
-async function fetchRedditSubreddit(subreddit: string): Promise<RawArticle[]> {
-  try {
-    const res = await fetch(`https://www.reddit.com/r/${subreddit}/hot.json?limit=10`, {
-      headers: { 'User-Agent': 'NewsDigestBot/1.0' },
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!res.ok) return [];
-    const data = (await res.json()) as {
-      data: { children: Array<{ data: { title: string; url: string; selftext: string; score: number; permalink: string } }> };
-    };
-    return (data.data?.children ?? [])
-      .filter((c) => c.data?.title)
-      .slice(0, 8)
-      .map((c) => ({
-        title: c.data.title,
-        content: (c.data.selftext ?? '').slice(0, 500) || `Reddit score: ${c.data.score}`,
-        url: c.data.url ?? `https://reddit.com${c.data.permalink}`,
-        source: `Reddit r/${subreddit}`,
-        category: 'AI' as CategoryKey,
-      }));
-  } catch {
-    console.warn(`[collector] Reddit r/${subreddit} fetch failed`);
-    return [];
+/**
+ * 서브레딧들을 **멀티레딧 피드 한 번**으로 받는다(`/r/A+B/.rss`).
+ *
+ * 2026-09-14: `hot.json`은 403(비인증 JSON 차단)이라 `/.rss`(Atom)를 쓴다. 브라우저 UA로 바꾸면
+ * 오히려 429다 — 봇 UA가 정직해서 통과하는 쪽이다.
+ * 2026-10-08: 순차 호출(1.5초 간격)로도 둘째(r/LocalLLaMA)가 9/16부터 23일 연속 429였다 —
+ * 비인증 .rss는 IP당 짧은 창에 1회만 허용하는 듯하다. 간격을 늘리는 대신 요청 자체를 1회로
+ * 줄였다. 항목 링크(`/r/<sub>/comments/…`)에서 서브레딧을 되찾아 출처를 붙이고 서브레딧당
+ * 상한을 둔다(멀티레딧은 hot 순이라 LocalLLaMA가 25건 중 22건을 차지했다).
+ */
+async function fetchRedditAll(subreddits: string[]): Promise<RawArticle[]> {
+  const items = await fetchFeed({
+    name: `Reddit r/${subreddits.join('+')}`,
+    url: `https://www.reddit.com/r/${subreddits.join('+')}/.rss?limit=50`, // 50건 받아 서브레딧별 상한으로 자른다 — 25건이면 소수 서브레딧이 2건뿐
+    category: 'AI',
+  });
+  const perSub = new Map<string, number>();
+  const out: RawArticle[] = [];
+  for (const a of items) {
+    const sub = a.url.match(/reddit\.com\/r\/([^/]+)\//i)?.[1] ?? subreddits[0];
+    const n = perSub.get(sub) ?? 0;
+    if (n >= 8) continue;
+    perSub.set(sub, n + 1);
+    out.push({ ...a, source: `Reddit r/${sub}` });
   }
+  return out;
 }
 
+/**
+ * 두 목록을 고르게 섞는다. 뒤에 append하면 클러스터 상한(limit)에서 통째로 잘린다 —
+ * investing 8건을 STOCKS 뒤에 붙였더니 상위 20개 안에 하나도 못 들어갔다.
+ */
+function interleaveInto(base: RawArticle[], extra: RawArticle[]): RawArticle[] {
+  if (!extra.length) return base;
+  if (!base.length) return extra;
+  const out: RawArticle[] = [];
+  const ratio = base.length / extra.length;
+  let ei = 0;
+  for (let i = 0; i < base.length; i++) {
+    out.push(base[i]);
+    while (ei < extra.length && i + 1 >= (ei + 1) * ratio) out.push(extra[ei++]);
+  }
+  while (ei < extra.length) out.push(extra[ei++]);
+  return out;
+}
+
+/**
+ * AI 1차 출처 — 자사 발표. 언론 RSS는 이걸 받아쓰므로 한 단계 늦고, 안 다루면 아예 놓친다.
+ *
+ * 2026-09-14 점검: 5개 중 **4개가 죽어 있었다**(OpenAI 403 · Anthropic 404 · Meta 404,
+ * DeepMind·Mistral만 응답). 수집 실패가 Promise.allSettled에 삼켜져 조용히 0건이 되고 있었다.
+ * 살아 있는 URL로 교체하고, 죽은 소스는 주석으로 사유를 남긴다.
+ * 확인 방법: curl -sL -o /dev/null -w '%{http_code}' <url>
+ */
 const AI_BLOG_SOURCES: RssSource[] = [
-  { name: 'OpenAI Blog',     url: 'https://openai.com/blog/rss/',           category: 'AI' },
-  { name: 'Anthropic News',  url: 'https://www.anthropic.com/news/rss.xml', category: 'AI' },
-  { name: 'Google DeepMind', url: 'https://deepmind.google/blog/rss.xml',   category: 'AI' },
-  { name: 'Meta AI Blog',    url: 'https://ai.meta.com/blog/feed/',         category: 'AI' },
-  { name: 'Mistral AI',      url: 'https://mistral.ai/news/rss',            category: 'AI' },
+  { name: 'OpenAI',          url: 'https://openai.com/news/rss.xml',          category: 'AI' }, // 구 /blog/rss/ 는 403
+  { name: 'Google AI',       url: 'https://blog.google/technology/ai/rss',    category: 'AI' },
+  { name: 'Google DeepMind', url: 'https://deepmind.google/blog/rss.xml',     category: 'AI' },
+  { name: 'Hugging Face',    url: 'https://huggingface.co/blog/feed.xml',     category: 'AI' },
+  { name: 'Mistral AI',      url: 'https://mistral.ai/news/rss',              category: 'AI' },
+  // Anthropic: RSS 미제공(2026-09-14 /rss.xml·/news/rss.xml·/news/feed.xml 모두 404)
+  // Meta AI:   RSS 미제공(/blog/feed/·/blog/rss/ 404)
+  // xAI:       blog/rss.xml 403 차단. 실제 발표는 X 게시물이라 무료 수집 경로가 없다
 ];
 
 // ─── 3-signal similarity ──────────────────────────────────────────────────────
@@ -241,8 +274,7 @@ export async function collectByCategory(
   // AI category: extra sources from modular collectors + Reddit + AI blogs
   const extraResults = await Promise.allSettled([
     collectHN(),
-    fetchRedditSubreddit('MachineLearning'),
-    fetchRedditSubreddit('LocalLLaMA'),
+    fetchRedditAll(['MachineLearning', 'LocalLLaMA']),
     collectArxiv(),
     collectPwC(),
     collectNewsletter(),
@@ -255,6 +287,12 @@ export async function collectByCategory(
     if (r.status === 'fulfilled') aiExtra.push(...r.value);
   }
   rawByCategory.set('AI', [...(rawByCategory.get('AI') ?? []), ...aiExtra]);
+
+  // 증권: investing.com 헤드라인(TradingAgents 캐시 경유 — collectors/investing.ts 주석 참조)
+  const investing = await collectInvesting();
+  if (investing.length) {
+    rawByCategory.set('STOCKS', interleaveInto(rawByCategory.get('STOCKS') ?? [], investing));
+  }
 
   // Cluster each category
   const clusteredByCategory = new Map<CategoryKey, RawCluster[]>();

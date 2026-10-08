@@ -11,16 +11,6 @@
       "category": "글로벌"
     },
     {
-      "name": "Reuters World",
-      "url": "https://feeds.reuters.com/reuters/worldNews",
-      "category": "글로벌"
-    },
-    {
-      "name": "AP News Top",
-      "url": "https://apnews.com/rss/apf-topnews",
-      "category": "글로벌"
-    },
-    {
       "name": "Al Jazeera",
       "url": "https://www.aljazeera.com/xml/rss/all.xml",
       "category": "글로벌"
@@ -31,18 +21,8 @@
       "category": "증권"
     },
     {
-      "name": "Reuters Business",
-      "url": "https://feeds.reuters.com/reuters/businessNews",
-      "category": "증권"
-    },
-    {
       "name": "CNBC Markets",
       "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10001147",
-      "category": "증권"
-    },
-    {
-      "name": "Financial Times",
-      "url": "https://www.ft.com/rss/home/us",
       "category": "증권"
     },
     {
@@ -66,11 +46,6 @@
       "category": "AI"
     },
     {
-      "name": "VentureBeat AI",
-      "url": "https://venturebeat.com/category/ai/feed/",
-      "category": "AI"
-    },
-    {
       "name": "MIT Technology Review",
       "url": "https://www.technologyreview.com/feed/",
       "category": "AI"
@@ -78,11 +53,6 @@
     {
       "name": "연합뉴스 정치",
       "url": "https://www.yna.co.kr/rss/politics.xml",
-      "category": "정치"
-    },
-    {
-      "name": "KBS 뉴스 정치",
-      "url": "https://news.kbs.co.kr/rss/rss.do?cat=politics",
       "category": "정치"
     },
     {
@@ -101,11 +71,6 @@
       "category": "정치"
     },
     {
-      "name": "MBC 뉴스 정치",
-      "url": "https://imnews.imbc.com/rss/politics/index.xml",
-      "category": "정치"
-    },
-    {
       "name": "매일경제 부동산",
       "url": "https://www.mk.co.kr/rss/50300009/",
       "category": "부동산"
@@ -116,19 +81,41 @@
       "category": "부동산"
     },
     {
-      "name": "연합뉴스 부동산",
-      "url": "https://www.yna.co.kr/rss/realestate.xml",
-      "category": "부동산"
+      "name": "아시아경제 부동산",
+      "url": "https://www.asiae.co.kr/rss/realestate.htm",
+      "category": "부동산",
+      "_note": "2026-09-14 연합뉴스 부동산(404) 대체. 부동산 전용·원문 링크·본문 300자"
     },
     {
-      "name": "이데일리 부동산",
-      "url": "https://www.edaily.co.kr/rss/real_estate",
-      "category": "부동산"
+      "name": "SBS 정치",
+      "url": "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=01",
+      "category": "정치",
+      "_note": "2026-09-14 KBS·MBC 정치(200/0건) 대체"
     },
     {
-      "name": "뉴스핌 부동산",
-      "url": "https://www.newspim.com/rss/real_estate",
-      "category": "부동산"
+      "name": "Financial Times Markets",
+      "url": "https://www.ft.com/markets?format=rss",
+      "category": "증권",
+      "_note": "2026-09-14 구 /rss/home/us(404) 경로 교정"
+    },
+    {
+      "name": "WSJ Markets",
+      "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+      "category": "증권",
+      "_note": "2026-09-14 Reuters Business(RSS 폐지) 대체"
+    },
+    {
+      "name": "Google News · Reuters",
+      "url": "https://news.google.com/rss/search?q=when:24h+site:reuters.com&hl=en-US&gl=US&ceid=US:en",
+      "category": "글로벌",
+      "_note": "2026-09-14 Reuters가 공식 RSS를 폐지해 무료 직수집 경로가 없다. 집계 피드라 링크는 news.google.com 리다이렉트(브라우저에선 원문으로 감) — 출처는 <source> 태그에서 원 매체명을 살린다."
+    },
+    {
+      "name": "Google News · AP",
+      "url": "https://news.google.com/rss/search?q=when:24h+site:apnews.com&hl=en-US&gl=US&ceid=US:en",
+      "category": "글로벌",
+      "_note": "2026-09-14 AP 공식 RSS가 403. 위와 같은 이유·같은 제약."
     }
-  ]
+  ],
+  "_healthNote": "2026-09-14 전수 점검: 26개 중 10개가 죽어 있었고(HTTP 403/404/DNS 또는 200+0건) 1개는 Atom 피드라 파서가 못 읽었다. fetchFeed가 !res.ok를 조용히 []로 반환해 수년 누적된 것으로 보인다. 죽은 소스는 대체하거나 제거했고, 파서는 Atom을 읽도록 고쳤으며, 이제 죽으면 로그에 DEAD/EMPTY로 남는다. 제거(대체 없음): Reuters World·Business(RSS 폐지)·AP News(403)·VentureBeat AI(429 차단 지속). 보류: 구글뉴스 검색 피드는 링크가 news.google.com 리다이렉트라 원문 URL이 안 남아 도입하지 않았다."
 }

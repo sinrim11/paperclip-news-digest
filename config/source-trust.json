@@ -1,13 +1,15 @@
 {
   "version": "1.0.0",
   "description": "Trust scores per source type (0.0–1.0). Higher = more credible.",
-  "defaultTrust": 0.60,
+  "defaultTrust": 0.6,
   "sourceTrust": {
     "arxiv": 0.95,
-    "pwc": 0.90,
-    "github": 0.80,
+    "pwc": 0.9,
+    "github": 0.8,
     "newsletter": 0.75,
-    "rss": 0.70,
-    "hn": 0.65
-  }
+    "rss": 0.7,
+    "hn": 0.65,
+    "investing": 0.65
+  },
+  "_deadConfigNote": "2026-09-14: rss:primary(0.85)를 신설했다가 제거했다. sourceType은 runCollector에서 수집기 단위로 하드코딩되고('rss'), 소스별 primary 플래그를 읽는 코드가 없어 어떤 계산에도 닿지 않았다. AI 1차 출처는 news_sources.json이 아니라 news-collector.ts의 AI_BLOG_SOURCES로 들어간다."
 }

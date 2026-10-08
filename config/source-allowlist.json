@@ -42,6 +42,12 @@
       "label": "X (Twitter)",
       "deferred": true,
       "deferredReason": "API rate limits and cost model unresolved"
+    },
+    {
+      "type": "investing",
+      "label": "investing.com (TradingAgents 캐시 경유)",
+      "deferred": false,
+      "_note": "2026-09-14 추가. 직접 스크래핑이 아니라 ~/TradingAgents-ClaudeCLI가 매일 17:00에 남기는 market-news.json을 읽는다. investing.com은 Cloudflare Turnstile로 헤드리스를 막아 CDP Chrome + 수동 로그인 세션이 필요하고, 그 의존성은 news-digest가 지지 않는다."
     }
   ]
 }

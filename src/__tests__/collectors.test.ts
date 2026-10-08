@@ -42,11 +42,21 @@ const SAMPLE_HN_RESPONSE = {
   ],
 };
 
-const SAMPLE_PWC_RESPONSE = {
-  results: [
-    { title: 'Attention Is All You Need v2', url_abs: 'https://paperswithcode.com/paper/attention', abstract: 'Transformer paper.', published: new Date().toISOString(), repository_count: 10 },
-  ],
-};
+// 2026-09-14: Papers with Code가 Hugging Face로 흡수돼 응답 형태가 바뀌었다.
+// 종전 mock은 옛 `{results:[…]}`를 그대로 흉내 내 통과했고, 프로덕션이 매일 0건이어도 잡지 못했다.
+// mock은 실제 엔드포인트가 주는 형태여야 한다 — 그렇지 않으면 계약이 아니라 자기 확인이 된다.
+const SAMPLE_PWC_RESPONSE = [
+  {
+    paper: {
+      id: '2609.11115',
+      title: 'Attention Is All You Need v2',
+      summary: 'Transformer paper.',
+      publishedAt: new Date().toISOString(),
+      upvotes: 42,
+    },
+    publishedAt: new Date().toISOString(),
+  },
+];
 
 const SAMPLE_GITHUB_HTML = `
 <html><body>
@@ -231,8 +241,18 @@ describe('arxiv collector', () => {
     }
   });
 
-  it('collectArxiv filters out articles older than 48h', async () => {
-    const oldDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  it('collectArxiv sends OR query with spaces, not literal plus (%2B → totalResults=0)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(makeResponse('<feed></feed>'));
+    vi.stubGlobal('fetch', fetchMock);
+    const { collectArxiv } = await import('../lib/collectors/arxiv');
+    await collectArxiv();
+    const url = String(fetchMock.mock.calls[0][0]);
+    expect(url).not.toContain('%2B');
+    expect(url).toContain('cat%3Acs.AI%20OR%20cat%3Acs.CL');
+  });
+
+  it('collectArxiv filters out articles older than 96h (주말 공백 허용)', async () => {
+    const oldDate = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
     const oldXml = `<?xml version="1.0"?><feed>
       <entry>
         <title>Old Paper</title>
@@ -272,7 +292,7 @@ describe('pwc collector', () => {
     for (const a of articles) {
       expect(a.title).toBeTruthy();
       expect(a.url).toBeTruthy();
-      expect(a.source).toBe('Papers with Code');
+      expect(a.source).toBe('HF Daily Papers');
       expect(a.category).toBe('AI');
     }
   });

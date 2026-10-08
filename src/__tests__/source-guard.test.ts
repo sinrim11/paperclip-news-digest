@@ -21,8 +21,9 @@ describe('source-guard: allowed sources', () => {
     expect(isSourceAllowed('tiktok')).toBe(false);
   });
 
-  it('getAllowedSourceTypes returns exactly 6 types', () => {
-    expect(getAllowedSourceTypes()).toHaveLength(6);
+  it('getAllowedSourceTypes returns exactly 7 types', () => {
+    // 2026-09-14 investing 추가(TradingAgents 캐시 경유)
+    expect(getAllowedSourceTypes()).toHaveLength(7);
     expect(getAllowedSourceTypes()).toContain('rss');
     expect(getAllowedSourceTypes()).toContain('newsletter');
   });
