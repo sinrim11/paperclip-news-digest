@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { listProfiles, loadProfile, defaultProfile, PROFILE_COOKIE, DEFAULT_ID } from '@/lib/profiles';
 import { useProfileAction, saveProfileAction, deleteProfileAction } from './actions';
 import DecisionFlow from '@/components/DecisionFlow';
+import { DEFAULT_WORK } from '@/lib/commute';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: '프로필 설정 | 뉴스 다이제스트' };
@@ -69,7 +70,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Pr
                   <div><dt className="inline text-gray-500">기존대출 상환 </dt><dd className="inline font-mono font-semibold text-gray-900">{f.existingLoanMonthly > 0 ? man(f.existingLoanMonthly) + '/월' : '없음'}</dd></div>
                   <div><dt className="inline text-gray-500">전세보증금(본인) </dt><dd className="inline font-mono font-semibold text-gray-900">{eok(f.jeonseDepositSelf)}</dd></div>
                   <div className="col-span-2"><dt className="inline text-gray-500">생애최초 </dt><dd className="inline font-semibold text-gray-900">{f.firstTimeBuyer ? 'O (LTV70·취득세감면)' : 'X (LTV40)'}</dd></div>
-                  <div className="col-span-2"><dt className="inline text-gray-500">출근지 </dt><dd className="inline font-semibold text-gray-900">{p.work?.label ?? '기본(전문건설회관)'}</dd></div>
+                  <div className="col-span-2"><dt className="inline text-gray-500">출근지 </dt><dd className="inline font-semibold text-gray-900">{p.work?.label ?? `기본(${DEFAULT_WORK.label})`}</dd></div>
                   <div className="col-span-2"><dt className="inline text-gray-500">분석 목적 </dt><dd className="inline font-semibold text-gray-900">{p.purpose === 'live' ? '실거주 우선(통근 가중)' : '투자 우선'}</dd></div>
                 </dl>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -178,12 +179,12 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Pr
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-xs">
                 <span className="mb-1 block font-semibold text-gray-600">출근지 이름</span>
-                <input name="workLabel" defaultValue={pre?.work?.label ?? '전문건설회관(신대방)'} placeholder="예: 전문건설회관" className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm" />
+                <input name="workLabel" defaultValue={pre?.work?.label ?? DEFAULT_WORK.label} placeholder="예: 회사 이름" className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm" />
               </label>
               <label className="block text-xs">
                 <span className="block font-semibold text-gray-600">주소/건물명으로 좌표 찾기</span>
                 <span className="mb-1 mt-0.5 block text-emerald-600">★ 입력하면 카카오 지오코딩으로 좌표 자동 해석</span>
-                <input name="workAddress" placeholder="예: 서울 동작구 보라매로5길 15 또는 '전문건설회관'" className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm" />
+                <input name="workAddress" placeholder="예: 도로명 주소 또는 건물 이름" className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm" />
               </label>
               <label className="block text-xs">
                 <span className="block font-semibold text-gray-600">위도</span>

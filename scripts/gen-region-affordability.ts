@@ -6,7 +6,7 @@
  * 세 예산 밴드로 분류한다:
  *   ① 자기자본권  (≤ comfortable — market-context 일일 갱신)
  *   ② 스트레치    (comfortable < x ≤ stretch)
- *   ③ 부모님 찬스 (stretch < x ≤ stretch + 가족지원 3억 — reader-profile)
+ *   ③ 부모님 찬스 (stretch < x ≤ stretch + 가족지원 — reader-profile)
  *
  * 산출:
  *   - config/region-affordability.json  (웹/후속 파이프라인 소비)

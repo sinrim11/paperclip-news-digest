@@ -163,7 +163,7 @@ export default function StrategyPage() {
       <section className="rounded-lg border bg-white p-5">
         <h2 className="text-lg font-bold text-gray-900">🛒 실행 쇼핑리스트 — 지금 / 완화 시</h2>
         <p className="mt-1 text-sm leading-relaxed text-gray-700">
-          가족지원 2억 반영 후 상당수가 현행 생초 예산(7.5억)으로 <b className="text-green-700">지금 실사·매수 가능</b>.
+          가족지원 반영 후 상당수가 현행 생애최초 예산 안에서 <b className="text-green-700">지금 실사·매수 가능</b>.
         </p>
         <details className="mt-1 text-xs text-gray-500">
           <summary className="cursor-pointer select-none hover:text-gray-700">자세히</summary>

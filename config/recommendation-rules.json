@@ -45,7 +45,7 @@
     "_note": "하루 추천에서 한 구 최대 N개(동네 편중 방지) + 비서울(경기) 합산 최대 N개(서울 전역 우선). lawdCd 11* = 서울. 2026-08-29: 비서울 합산 캡만으로는 남양주가 슬롯을 독점해 신규 편입 지역(강남권 1시간)이 못 들어왔다 → 비서울은 같은 시 하루 1건으로 세분화하고 합산 캡을 3으로."
   },
   "budgetFallback": {
-    "_note": "market-context.json 부재 시 사용. comfortable=오늘 자기자본권(약7억·마통해지 생초LTV70%), stretch=2년 적립 자기자본권(약7.8억). 가족지원은 사실상 불필요. budgetFitStretch를 1로 유지해 오늘 자기자본 내(≤7억)를 우선.",
+    "_note": "market-context.json 부재 시 사용. comfortable=오늘 자기자본권, stretch=2년 적립 자기자본권(둘 다 reader-profile에서 계산). budgetFitStretch를 1로 유지해 오늘 자기자본 내를 우선.",
     "comfortableCeilingManwon": 70000,
     "stretchCeilingManwon": 78000
   },
@@ -89,7 +89,7 @@
     "_weakJeonseNote": "2026-09-12: 55→45. 55%는 수도권 전세가율 중앙값(56%) 바로 아래라 단지의 47%가 상시 해당돼 변별력이 없었다 — 제외 44건이 전부 \"거래량 급감+전세가율\" 동일 조합이었고, 사실상 거래량 단일 기준으로 동작했다. 45%는 하위 22%(25분위 46%)를 잡아 \"실거주 수요 약함\"이라는 문구와 의미가 맞는다. 효과: 제외 16→7건, 거래량 급감만 있는 36→45건은 제외가 아니라 유의점으로 표시된다."
   },
   "stretchPlus": {
-    "_note": "스트레치+ 트랙 — comfortable 초과 ~ 상한 구간을 메인 5건과 분리된 섹션으로 노출(점수·로테이션 오염 금지, 쿨다운도 트랙별 분리). 상한은 엔진이 동적 계산: max(ceilingManwon, stretch + 부모님찬스 3억) — 2026-08-10부터 reader-profile contingencySupport.가족지원 반영. ceilingManwon은 프로필 부재 시 폴백. 표기 필수: '+X 더 보태면' + 월 상환 증가분 + 조달 판정.",
+    "_note": "스트레치+ 트랙 — comfortable 초과 ~ 상한 구간을 메인 5건과 분리된 섹션으로 노출(점수·로테이션 오염 금지, 쿨다운도 트랙별 분리). 상한은 엔진이 동적 계산: max(ceilingManwon, stretch + 가족지원(reader-profile contingencySupport)) — 2026-08-10부터 reader-profile contingencySupport.가족지원 반영. ceilingManwon은 프로필 부재 시 폴백. 표기 필수: '+X 더 보태면' + 월 상환 증가분 + 조달 판정.",
     "enabled": true,
     "limit": 3,
     "ceilingManwon": 92000,

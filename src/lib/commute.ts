@@ -15,8 +15,17 @@ import { join } from 'path';
 export interface Station { name: string; lines: string[]; lat: number; lng: number }
 export interface WorkPlace { label: string; lat: number; lng: number }
 
-/** 기본 출근지 — 전문건설회관(서울 동작구 신대방동 395-70. 카카오 지오코딩 실좌표) */
-export const DEFAULT_WORK: WorkPlace = { label: '전문건설회관(신대방)', lat: 37.49199, lng: 126.92435 };
+/**
+ * 기본 출근지 — config/default-work.json(gitignored)에서 읽는다. 저장소가 PUBLIC이라 실제 근무지를
+ * 코드에 두지 않는다(2026-10-08). 파일이 없으면 서울시청 좌표로 계산한다.
+ */
+export const DEFAULT_WORK: WorkPlace = (() => {
+  try {
+    const w = JSON.parse(readFileSync(join(process.cwd(), 'config', 'default-work.json'), 'utf-8'));
+    if (typeof w?.label === 'string' && Number.isFinite(w?.lat) && Number.isFinite(w?.lng)) return w as WorkPlace;
+  } catch { /* 파일 없음 → 기본값 */ }
+  return { label: '서울시청', lat: 37.5663, lng: 126.9779 };
+})();
 
 const LINE_LABEL: Record<string, string> = {
   '1': '1호선', '2': '2호선', '3': '3호선', '4': '4호선', '5': '5호선', '6': '6호선', '7': '7호선', '8': '8호선', '9': '9호선',

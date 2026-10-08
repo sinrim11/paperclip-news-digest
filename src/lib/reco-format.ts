@@ -143,7 +143,7 @@ export function formatGapReco(r: RecoView): string {
 
 export function formatReco(r: RecoView): string {
   const lines: string[] = [];
-  const budget = r.budgetLabel ?? (r.scenario === '현행' ? '생애최초 예산(8억) 내 ✅' : '8~9억 · 대출 최적화 시 🔓');
+  const budget = r.budgetLabel ?? (r.scenario === '현행' ? '생애최초 예산 내 ✅' : '예산 상단 · 대출 최적화 시 🔓');
   lines.push(`🏠 ${r.rank}. ${r.name} — ${r.gu} ${r.dong}`);
   lines.push(specLine(r));
   lines.push(`💰 실거래 중간 ${eok(r.medianManwon)}${r.tradeCount ? ` (${r.tradeCount}건)` : ''} · ${budget}`);

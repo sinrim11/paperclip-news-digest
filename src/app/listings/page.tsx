@@ -9,7 +9,7 @@ import DecisionFlow from '@/components/DecisionFlow';
 import { CompareToggle, CompareBar } from '@/components/CompareControls';
 import { resolveContext, PROFILE_COOKIE } from '@/lib/profiles';
 import { analyzeWithVersus, listingsCompact } from '@/lib/invest-compact';
-import { computeCommute, computeAmenity, computeAmenityKakao, lineLabel, type KakaoCtx } from '@/lib/commute';
+import { computeCommute, computeAmenity, computeAmenityKakao, lineLabel, DEFAULT_WORK, type KakaoCtx } from '@/lib/commute';
 import { LISTING_PERSONAS } from '@/lib/listing-personas';
 
 /** 카카오 실데이터 캐시 로더 — 커스텀 프로필 재계산용. 출근지가 캐시와 다르면 자차 실경로 무효화 */
@@ -256,7 +256,7 @@ export default async function ListingsPage({ searchParams }: { searchParams?: Pr
           <span className="text-gray-400"> — 같은 단지는 대표매물 하나로 묶었고, 펼치면 개별 매물이 나옵니다.</span>
         </p>
         <p className="text-xs text-gray-500">
-          🚇 통근 기준 <b className="text-gray-700">{(ctx && !ctx.isDefault ? ctx.work.label : data.work?.label) ?? '전문건설회관'}</b>
+          🚇 통근 기준 <b className="text-gray-700">{(ctx && !ctx.isDefault ? ctx.work.label : data.work?.label) ?? DEFAULT_WORK.label}</b>
           {(ctx && !ctx.isDefault ? ctx.purposeLive : data.work?.purposeLive) ? ' · 실거주 모드(통근 16%·상권 7% 가중)' : ' · 투자 모드(통근·상권은 참고 표시)'}
           {' · '}<Link href="/settings" className="font-medium text-blue-600 hover:underline">설정에서 변경</Link>
         </p>

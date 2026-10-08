@@ -53,3 +53,6 @@ config/gosi-hits.json
 # API 수집 캐시 — 재생성 가능하고 크다(2026-09-12)
 config/kapt-cache.json
 config/public-price-cache.json
+
+# 실제 근무지(통근 계산 기본값) — repo PUBLIC이라 커밋 금지 (2026-10-08)
+config/default-work.json
