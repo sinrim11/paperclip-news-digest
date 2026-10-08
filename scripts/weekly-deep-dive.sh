@@ -53,9 +53,26 @@ focus = ' / '.join(v for v in (p.get('focusCategories') or {}).values())
 print(f\"## 독자 프로필\n{p.get('summary','')}\n관심 초점: {focus}\n리포트의 '자산별 시사점'과 '다음 주 체크포인트'는 이 독자의 의사결정(특히 주택 매수 준비) 관점에서 작성할 것.\")" 2>>"$LOG")
 fi
 
+# 관심 권역 = 실제 추천 권역(2026-10-08 사용자 결정). 종전엔 프로필의 근무지(신대방) 주변을
+# 관심 권역으로 읽어 "관악·동작·영등포 데이터 없음"을 매주 적었는데, 추천·카드뉴스는 남양주·안양 등
+# 다른 권역을 보고 있었다. 최근 28일 SentRecommendation 발송 구 분포를 그대로 넣는다.
+REGIONS=$(psql -h localhost -p 5432 -d news_digest -At -F' ' -c "
+  SELECT gu || ' ' || count(*) || '건' FROM \"SentRecommendation\"
+  WHERE \"sentDate\" >= to_char(CURRENT_DATE - 28, 'YYYY-MM-DD')
+  GROUP BY gu ORDER BY count(*) DESC LIMIT 12;" 2>>"$LOG" | paste -sd ',' - | sed 's/,/ · /g')
+REGION_BLOCK=""
+if [ -n "$REGIONS" ]; then
+  REGION_BLOCK="## 관심 권역 (최근 28일 실제 추천 발송 구 분포 — 많은 순)
+${REGIONS}
+부동산 시사점·체크포인트의 지역 판단은 이 권역 기준으로 쓸 것. 프로필의 근무지는 통근 거리 참고일 뿐 관심 권역이 아니다.
+이 권역을 직접 다룬 뉴스가 없으면 없다고 한 줄로만 적고, 수도권 전체 흐름이 이 권역(대부분 경기 외곽·서울 중저가)에 어떻게 작용하는지로 해석할 것."
+fi
+
 PROMPT="당신은 시니어 투자 전략가입니다. 아래는 지난 7일간 수집된 뉴스 다이제스트입니다 (형식: 날짜|카테고리|긴급도|TOP3여부|제목|팩트).
 
 ${PROFILE}
+
+${REGION_BLOCK}
 
 ${DATA}
 
